@@ -102,6 +102,12 @@ function App() {
     }
   }, [viewMode])
 
+  // Get the selected project's has_spec status
+  const selectedProjectData = selectedProject
+    ? projects?.find(p => p.name === selectedProject)
+    : null
+  const needsSetup = selectedProjectData?.has_spec === false
+
   // Play sounds when features move between columns
   useFeatureSound(features)
 
@@ -390,6 +396,14 @@ function App() {
               Select a project from the dropdown above or create a new one to get started.
             </p>
           </div>
+        ) : needsSetup ? (
+          <ProjectSetupRequired
+            projectName={selectedProject}
+            onSetupComplete={() => {
+              // Refetch projects to update has_spec status
+              refetchProjects()
+            }}
+          />
         ) : (
           <div className="space-y-8">
             {/* Progress Dashboard */}
