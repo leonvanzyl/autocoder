@@ -66,6 +66,20 @@ export async function deleteProject(name: string): Promise<void> {
   })
 }
 
+export interface ResetProjectResponse {
+  success: boolean
+  message: string
+  deleted_files: string[]
+  full_reset: boolean
+}
+
+export async function resetProject(name: string, fullReset: boolean = false): Promise<ResetProjectResponse> {
+  const params = fullReset ? '?full_reset=true' : ''
+  return fetchJSON(`/projects/${encodeURIComponent(name)}/reset${params}`, {
+    method: 'POST',
+  })
+}
+
 export async function getProjectPrompts(name: string): Promise<ProjectPrompts> {
   return fetchJSON(`/projects/${encodeURIComponent(name)}/prompts`)
 }

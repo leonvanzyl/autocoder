@@ -259,6 +259,100 @@ async def delete_project(name: str, delete_files: bool = False):
     }
 
 
+class ResetOptions:
+    """Options for project reset."""
+    delete_prompts: bool = False
+
+
+@router.post("/{name}/reset")
+async def reset_project(name: str, full_reset: bool = False):
+    """
+    Reset a project to its initial state.
+
+    This clears all features, assistant chat history, and settings.
+    Use this to restart a project from scratch without having to re-register it.
+
+    Args:
+        name: Project name to reset
+        full_reset: If True, also deletes prompts directory for complete fresh start
+
+    Always Deletes:
+    - features.db (feature tracking database)
+    - assistant.db (assistant chat history)
+    - .claude_settings.json (agent settings)
+    - .claude_assistant_settings.json (assistant settings)
+
+    When full_reset=True, Also Deletes:
+    - prompts/ directory (app_spec.txt, initializer_prompt.md, coding_prompt.md)
+
+    Preserves:
+    - Project registration in registry
+    """
+    _init_imports()
+    _, _, get_project_path, _, _ = _get_registry_functions()
+
+    name = validate_project_name(name)
+    project_dir = get_project_path(name)
+
+    if not project_dir:
+        raise HTTPException(status_code=404, detail=f"Project '{name}' not found")
+
+    if not project_dir.exists():
+        raise HTTPException(status_code=404, detail=f"Project directory not found")
+
+    # Check if agent is running
+    lock_file = project_dir / ".agent.lock"
+    if lock_file.exists():
+        raise HTTPException(
+            status_code=409,
+            detail="Cannot reset project while agent is running. Stop the agent first."
+        )
+
+    # Files to delete
+    files_to_delete = [
+        "features.db",
+        "assistant.db",
+        ".claude_settings.json",
+        ".claude_assistant_settings.json",
+    ]
+
+    deleted_files = []
+    errors = []
+
+    for filename in files_to_delete:
+        filepath = project_dir / filename
+        if filepath.exists():
+            try:
+                filepath.unlink()
+                deleted_files.append(filename)
+            except Exception as e:
+                errors.append(f"{filename}: {e}")
+
+    # If full reset, also delete prompts directory
+    if full_reset:
+        prompts_dir = project_dir / "prompts"
+        if prompts_dir.exists():
+            try:
+                shutil.rmtree(prompts_dir)
+                deleted_files.append("prompts/")
+            except Exception as e:
+                errors.append(f"prompts/: {e}")
+
+    if errors:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to delete some files: {'; '.join(errors)}"
+        )
+
+    reset_type = "fully reset" if full_reset else "reset"
+    return {
+        "success": True,
+        "message": f"Project '{name}' has been {reset_type}",
+        "deleted_files": deleted_files,
+        "full_reset": full_reset,
+    }
+
+
 @router.get("/{name}/prompts", response_model=ProjectPrompts)
 async def get_project_prompts(name: str):
     """Get the content of project prompt files."""

@@ -11,6 +11,12 @@ echo ""
 # Get the directory where this script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Activate virtual environment if it exists
+if [ -d "$SCRIPT_DIR/venv" ]; then
+    echo "Activating virtual environment..."
+    source "$SCRIPT_DIR/venv/bin/activate"
+fi
+
 # Check if Python is available
 if ! command -v python3 &> /dev/null; then
     if ! command -v python &> /dev/null; then

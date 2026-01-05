@@ -16,7 +16,9 @@ import { DebugLogViewer } from './components/DebugLogViewer'
 import { AgentThought } from './components/AgentThought'
 import { AssistantFAB } from './components/AssistantFAB'
 import { AssistantPanel } from './components/AssistantPanel'
-import { Plus, Loader2 } from 'lucide-react'
+import { ResetProjectModal } from './components/ResetProjectModal'
+import { ProjectSetupRequired } from './components/ProjectSetupRequired'
+import { Plus, Loader2, RotateCcw } from 'lucide-react'
 import type { Feature } from './lib/types'
 
 function App() {
@@ -34,11 +36,18 @@ function App() {
   const [debugOpen, setDebugOpen] = useState(false)
   const [debugPanelHeight, setDebugPanelHeight] = useState(288) // Default height
   const [assistantOpen, setAssistantOpen] = useState(false)
+  const [showResetModal, setShowResetModal] = useState(false)
 
-  const { data: projects, isLoading: projectsLoading } = useProjects()
+  const { data: projects, isLoading: projectsLoading, refetch: refetchProjects } = useProjects()
   const { data: features } = useFeatures(selectedProject)
   const { data: agentStatusData } = useAgentStatus(selectedProject)
   const wsState = useProjectWebSocket(selectedProject)
+
+  // Get the selected project's has_spec status
+  const selectedProjectData = selectedProject
+    ? projects?.find(p => p.name === selectedProject)
+    : null
+  const needsSetup = selectedProjectData?.has_spec === false
 
   // Play sounds when features move between columns
   useFeatureSound(features)
@@ -95,7 +104,9 @@ function App() {
 
       // Escape : Close modals
       if (e.key === 'Escape') {
-        if (assistantOpen) {
+        if (showResetModal) {
+          setShowResetModal(false)
+        } else if (assistantOpen) {
           setAssistantOpen(false)
         } else if (showAddFeature) {
           setShowAddFeature(false)
@@ -109,7 +120,7 @@ function App() {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [selectedProject, showAddFeature, selectedFeature, debugOpen, assistantOpen])
+  }, [selectedProject, showAddFeature, selectedFeature, debugOpen, assistantOpen, showResetModal, wsState.agentStatus])
 
   // Combine WebSocket progress with feature data
   const progress = wsState.progress.total > 0 ? wsState.progress : {
@@ -160,6 +171,16 @@ function App() {
                     </kbd>
                   </button>
 
+                  <button
+                    onClick={() => setShowResetModal(true)}
+                    className="neo-btn bg-[var(--color-neo-pending)] text-[var(--color-neo-text)] text-sm"
+                    title="Reset project to start fresh"
+                    disabled={wsState.agentStatus === 'running'}
+                  >
+                    <RotateCcw size={18} />
+                    Reset
+                  </button>
+
                   <AgentControl
                     projectName={selectedProject}
                     status={wsState.agentStatus}
@@ -186,6 +207,14 @@ function App() {
               Select a project from the dropdown above or create a new one to get started.
             </p>
           </div>
+        ) : needsSetup ? (
+          <ProjectSetupRequired
+            projectName={selectedProject}
+            onSetupComplete={() => {
+              // Refetch projects to update has_spec status
+              refetchProjects()
+            }}
+          />
         ) : (
           <div className="space-y-8">
             {/* Progress Dashboard */}
@@ -242,6 +271,14 @@ function App() {
           feature={selectedFeature}
           projectName={selectedProject}
           onClose={() => setSelectedFeature(null)}
+        />
+      )}
+
+      {/* Reset Project Modal */}
+      {showResetModal && selectedProject && (
+        <ResetProjectModal
+          projectName={selectedProject}
+          onClose={() => setShowResetModal(false)}
         />
       )}
 
