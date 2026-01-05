@@ -11,8 +11,12 @@ echo ""
 # Get the directory where this script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Use virtual environment if it exists
+if [ -f "$SCRIPT_DIR/venv/bin/activate" ]; then
+    source "$SCRIPT_DIR/venv/bin/activate"
+    PYTHON_CMD="python"
 # Check if Python is available
-if ! command -v python3 &> /dev/null; then
+elif ! command -v python3 &> /dev/null; then
     if ! command -v python &> /dev/null; then
         echo "ERROR: Python not found"
         echo "Please install Python from https://python.org"
