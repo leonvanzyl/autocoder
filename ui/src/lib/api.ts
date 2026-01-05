@@ -95,6 +95,18 @@ export async function openProjectInIDE(name: string, ide: string): Promise<{ sta
   })
 }
 
+export interface ResetProjectResponse {
+  success: boolean
+  message: string
+  deleted_files: string[]
+}
+
+export async function resetProject(name: string): Promise<ResetProjectResponse> {
+  return fetchJSON(`/projects/${encodeURIComponent(name)}/reset`, {
+    method: 'POST',
+  })
+}
+
 export async function getProjectPrompts(name: string): Promise<ProjectPrompts> {
   return fetchJSON(`/projects/${encodeURIComponent(name)}/prompts`);
 }
