@@ -95,12 +95,6 @@ function App() {
         setAssistantOpen(prev => !prev)
       }
 
-      // R : Reset project (when project selected and agent not running)
-      if ((e.key === 'r' || e.key === 'R') && selectedProject && wsState.agentStatus !== 'running') {
-        e.preventDefault()
-        setShowResetModal(true)
-      }
-
       // Escape : Close modals
       if (e.key === 'Escape') {
         if (showResetModal) {
@@ -173,14 +167,11 @@ function App() {
                   <button
                     onClick={() => setShowResetModal(true)}
                     className="neo-btn bg-[var(--color-neo-pending)] text-[var(--color-neo-text)] text-sm"
-                    title="Reset project to start fresh (Press R)"
+                    title="Reset project to start fresh"
                     disabled={wsState.agentStatus === 'running'}
                   >
                     <RotateCcw size={18} />
                     Reset
-                    <kbd className="ml-1.5 px-1.5 py-0.5 text-xs bg-black/20 rounded font-mono">
-                      R
-                    </kbd>
                   </button>
 
                   <AgentControl

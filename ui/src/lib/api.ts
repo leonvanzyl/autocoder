@@ -70,10 +70,12 @@ export interface ResetProjectResponse {
   success: boolean
   message: string
   deleted_files: string[]
+  full_reset: boolean
 }
 
-export async function resetProject(name: string): Promise<ResetProjectResponse> {
-  return fetchJSON(`/projects/${encodeURIComponent(name)}/reset`, {
+export async function resetProject(name: string, fullReset: boolean = false): Promise<ResetProjectResponse> {
+  const params = fullReset ? '?full_reset=true' : ''
+  return fetchJSON(`/projects/${encodeURIComponent(name)}/reset${params}`, {
     method: 'POST',
   })
 }

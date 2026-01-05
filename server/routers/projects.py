@@ -259,23 +259,34 @@ async def delete_project(name: str, delete_files: bool = False):
     }
 
 
+class ResetOptions:
+    """Options for project reset."""
+    delete_prompts: bool = False
+
+
 @router.post("/{name}/reset")
-async def reset_project(name: str):
+async def reset_project(name: str, full_reset: bool = False):
     """
     Reset a project to its initial state.
 
-    This clears all features, assistant chat history, and settings while
-    preserving the prompts directory. Use this to restart a project from scratch
-    without having to re-register it.
+    This clears all features, assistant chat history, and settings.
+    Use this to restart a project from scratch without having to re-register it.
 
-    Deletes:
+    Args:
+        name: Project name to reset
+        full_reset: If True, also deletes prompts directory for complete fresh start
+
+    Always Deletes:
     - features.db (feature tracking database)
     - assistant.db (assistant chat history)
     - .claude_settings.json (agent settings)
     - .claude_assistant_settings.json (assistant settings)
 
-    Preserves:
+    When full_reset=True, Also Deletes:
     - prompts/ directory (app_spec.txt, initializer_prompt.md, coding_prompt.md)
+
+    Preserves:
+    - Project registration in registry
     """
     _init_imports()
     _, _, get_project_path, _, _ = _get_registry_functions()
@@ -317,16 +328,28 @@ async def reset_project(name: str):
             except Exception as e:
                 errors.append(f"{filename}: {e}")
 
+    # If full reset, also delete prompts directory
+    if full_reset:
+        prompts_dir = project_dir / "prompts"
+        if prompts_dir.exists():
+            try:
+                shutil.rmtree(prompts_dir)
+                deleted_files.append("prompts/")
+            except Exception as e:
+                errors.append(f"prompts/: {e}")
+
     if errors:
         raise HTTPException(
             status_code=500,
             detail=f"Failed to delete some files: {'; '.join(errors)}"
         )
 
+    reset_type = "fully reset" if full_reset else "reset"
     return {
         "success": True,
-        "message": f"Project '{name}' has been reset",
+        "message": f"Project '{name}' has been {reset_type}",
         "deleted_files": deleted_files,
+        "full_reset": full_reset,
     }
 
 
