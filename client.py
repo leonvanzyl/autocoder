@@ -160,17 +160,17 @@ def create_client(project_dir: Path, model: str, yolo_mode: bool = False):
         print("   - Warning: System Claude CLI not found, using bundled CLI")
 
     # Build MCP servers config - features is always included, playwright only in standard mode
+    # NOTE: Don't pass env at all - the subprocess inherits the parent environment automatically.
+    # Passing env (especially **os.environ) exceeds Windows command line limits (~8KB).
+    # Instead, we pass PROJECT_DIR as a command line argument.
     mcp_servers = {
         "features": {
             "command": sys.executable,  # Use the same Python that's running this script
-            "args": ["-m", "mcp_server.feature_mcp"],
-            "env": {
-                # Inherit parent environment (PATH, ANTHROPIC_API_KEY, etc.)
-                **os.environ,
-                # Add custom variables
-                "PROJECT_DIR": str(project_dir.resolve()),
-                "PYTHONPATH": str(Path(__file__).parent.resolve()),
-            },
+            "args": [
+                "-m", "mcp_server.feature_mcp",
+                "--project-dir", str(project_dir.resolve()),
+            ],
+            # No env - subprocess inherits parent environment
         },
     }
     if not yolo_mode:

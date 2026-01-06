@@ -72,6 +72,7 @@ class SpecChatSession:
         self.created_at = datetime.now()
         self._conversation_id: Optional[str] = None
         self._client_entered: bool = False  # Track if context manager is active
+        self._skill_content: str = ""  # Loaded in start()
 
     async def close(self) -> None:
         """Clean up resources and close the Claude client."""
@@ -138,18 +139,20 @@ class SpecChatSession:
         # Replace $ARGUMENTS with absolute project path (like CLI does in start.py:184)
         # Using absolute path avoids confusion when project folder name differs from app name
         project_path = str(self.project_dir.resolve())
-        system_prompt = skill_content.replace("$ARGUMENTS", project_path)
+        self._skill_content = skill_content.replace("$ARGUMENTS", project_path)
 
         # Create Claude SDK client with limited tools for spec creation
         # Use Opus for best quality spec generation
         # Use system CLI to avoid bundled Bun runtime crash (exit code 3) on Windows
+        # NOTE: We use a short system_prompt to avoid Windows command line length limits (~8KB)
+        # The full skill content (~18KB) is passed in the first message instead
         system_cli = shutil.which("claude")
         try:
             self.client = ClaudeSDKClient(
                 options=ClaudeAgentOptions(
                     model="claude-opus-4-5-20251101",
                     cli_path=system_cli,
-                    system_prompt=system_prompt,
+                    system_prompt="You are an expert at creating detailed application specifications. Follow the instructions provided in the user's first message.",
                     allowed_tools=[
                         "Read",
                         "Write",
@@ -173,9 +176,11 @@ class SpecChatSession:
             }
             return
 
-        # Start the conversation - Claude will send the Phase 1 greeting
+        # Start the conversation - send the full skill content as the first message
+        # This avoids Windows command line length limits by not using system_prompt
         try:
-            async for chunk in self._query_claude("Begin the spec creation process."):
+            initial_message = f"{self._skill_content}\n\n---\n\nBegin the spec creation process."
+            async for chunk in self._query_claude(initial_message):
                 yield chunk
             # Signal that the response is complete (for UI to hide loading indicator)
             yield {"type": "response_done"}

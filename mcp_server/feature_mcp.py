@@ -17,6 +17,7 @@ Tools:
 - feature_create_bulk: Create multiple features at once
 """
 
+import argparse
 import json
 import os
 import sys
@@ -34,8 +35,31 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from api.database import Feature, create_database
 from api.migration import migrate_json_to_sqlite
 
-# Configuration from environment
-PROJECT_DIR = Path(os.environ.get("PROJECT_DIR", ".")).resolve()
+
+def get_project_dir() -> Path:
+    """Get project directory from CLI args or environment variable.
+
+    Supports both --project-dir CLI argument (preferred on Windows to avoid
+    command line length limits) and PROJECT_DIR environment variable.
+    """
+    parser = argparse.ArgumentParser(description="Feature MCP Server")
+    parser.add_argument(
+        "--project-dir",
+        type=str,
+        default=None,
+        help="Project directory path"
+    )
+    args, _ = parser.parse_known_args()
+
+    if args.project_dir:
+        return Path(args.project_dir).resolve()
+
+    # Fall back to environment variable
+    return Path(os.environ.get("PROJECT_DIR", ".")).resolve()
+
+
+# Configuration - supports both CLI args and environment variable
+PROJECT_DIR = get_project_dir()
 
 
 # Pydantic models for input validation
