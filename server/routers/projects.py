@@ -272,7 +272,7 @@ async def get_project_prompts(name: str):
         raise HTTPException(status_code=404, detail=f"Project '{name}' not found")
 
     if not project_dir.exists():
-        raise HTTPException(status_code=404, detail=f"Project directory not found")
+        raise HTTPException(status_code=404, detail="Project directory not found")
 
     prompts_dir = _get_project_prompts_dir(project_dir)
 
@@ -305,7 +305,7 @@ async def update_project_prompts(name: str, prompts: ProjectPromptsUpdate):
         raise HTTPException(status_code=404, detail=f"Project '{name}' not found")
 
     if not project_dir.exists():
-        raise HTTPException(status_code=404, detail=f"Project directory not found")
+        raise HTTPException(status_code=404, detail="Project directory not found")
 
     prompts_dir = _get_project_prompts_dir(project_dir)
     prompts_dir.mkdir(parents=True, exist_ok=True)
@@ -335,6 +335,6 @@ async def get_project_stats_endpoint(name: str):
         raise HTTPException(status_code=404, detail=f"Project '{name}' not found")
 
     if not project_dir.exists():
-        raise HTTPException(status_code=404, detail=f"Project directory not found")
+        raise HTTPException(status_code=404, detail="Project directory not found")
 
     return get_project_stats(project_dir)

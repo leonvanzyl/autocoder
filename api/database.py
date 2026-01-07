@@ -5,15 +5,26 @@ Database Models and Connection
 SQLite database schema for feature storage using SQLAlchemy.
 """
 
+import enum
 from pathlib import Path
 from typing import Optional
 
-from sqlalchemy import Boolean, Column, Integer, String, Text, create_engine
+from sqlalchemy import Boolean, Column, DateTime, Enum, Integer, String, Text, create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.types import JSON
 
 Base = declarative_base()
+
+
+class FeatureStatus(enum.Enum):
+    """Status of a feature in the queue."""
+
+    PENDING = "pending"  # Available for claiming
+    IN_PROGRESS = "in_progress"  # Claimed by a worker (leased)
+    PASSING = "passing"  # Completed successfully
+    CONFLICT = "conflict"  # Merge conflict; manual resolution needed
+    FAILED = "failed"  # Agent could not complete (permanent)
 
 
 class Feature(Base):
@@ -27,8 +38,25 @@ class Feature(Base):
     name = Column(String(255), nullable=False)
     description = Column(Text, nullable=False)
     steps = Column(JSON, nullable=False)  # Stored as JSON array
+
+    # Status tracking (new enum-based status for parallel execution)
+    status = Column(
+        Enum(FeatureStatus, values_callable=lambda x: [e.value for e in x]),
+        default=FeatureStatus.PENDING,
+        index=True,
+    )
+
+    # Legacy fields - kept for backward compatibility
     passes = Column(Boolean, default=False, index=True)
     in_progress = Column(Boolean, default=False, index=True)
+
+    # Claim/lease tracking for parallel execution
+    claimed_by = Column(String(100), nullable=True)  # Worker ID holding this feature
+    claimed_at = Column(DateTime, nullable=True)  # Timestamp for lease expiry detection
+
+    # Completion audit
+    completed_at = Column(DateTime, nullable=True)
+    completed_by = Column(String(100), nullable=True)
 
     def to_dict(self) -> dict:
         """Convert feature to dictionary for JSON serialization."""
@@ -41,6 +69,11 @@ class Feature(Base):
             "steps": self.steps,
             "passes": self.passes,
             "in_progress": self.in_progress,
+            "status": self.status.value if self.status else FeatureStatus.PENDING.value,
+            "claimed_by": self.claimed_by,
+            "claimed_at": self.claimed_at.isoformat() if self.claimed_at else None,
+            "completed_at": self.completed_at.isoformat() if self.completed_at else None,
+            "completed_by": self.completed_by,
         }
 
 
@@ -58,19 +91,46 @@ def get_database_url(project_dir: Path) -> str:
     return f"sqlite:///{db_path.as_posix()}"
 
 
-def _migrate_add_in_progress_column(engine) -> None:
-    """Add in_progress column to existing databases that don't have it."""
+def _migrate_database_schema(engine) -> None:
+    """Migrate existing databases to add new columns for parallel execution."""
     from sqlalchemy import text
 
     with engine.connect() as conn:
-        # Check if column exists
+        # Check existing columns
         result = conn.execute(text("PRAGMA table_info(features)"))
         columns = [row[1] for row in result.fetchall()]
 
+        # Migration: in_progress column (legacy)
         if "in_progress" not in columns:
-            # Add the column with default value
             conn.execute(text("ALTER TABLE features ADD COLUMN in_progress BOOLEAN DEFAULT 0"))
-            conn.commit()
+
+        # Migration: status column for parallel execution
+        if "status" not in columns:
+            conn.execute(text("ALTER TABLE features ADD COLUMN status TEXT DEFAULT 'pending'"))
+            # Migrate existing data: passes=True -> 'passing', in_progress=True -> 'in_progress'
+            conn.execute(text("""
+                UPDATE features SET status = CASE
+                    WHEN passes = 1 THEN 'passing'
+                    WHEN in_progress = 1 THEN 'in_progress'
+                    ELSE 'pending'
+                END
+            """))
+
+        # Migration: claim tracking columns
+        if "claimed_by" not in columns:
+            conn.execute(text("ALTER TABLE features ADD COLUMN claimed_by TEXT"))
+
+        if "claimed_at" not in columns:
+            conn.execute(text("ALTER TABLE features ADD COLUMN claimed_at DATETIME"))
+
+        # Migration: completion audit columns
+        if "completed_at" not in columns:
+            conn.execute(text("ALTER TABLE features ADD COLUMN completed_at DATETIME"))
+
+        if "completed_by" not in columns:
+            conn.execute(text("ALTER TABLE features ADD COLUMN completed_by TEXT"))
+
+        conn.commit()
 
 
 def create_database(project_dir: Path) -> tuple:
@@ -87,8 +147,8 @@ def create_database(project_dir: Path) -> tuple:
     engine = create_engine(db_url, connect_args={"check_same_thread": False})
     Base.metadata.create_all(bind=engine)
 
-    # Migrate existing databases to add in_progress column
-    _migrate_add_in_progress_column(engine)
+    # Migrate existing databases to add new columns
+    _migrate_database_schema(engine)
 
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     return engine, SessionLocal

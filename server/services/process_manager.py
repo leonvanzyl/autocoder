@@ -75,6 +75,7 @@ class AgentProcessManager:
         self.started_at: datetime | None = None
         self._output_task: asyncio.Task | None = None
         self.yolo_mode: bool = False  # YOLO mode for rapid prototyping
+        self.parallel_workers: int | None = None  # Number of parallel workers (None = single agent)
 
         # Support multiple callbacks (for multiple WebSocket clients)
         self._output_callbacks: Set[Callable[[str], Awaitable[None]]] = set()
@@ -148,11 +149,11 @@ class AgentProcessManager:
         try:
             pid = int(self.lock_file.read_text().strip())
             if psutil.pid_exists(pid):
-                # Check if it's actually our agent process
+                # Check if it's actually our agent process (single or parallel)
                 try:
                     proc = psutil.Process(pid)
                     cmdline = " ".join(proc.cmdline())
-                    if "autonomous_agent_demo.py" in cmdline:
+                    if "autonomous_agent_demo.py" in cmdline or "parallel_agent.py" in cmdline:
                         return False  # Another agent is running
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
                     pass
@@ -215,12 +216,17 @@ class AgentProcessManager:
                     self.status = "stopped"
                 self._remove_lock()
 
-    async def start(self, yolo_mode: bool = False) -> tuple[bool, str]:
+    async def start(
+        self,
+        yolo_mode: bool = False,
+        parallel_workers: int | None = None
+    ) -> tuple[bool, str]:
         """
         Start the agent as a subprocess.
 
         Args:
             yolo_mode: If True, run in YOLO mode (no browser testing)
+            parallel_workers: Number of parallel workers (None or 1 = single agent)
 
         Returns:
             Tuple of (success, message)
@@ -231,16 +237,35 @@ class AgentProcessManager:
         if not self._check_lock():
             return False, "Another agent instance is already running for this project"
 
-        # Store YOLO mode for status queries
+        # Store mode settings for status queries
         self.yolo_mode = yolo_mode
+        self.parallel_workers = parallel_workers if parallel_workers and parallel_workers > 1 else None
 
-        # Build command - pass absolute path to project directory
-        cmd = [
-            sys.executable,
-            str(self.root_dir / "autonomous_agent_demo.py"),
-            "--project-dir",
-            str(self.project_dir.resolve()),
-        ]
+        # Determine which script to run
+        use_parallel = parallel_workers is not None and parallel_workers > 1
+
+        if use_parallel:
+            # Verify git repo for parallel mode
+            if not (self.project_dir / ".git").exists():
+                return False, "Parallel mode requires a git repository"
+
+            # Build command for parallel agent
+            cmd = [
+                sys.executable,
+                str(self.root_dir / "parallel_agent.py"),
+                "--project-dir",
+                str(self.project_dir.resolve()),
+                "--workers",
+                str(parallel_workers),
+            ]
+        else:
+            # Build command for single agent
+            cmd = [
+                sys.executable,
+                str(self.root_dir / "autonomous_agent_demo.py"),
+                "--project-dir",
+                str(self.project_dir.resolve()),
+            ]
 
         # Add --yolo flag if YOLO mode is enabled
         if yolo_mode:
@@ -263,6 +288,8 @@ class AgentProcessManager:
             # Start output streaming task
             self._output_task = asyncio.create_task(self._stream_output())
 
+            if use_parallel:
+                return True, f"Parallel agent started with {parallel_workers} workers (PID {self.process.pid})"
             return True, f"Agent started with PID {self.process.pid}"
         except Exception as e:
             logger.exception("Failed to start agent")
@@ -307,6 +334,7 @@ class AgentProcessManager:
             self.process = None
             self.started_at = None
             self.yolo_mode = False  # Reset YOLO mode
+            self.parallel_workers = None  # Reset parallel mode
 
             return True, "Agent stopped"
         except Exception as e:
@@ -388,6 +416,7 @@ class AgentProcessManager:
             "pid": self.pid,
             "started_at": self.started_at.isoformat() if self.started_at else None,
             "yolo_mode": self.yolo_mode,
+            "parallel_workers": self.parallel_workers,
         }
 
 

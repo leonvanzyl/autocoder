@@ -9,7 +9,6 @@ but cannot modify any files.
 
 import json
 import logging
-import os
 import shutil
 import sys
 import threading
@@ -22,7 +21,6 @@ from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
 from .assistant_database import (
     create_conversation,
     add_message,
-    get_conversation,
 )
 
 logger = logging.getLogger(__name__)
@@ -168,23 +166,30 @@ class AssistantChatSession:
             json.dump(security_settings, f, indent=2)
 
         # Build MCP servers config - only features MCP for read-only access
+        # NOTE: Don't specify env - let subprocess inherit parent environment.
+        # This avoids Windows command line limits while keeping necessary env vars.
+        # IMPORTANT: Use absolute path to feature_mcp.py since cwd may be different from autocoder root
+        mcp_script = ROOT_DIR / "mcp_server" / "feature_mcp.py"
         mcp_servers = {
             "features": {
                 "command": sys.executable,
-                "args": ["-m", "mcp_server.feature_mcp"],
-                "env": {
-                    **os.environ,
-                    "PROJECT_DIR": str(self.project_dir.resolve()),
-                    "PYTHONPATH": str(ROOT_DIR.resolve()),
-                },
+                "args": [
+                    str(mcp_script.resolve()),
+                    "--project-dir", str(self.project_dir.resolve()),
+                ],
             },
         }
 
-        # Get system prompt with project context
-        system_prompt = get_system_prompt(self.project_name, self.project_dir)
+        # NOTE: Use a short system_prompt to avoid Windows command line length limits (~8KB)
+        # The full project context will be passed in the greeting message instead
+        system_prompt = "You are a helpful project assistant with read-only access. Follow the context provided in your first message."
+
+        # Get the full context to include in the greeting
+        project_context = get_system_prompt(self.project_name, self.project_dir)
 
         # Use system Claude CLI
         system_cli = shutil.which("claude")
+        logger.info(f"Creating assistant client for {self.project_name}")
 
         try:
             self.client = ClaudeSDKClient(
@@ -202,19 +207,29 @@ class AssistantChatSession:
             )
             await self.client.__aenter__()
             self._client_entered = True
+            logger.info(f"Assistant client connected for {self.project_name}")
         except Exception as e:
-            logger.exception("Failed to create Claude client")
+            logger.exception(f"Failed to create Claude client: {type(e).__name__}: {e}")
             yield {"type": "error", "content": f"Failed to initialize assistant: {str(e)}"}
             return
 
-        # Send initial greeting
+        # Send project context to Claude as the first message to set up the assistant
+        # This is similar to how spec_chat_session sends skill content in the first message
         try:
-            greeting = f"Hello! I'm your project assistant for **{self.project_name}**. I can help you understand the codebase, explain features, and answer questions about the project. What would you like to know?"
+            # Send context to Claude and get initial response
+            context_message = f"{project_context}\n\n---\n\nPlease introduce yourself briefly as the project assistant."
+            greeting_parts = []
 
-            # Store the greeting in the database
-            add_message(self.project_dir, self.conversation_id, "assistant", greeting)
+            async for chunk in self._query_claude(context_message):
+                if chunk.get("type") == "text":
+                    greeting_parts.append(chunk.get("content", ""))
+                yield chunk
 
-            yield {"type": "text", "content": greeting}
+            # Store the complete greeting in the database
+            greeting = "".join(greeting_parts)
+            if greeting:
+                add_message(self.project_dir, self.conversation_id, "assistant", greeting)
+
             yield {"type": "response_done"}
         except Exception as e:
             logger.exception("Failed to send greeting")

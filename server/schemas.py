@@ -103,6 +103,12 @@ class FeatureListResponse(BaseModel):
 class AgentStartRequest(BaseModel):
     """Request schema for starting the agent."""
     yolo_mode: bool = False
+    parallel_workers: int | None = Field(
+        default=None,
+        ge=1,
+        le=10,
+        description="Number of parallel workers (1-10). None or 1 = single agent mode"
+    )
 
 
 class AgentStatus(BaseModel):
@@ -111,6 +117,7 @@ class AgentStatus(BaseModel):
     pid: int | None = None
     started_at: datetime | None = None
     yolo_mode: bool = False
+    parallel_workers: int | None = None  # None = single agent mode
 
 
 class AgentActionResponse(BaseModel):

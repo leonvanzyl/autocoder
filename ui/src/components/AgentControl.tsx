@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Play, Pause, Square, Loader2, Zap } from 'lucide-react'
+import { Play, Pause, Square, Loader2, Zap, Users } from 'lucide-react'
 import {
   useStartAgent,
   useStopAgent,
@@ -12,10 +12,12 @@ interface AgentControlProps {
   projectName: string
   status: AgentStatus
   yoloMode?: boolean  // From server status - whether currently running in YOLO mode
+  parallelWorkers?: number | null  // From server status - current worker count
 }
 
-export function AgentControl({ projectName, status, yoloMode = false }: AgentControlProps) {
+export function AgentControl({ projectName, status, yoloMode = false, parallelWorkers = null }: AgentControlProps) {
   const [yoloEnabled, setYoloEnabled] = useState(false)
+  const [workerCount, setWorkerCount] = useState<number | null>(null)  // null = single agent
 
   const startAgent = useStartAgent(projectName)
   const stopAgent = useStopAgent(projectName)
@@ -28,7 +30,7 @@ export function AgentControl({ projectName, status, yoloMode = false }: AgentCon
     pauseAgent.isPending ||
     resumeAgent.isPending
 
-  const handleStart = () => startAgent.mutate(yoloEnabled)
+  const handleStart = () => startAgent.mutate({ yoloMode: yoloEnabled, parallelWorkers: workerCount })
   const handleStop = () => stopAgent.mutate()
   const handlePause = () => pauseAgent.mutate()
   const handleResume = () => resumeAgent.mutate()
@@ -48,6 +50,16 @@ export function AgentControl({ projectName, status, yoloMode = false }: AgentCon
         </div>
       )}
 
+      {/* Parallel Workers Indicator - shown when running with multiple workers */}
+      {(status === 'running' || status === 'paused') && parallelWorkers && parallelWorkers > 1 && (
+        <div className="flex items-center gap-1 px-2 py-1 bg-[var(--color-neo-progress)] border-3 border-[var(--color-neo-border)]">
+          <Users size={14} className="text-cyan-900" />
+          <span className="font-display font-bold text-xs uppercase text-cyan-900">
+            {parallelWorkers}x
+          </span>
+        </div>
+      )}
+
       {/* Control Buttons */}
       <div className="flex gap-1">
         {status === 'stopped' || status === 'crashed' ? (
@@ -62,11 +74,33 @@ export function AgentControl({ projectName, status, yoloMode = false }: AgentCon
             >
               <Zap size={18} className={yoloEnabled ? 'text-yellow-900' : ''} />
             </button>
+            {/* Parallel Workers Selector - cycles through 1/3/5 */}
+            <button
+              onClick={() => {
+                // Cycle: null(1) -> 3 -> 5 -> null(1)
+                if (workerCount === null) setWorkerCount(3)
+                else if (workerCount === 3) setWorkerCount(5)
+                else setWorkerCount(null)
+              }}
+              className={`neo-btn text-sm py-2 px-3 ${
+                workerCount !== null ? 'neo-btn-info' : 'neo-btn-secondary'
+              }`}
+              title={`Parallel Workers: ${workerCount ?? 1} (click to cycle 1→3→5)`}
+            >
+              <Users size={18} className={workerCount !== null ? 'text-cyan-900' : ''} />
+              {workerCount !== null && (
+                <span className="ml-1 font-bold text-xs">{workerCount}</span>
+              )}
+            </button>
             <button
               onClick={handleStart}
               disabled={isLoading}
               className="neo-btn neo-btn-success text-sm py-2 px-3"
-              title={yoloEnabled ? "Start Agent (YOLO Mode)" : "Start Agent"}
+              title={
+                workerCount !== null
+                  ? `Start ${workerCount} Parallel Agents${yoloEnabled ? ' (YOLO Mode)' : ''}`
+                  : yoloEnabled ? 'Start Agent (YOLO Mode)' : 'Start Agent'
+              }
             >
               {isLoading ? (
                 <Loader2 size={18} className="animate-spin" />

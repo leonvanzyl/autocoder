@@ -69,6 +69,7 @@ async def get_agent_status(project_name: str):
         pid=manager.pid,
         started_at=manager.started_at,
         yolo_mode=manager.yolo_mode,
+        parallel_workers=manager.parallel_workers,
     )
 
 
@@ -77,10 +78,16 @@ async def start_agent(
     project_name: str,
     request: AgentStartRequest = AgentStartRequest(),
 ):
-    """Start the agent for a project."""
+    """Start the agent for a project.
+
+    If parallel_workers > 1, uses git worktrees for parallel execution.
+    """
     manager = get_project_manager(project_name)
 
-    success, message = await manager.start(yolo_mode=request.yolo_mode)
+    success, message = await manager.start(
+        yolo_mode=request.yolo_mode,
+        parallel_workers=request.parallel_workers,
+    )
 
     return AgentActionResponse(
         success=success,

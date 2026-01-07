@@ -6,12 +6,14 @@ Functions for creating and configuring the Claude Agent SDK client.
 """
 
 import json
-import os
 import shutil
 import sys
 from pathlib import Path
 
 from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
+
+# Root directory of the autocoder project (where this file lives)
+ROOT_DIR = Path(__file__).parent.resolve()
 from claude_agent_sdk.types import HookMatcher
 
 from security import bash_security_hook
@@ -21,6 +23,7 @@ from security import bash_security_hook
 FEATURE_MCP_TOOLS = [
     "mcp__features__feature_get_stats",
     "mcp__features__feature_get_next",
+    "mcp__features__feature_get_by_id",  # For parallel mode - get specific feature
     "mcp__features__feature_get_for_regression",
     "mcp__features__feature_mark_in_progress",
     "mcp__features__feature_mark_passing",
@@ -74,27 +77,37 @@ BUILTIN_TOOLS = [
 ]
 
 
-def create_client(project_dir: Path, model: str, yolo_mode: bool = False):
+def create_client(
+    project_dir: Path,
+    model: str,
+    yolo_mode: bool = False,
+    work_dir: Path | None = None,
+):
     """
     Create a Claude Agent SDK client with multi-layered security.
 
     Args:
-        project_dir: Directory for the project
+        project_dir: Directory for prompts and features.db (MCP server target)
         model: Claude model to use
         yolo_mode: If True, skip Playwright MCP server for rapid prototyping
+        work_dir: Directory for file operations (default: same as project_dir)
+                  In parallel mode, this is the git worktree path.
 
     Returns:
         Configured ClaudeSDKClient (from claude_agent_sdk)
 
     Security layers (defense in depth):
     1. Sandbox - OS-level bash command isolation prevents filesystem escape
-    2. Permissions - File operations restricted to project_dir only
+    2. Permissions - File operations restricted to work_dir only
     3. Security hooks - Bash commands validated against an allowlist
        (see security.py for ALLOWED_COMMANDS)
 
     Note: Authentication is handled by start.bat/start.sh before this runs.
     The Claude SDK auto-detects credentials from ~/.claude/.credentials.json
     """
+    # work_dir defaults to project_dir if not specified
+    if work_dir is None:
+        work_dir = project_dir
     # Build allowed tools list based on mode
     # In YOLO mode, exclude Playwright tools for faster prototyping
     allowed_tools = [*BUILTIN_TOOLS, *FEATURE_MCP_TOOLS]
@@ -133,17 +146,20 @@ def create_client(project_dir: Path, model: str, yolo_mode: bool = False):
         },
     }
 
-    # Ensure project directory exists before creating settings file
+    # Ensure directories exist before creating settings file
     project_dir.mkdir(parents=True, exist_ok=True)
+    work_dir.mkdir(parents=True, exist_ok=True)
 
-    # Write settings to a file in the project directory
-    settings_file = project_dir / ".claude_settings.json"
+    # Write settings to a file in the work directory (where cwd is)
+    settings_file = work_dir / ".claude_settings.json"
     with open(settings_file, "w") as f:
         json.dump(security_settings, f, indent=2)
 
     print(f"Created security settings at {settings_file}")
     print("   - Sandbox enabled (OS-level bash isolation)")
-    print(f"   - Filesystem restricted to: {project_dir.resolve()}")
+    print(f"   - Filesystem restricted to: {work_dir.resolve()}")
+    if work_dir != project_dir:
+        print(f"   - Database/prompts from: {project_dir.resolve()}")
     print("   - Bash commands restricted to allowlist (see security.py)")
     if yolo_mode:
         print("   - MCP servers: features (database) - YOLO MODE (no Playwright)")
@@ -160,17 +176,17 @@ def create_client(project_dir: Path, model: str, yolo_mode: bool = False):
         print("   - Warning: System Claude CLI not found, using bundled CLI")
 
     # Build MCP servers config - features is always included, playwright only in standard mode
+    # NOTE: Don't specify env - let subprocess inherit parent environment.
+    # This avoids Windows command line limits while keeping necessary env vars.
+    # IMPORTANT: Use absolute path to feature_mcp.py since cwd may be different from autocoder root
+    mcp_script = ROOT_DIR / "mcp_server" / "feature_mcp.py"
     mcp_servers = {
         "features": {
             "command": sys.executable,  # Use the same Python that's running this script
-            "args": ["-m", "mcp_server.feature_mcp"],
-            "env": {
-                # Inherit parent environment (PATH, ANTHROPIC_API_KEY, etc.)
-                **os.environ,
-                # Add custom variables
-                "PROJECT_DIR": str(project_dir.resolve()),
-                "PYTHONPATH": str(Path(__file__).parent.resolve()),
-            },
+            "args": [
+                str(mcp_script),
+                "--project-dir", str(project_dir.resolve()),
+            ],
         },
     }
     if not yolo_mode:
@@ -195,7 +211,7 @@ def create_client(project_dir: Path, model: str, yolo_mode: bool = False):
                 ],
             },
             max_turns=1000,
-            cwd=str(project_dir.resolve()),
+            cwd=str(work_dir.resolve()),  # Work in worktree (parallel) or project dir
             settings=str(settings_file.resolve()),  # Use absolute path
         )
     )

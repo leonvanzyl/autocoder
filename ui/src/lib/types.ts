@@ -90,6 +90,12 @@ export interface AgentStatusResponse {
   pid: number | null
   started_at: string | null
   yolo_mode: boolean
+  parallel_workers: number | null  // Number of parallel workers (null = single agent)
+}
+
+export interface AgentStartOptions {
+  yoloMode: boolean
+  parallelWorkers: number | null  // Number of parallel workers (null or 1 = single agent)
 }
 
 export interface AgentActionResponse {

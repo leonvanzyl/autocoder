@@ -205,16 +205,19 @@ feature_get_stats
 # 2. Get the NEXT feature to work on (one feature only)
 feature_get_next
 
-# 3. Mark a feature as in-progress (call immediately after feature_get_next)
+# 3. Get a specific feature by ID (for parallel mode where feature is pre-assigned)
+feature_get_by_id with feature_id={id}
+
+# 4. Mark a feature as in-progress (call immediately after feature_get_next)
 feature_mark_in_progress with feature_id={id}
 
-# 4. Mark a feature as passing (after lint/type-check succeeds)
+# 5. Mark a feature as passing (after lint/type-check succeeds)
 feature_mark_passing with feature_id={id}
 
-# 5. Skip a feature (moves to end of queue) - ONLY when blocked by dependency
+# 6. Skip a feature (moves to end of queue) - ONLY when blocked by dependency
 feature_skip with feature_id={id}
 
-# 6. Clear in-progress status (when abandoning a feature)
+# 7. Clear in-progress status (when abandoning a feature)
 feature_clear_in_progress with feature_id={id}
 ```
 

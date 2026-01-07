@@ -110,7 +110,7 @@ async def list_features(project_name: str):
         raise HTTPException(status_code=404, detail=f"Project '{project_name}' not found in registry")
 
     if not project_dir.exists():
-        raise HTTPException(status_code=404, detail=f"Project directory not found")
+        raise HTTPException(status_code=404, detail="Project directory not found")
 
     db_file = project_dir / "features.db"
     if not db_file.exists():
@@ -142,7 +142,7 @@ async def list_features(project_name: str):
             )
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         logger.exception("Database error in list_features")
         raise HTTPException(status_code=500, detail="Database error occurred")
 
@@ -157,7 +157,7 @@ async def create_feature(project_name: str, feature: FeatureCreate):
         raise HTTPException(status_code=404, detail=f"Project '{project_name}' not found in registry")
 
     if not project_dir.exists():
-        raise HTTPException(status_code=404, detail=f"Project directory not found")
+        raise HTTPException(status_code=404, detail="Project directory not found")
 
     _, Feature = _get_db_classes()
 
@@ -187,7 +187,7 @@ async def create_feature(project_name: str, feature: FeatureCreate):
             return feature_to_response(db_feature)
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to create feature")
         raise HTTPException(status_code=500, detail="Failed to create feature")
 
@@ -202,7 +202,7 @@ async def get_feature(project_name: str, feature_id: int):
         raise HTTPException(status_code=404, detail=f"Project '{project_name}' not found in registry")
 
     if not project_dir.exists():
-        raise HTTPException(status_code=404, detail=f"Project directory not found")
+        raise HTTPException(status_code=404, detail="Project directory not found")
 
     db_file = project_dir / "features.db"
     if not db_file.exists():
@@ -220,7 +220,7 @@ async def get_feature(project_name: str, feature_id: int):
             return feature_to_response(feature)
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         logger.exception("Database error in get_feature")
         raise HTTPException(status_code=500, detail="Database error occurred")
 
@@ -235,7 +235,7 @@ async def delete_feature(project_name: str, feature_id: int):
         raise HTTPException(status_code=404, detail=f"Project '{project_name}' not found in registry")
 
     if not project_dir.exists():
-        raise HTTPException(status_code=404, detail=f"Project directory not found")
+        raise HTTPException(status_code=404, detail="Project directory not found")
 
     _, Feature = _get_db_classes()
 
@@ -252,7 +252,7 @@ async def delete_feature(project_name: str, feature_id: int):
             return {"success": True, "message": f"Feature {feature_id} deleted"}
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to delete feature")
         raise HTTPException(status_code=500, detail="Failed to delete feature")
 
@@ -272,7 +272,7 @@ async def skip_feature(project_name: str, feature_id: int):
         raise HTTPException(status_code=404, detail=f"Project '{project_name}' not found in registry")
 
     if not project_dir.exists():
-        raise HTTPException(status_code=404, detail=f"Project directory not found")
+        raise HTTPException(status_code=404, detail="Project directory not found")
 
     _, Feature = _get_db_classes()
 
@@ -292,6 +292,6 @@ async def skip_feature(project_name: str, feature_id: int):
             return {"success": True, "message": f"Feature {feature_id} moved to end of queue"}
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to skip feature")
         raise HTTPException(status_code=500, detail="Failed to skip feature")

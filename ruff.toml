@@ -1,0 +1,22 @@
+# Ruff configuration for autocoder project
+
+[lint]
+# Ignore specific rules where they're false positives or intentional
+ignore = [
+    # E402: Module level import not at top of file
+    # Intentional: load_dotenv() must run before imports, ROOT_DIR must be set first
+    "E402",
+    # E712: Avoid equality comparisons to True/False
+    # SQLAlchemy filters require `== True` / `== False` syntax
+    "E712",
+]
+
+# Exclude common non-source directories
+exclude = [
+    ".git",
+    ".venv",
+    "venv",
+    "__pycache__",
+    "node_modules",
+    "ui",
+]

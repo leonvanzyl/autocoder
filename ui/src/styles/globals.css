@@ -150,6 +150,16 @@
     color: #ffffff;
   }
 
+  .neo-btn-secondary {
+    background-color: #e0e0e0;
+    color: #1a1a1a;
+  }
+
+  .neo-btn-info {
+    background-color: var(--color-neo-progress);
+    color: #1a1a1a;
+  }
+
   .neo-btn-ghost {
     background-color: transparent;
     color: #1a1a1a;
