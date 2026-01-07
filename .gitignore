@@ -136,3 +136,7 @@ Pipfile.lock
 *.temp
 .tmp/
 .temp/
+
+# Research and analysis directories
+to_check/
+.serena/

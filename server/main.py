@@ -20,7 +20,16 @@ from fastapi.responses import FileResponse
 mimetypes.add_type("application/javascript", ".js")
 mimetypes.add_type("text/css", ".css")
 
-from .routers import projects_router, features_router, agent_router, spec_creation_router, filesystem_router, assistant_chat_router
+from .routers import (
+    projects_router,
+    features_router,
+    agent_router,
+    spec_creation_router,
+    filesystem_router,
+    assistant_chat_router,
+    model_settings_router,
+    parallel_agents_router,
+)
 from .websocket import project_websocket
 from .services.process_manager import cleanup_all_managers
 from .services.assistant_chat_session import cleanup_all_sessions as cleanup_assistant_sessions
@@ -91,6 +100,8 @@ app.include_router(agent_router)
 app.include_router(spec_creation_router)
 app.include_router(filesystem_router)
 app.include_router(assistant_chat_router)
+app.include_router(model_settings_router)
+app.include_router(parallel_agents_router)
 
 
 # ============================================================================

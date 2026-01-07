@@ -1,0 +1,432 @@
+@import "tailwindcss";
+
+/* ============================================================================
+   Neobrutalism Design System
+   ============================================================================ */
+
+@theme {
+  /* Colors */
+  --color-neo-bg: #fffef5;
+  --color-neo-card: #ffffff;
+  --color-neo-pending: #ffd60a;
+  --color-neo-progress: #00b4d8;
+  --color-neo-done: #70e000;
+  --color-neo-accent: #ff006e;
+  --color-neo-danger: #ff5400;
+  --color-neo-border: #1a1a1a;
+  --color-neo-text: #1a1a1a;
+  --color-neo-text-secondary: #4a4a4a;
+
+  /* Fonts */
+  --font-neo-display: 'Space Grotesk', sans-serif;
+  --font-neo-sans: 'DM Sans', sans-serif;
+  --font-neo-mono: 'JetBrains Mono', monospace;
+
+  /* Shadows */
+  --shadow-neo-sm: 2px 2px 0px rgba(0, 0, 0, 1);
+  --shadow-neo-md: 4px 4px 0px rgba(0, 0, 0, 1);
+  --shadow-neo-lg: 6px 6px 0px rgba(0, 0, 0, 1);
+  --shadow-neo-xl: 8px 8px 0px rgba(0, 0, 0, 1);
+
+  /* Transitions */
+  --transition-neo-fast: 0.15s cubic-bezier(0.34, 1.56, 0.64, 1);
+  --transition-neo-normal: 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* ============================================================================
+   Base Layer - Foundation styles
+   ============================================================================ */
+
+@layer base {
+  /* Ensure CSS variables are available globally */
+  :root {
+    --color-neo-bg: #fffef5;
+    --color-neo-card: #ffffff;
+    --color-neo-pending: #ffd60a;
+    --color-neo-progress: #00b4d8;
+    --color-neo-done: #70e000;
+    --color-neo-accent: #ff006e;
+    --color-neo-danger: #ff5400;
+    --color-neo-border: #1a1a1a;
+    --color-neo-text: #1a1a1a;
+    --color-neo-text-secondary: #4a4a4a;
+    --font-neo-display: 'Space Grotesk', sans-serif;
+    --font-neo-sans: 'DM Sans', sans-serif;
+    --font-neo-mono: 'JetBrains Mono', monospace;
+    --shadow-neo-sm: 2px 2px 0px rgba(0, 0, 0, 1);
+    --shadow-neo-md: 4px 4px 0px rgba(0, 0, 0, 1);
+    --shadow-neo-lg: 6px 6px 0px rgba(0, 0, 0, 1);
+    --shadow-neo-xl: 8px 8px 0px rgba(0, 0, 0, 1);
+  }
+
+  body {
+    font-family: var(--font-neo-sans);
+    background-color: var(--color-neo-bg);
+    color: var(--color-neo-text);
+  }
+
+  /* Force form elements to inherit colors properly */
+  button,
+  input,
+  textarea,
+  select {
+    color: inherit;
+    font-family: inherit;
+  }
+}
+
+/* ============================================================================
+   Component Layer - Reusable component styles
+   ============================================================================ */
+
+@layer components {
+  /* Cards */
+  .neo-card {
+    background: var(--color-neo-card);
+    border: 3px solid var(--color-neo-border);
+    box-shadow: var(--shadow-neo-md);
+    transition: transform var(--transition-neo-fast), box-shadow var(--transition-neo-fast);
+  }
+
+  .neo-card:hover {
+    transform: translate(-2px, -2px);
+    box-shadow: var(--shadow-neo-lg);
+  }
+
+  /* Buttons */
+  .neo-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.5rem;
+    font-family: var(--font-neo-display);
+    font-weight: 700;
+    font-size: 0.875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.025em;
+    color: #1a1a1a;
+    background-color: #ffffff;
+    border: 3px solid #1a1a1a;
+    box-shadow: var(--shadow-neo-md);
+    transition: transform var(--transition-neo-fast), box-shadow var(--transition-neo-fast);
+    cursor: pointer;
+  }
+
+  .neo-btn:hover {
+    transform: translate(-2px, -2px);
+    box-shadow: var(--shadow-neo-lg);
+  }
+
+  .neo-btn:active {
+    transform: translate(2px, 2px);
+    box-shadow: var(--shadow-neo-sm);
+  }
+
+  .neo-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: var(--shadow-neo-sm);
+  }
+
+  .neo-btn-primary {
+    background-color: #ff006e;
+    color: #ffffff;
+  }
+
+  .neo-btn-success {
+    background-color: #70e000;
+    color: #1a1a1a;
+  }
+
+  .neo-btn-warning {
+    background-color: #ffd60a;
+    color: #1a1a1a;
+  }
+
+  .neo-btn-danger {
+    background-color: #ff5400;
+    color: #ffffff;
+  }
+
+  .neo-btn-ghost {
+    background-color: transparent;
+    color: #1a1a1a;
+    box-shadow: none;
+  }
+
+  .neo-btn-ghost:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+    color: #1a1a1a;
+    box-shadow: none;
+    transform: none;
+  }
+
+  /* Inputs */
+  .neo-input {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    font-family: var(--font-neo-sans);
+    font-size: 1rem;
+    color: #1a1a1a;
+    background-color: #ffffff;
+    border: 3px solid #1a1a1a;
+    box-shadow: 3px 3px 0px rgba(0, 0, 0, 0.1);
+    transition: transform var(--transition-neo-fast), box-shadow var(--transition-neo-fast);
+  }
+
+  .neo-input::placeholder {
+    color: #4a4a4a;
+    opacity: 0.7;
+  }
+
+  .neo-input:focus {
+    outline: none;
+    transform: translate(-1px, -1px);
+    box-shadow: var(--shadow-neo-md);
+    border-color: #ff006e;
+  }
+
+  /* Badge */
+  .neo-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.25rem 0.75rem;
+    font-family: var(--font-neo-display);
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: #1a1a1a;
+    border: 2px solid #1a1a1a;
+  }
+
+  /* Progress Bar */
+  .neo-progress {
+    width: 100%;
+    height: 2rem;
+    background-color: #ffffff;
+    border: 3px solid #1a1a1a;
+    box-shadow: var(--shadow-neo-sm);
+    overflow: hidden;
+  }
+
+  .neo-progress-fill {
+    height: 100%;
+    background-color: #70e000;
+    transition: width 0.5s ease-out;
+  }
+
+  /* Modal */
+  .neo-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(2px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 50;
+  }
+
+  .neo-modal {
+    background-color: #ffffff;
+    border: 4px solid #1a1a1a;
+    box-shadow: var(--shadow-neo-xl);
+    animation: popIn 0.3s var(--transition-neo-fast);
+    max-width: 90vw;
+    max-height: 90vh;
+    overflow: auto;
+  }
+
+  /* Dropdown */
+  .neo-dropdown {
+    background-color: #ffffff;
+    border: 3px solid #1a1a1a;
+    box-shadow: var(--shadow-neo-lg);
+  }
+
+  .neo-dropdown-item {
+    display: block;
+    width: 100%;
+    padding: 0.75rem 1rem;
+    cursor: pointer;
+    color: #1a1a1a;
+    background-color: transparent;
+    text-align: left;
+    border: none;
+    font-size: 0.875rem;
+    transition: background-color var(--transition-neo-fast);
+  }
+
+  .neo-dropdown-item:hover {
+    background-color: #ffd60a;
+    color: #1a1a1a;
+  }
+
+  /* Tooltip */
+  .neo-tooltip {
+    background-color: #1a1a1a;
+    color: #ffffff;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    border: 2px solid #1a1a1a;
+    box-shadow: var(--shadow-neo-sm);
+  }
+
+  /* Empty State */
+  .neo-empty-state {
+    background-color: var(--color-neo-bg);
+    border: 4px dashed #1a1a1a;
+    padding: 2rem;
+    text-align: center;
+  }
+}
+
+/* ============================================================================
+   Animations
+   ============================================================================ */
+
+@keyframes popIn {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes neoPulse {
+  0%, 100% {
+    box-shadow: 6px 6px 0px rgba(0, 180, 216, 0.3);
+  }
+  50% {
+    box-shadow: 6px 6px 0px rgba(0, 180, 216, 0.8);
+  }
+}
+
+@keyframes completePop {
+  0% {
+    transform: scale(0.8);
+  }
+  60% {
+    transform: scale(1.15);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes thoughtFade {
+  0% {
+    opacity: 0;
+    transform: translateY(-4px);
+    filter: blur(2px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 200% center;
+  }
+  100% {
+    background-position: -200% center;
+  }
+}
+
+/* ============================================================================
+   Utilities Layer
+   ============================================================================ */
+
+@layer utilities {
+  .animate-slide-in {
+    animation: slideIn 0.3s ease-out;
+  }
+
+  .animate-pop-in {
+    animation: popIn 0.3s var(--transition-neo-fast);
+  }
+
+  .animate-pulse-neo {
+    animation: neoPulse 2s infinite;
+  }
+
+  .animate-complete {
+    animation: completePop 0.5s var(--transition-neo-fast);
+  }
+
+  .animate-thought-fade {
+    animation: thoughtFade 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+  }
+
+  .animate-shimmer {
+    background: linear-gradient(
+      90deg,
+      var(--color-neo-text) 0%,
+      var(--color-neo-text) 40%,
+      var(--color-neo-progress) 50%,
+      var(--color-neo-text) 60%,
+      var(--color-neo-text) 100%
+    );
+    background-size: 200% 100%;
+    background-clip: text;
+    -webkit-background-clip: text;
+    color: transparent;
+    animation: shimmer 2s ease-in-out infinite;
+  }
+
+  .font-display {
+    font-family: var(--font-neo-display);
+  }
+
+  .font-sans {
+    font-family: var(--font-neo-sans);
+  }
+
+  .font-mono {
+    font-family: var(--font-neo-mono);
+  }
+}
+
+/* ============================================================================
+   Scrollbar Styling (outside layers for broad compatibility)
+   ============================================================================ */
+
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+::-webkit-scrollbar-track {
+  background: #fffef5;
+  border: 2px solid #1a1a1a;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #1a1a1a;
+  border: 2px solid #1a1a1a;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #4a4a4a;
+}
