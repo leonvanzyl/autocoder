@@ -17,11 +17,13 @@ logger = logging.getLogger(__name__)
 
 # Files to copy from project_dir to worktrees for agent access
 # These files may not be committed to git but are needed by agents
-# Format: (source_path, dest_path) - if dest_path is None, uses source_path
+# Format: (source_path, dest_path, overwrite) - dest_path=None means same as source
 WORKTREE_SYNC_FILES = [
-    ("app_spec.txt", None),                    # Project specification (root)
-    ("prompts/app_spec.txt", "app_spec.txt"),  # Copy prompts/app_spec.txt → root (fallback)
-    ("claude-progress.txt", None),             # Progress notes
+    # prompts/app_spec.txt is source of truth - always overwrite root copy
+    ("prompts/app_spec.txt", "app_spec.txt", True),
+    # Fallback: copy root app_spec.txt if prompts/ version doesn't exist
+    ("app_spec.txt", None, False),
+    ("claude-progress.txt", None, False),
 ]
 
 
@@ -149,7 +151,7 @@ class WorktreeManager:
         Args:
             worktree_path: Destination worktree directory
         """
-        for src_rel, dst_rel in WORKTREE_SYNC_FILES:
+        for src_rel, dst_rel, overwrite in WORKTREE_SYNC_FILES:
             src = self.project_dir / src_rel
             # Use dst_rel if specified, otherwise same as src_rel
             dst = worktree_path / (dst_rel if dst_rel else src_rel)
@@ -158,8 +160,8 @@ class WorktreeManager:
                 # Create parent directories if needed
                 dst.parent.mkdir(parents=True, exist_ok=True)
 
-                # Only copy if dest doesn't exist (don't overwrite)
-                if not dst.exists():
+                # Copy if dest doesn't exist, or if overwrite=True
+                if not dst.exists() or overwrite:
                     shutil.copy2(src, dst)
                     logger.debug(f"Synced to worktree: {src_rel} → {dst.name}")
 
