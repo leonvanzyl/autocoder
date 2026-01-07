@@ -1,20 +1,31 @@
-# Autonomous Coding Agent
+# AutoCoder - Autonomous Coding Agent
 
-A long-running autonomous coding agent powered by the Claude Agent SDK. This tool can build complete applications over multiple sessions using a two-agent pattern (initializer + coding agent). Includes a React-based UI for monitoring progress in real-time.
+**Fork of the original Autonomous Coding Agent with modern packaging, auto-setup, and a unified CLI.**
 
-## 🚀 NEW Features
+This is my fork of [the original AutoCoder project](https://github.com/original-repo/autocoder) (I'll update this when I find the actual upstream). I loved the concept but wanted it to feel more like a proper, installable tool instead of a collection of scripts. So I:
 
-**Parallel Agent Execution** - Run multiple agents simultaneously for 3x faster development! ✨
-**Smart Model Selection** - Automatic Opus/Haiku routing for optimal cost/speed balance 💡
-**Knowledge Base Learning** - System learns from every feature and gets smarter over time 🧠
+- **Modernized the packaging** - Now it's a proper Python package with `pyproject.toml` (the 2025 way, not the 2015 way)
+- **Added auto-setup** - Because running `npm install && npm run build` manually 47 times was driving me nuts
+- **Unified the CLI** - One command (`autocoder`) that asks what you want instead of remembering 10 different scripts
+- **Fixed import hell** - Everything is now properly organized in `src/autocoder/` instead of scattered everywhere
+- **Kept backward compatibility** - All the old scripts still work because I'm not a monster
+
+The core magic (parallel agents, knowledge base, Claude integration) is all from the original project. I just made it easier to install and use.
 
 ---
 
-## Video Walkthrough
+## What This Thing Actually Does
 
-[![Watch the video](https://img.youtube.com/vi/YW09hhnVqNM/maxresdefault.jpg)](https://youtu.be/YW09hhnVqNM)
+It's an autonomous coding agent powered by Claude that:
 
-> **[Watch the setup and usage guide →](https://youtu.be/YW09hhnVqNM)**
+1. **Reads your project spec** (you create this first)
+2. **Builds features one by one** using the Claude Agent SDK
+3. **Tests everything** (auto-detects your test framework)
+4. **Can run 3-5 agents in parallel** for 3x faster development (the killer feature)
+5. **Learns from patterns** (knowledge base remembers what works)
+6. **Has a pretty nice web UI** for watching it work
+
+It's not going to replace your dev team (yet), but it's shockingly good at building features when you give it clear specs.
 
 ---
 
@@ -22,7 +33,7 @@ A long-running autonomous coding agent powered by the Claude Agent SDK. This too
 
 ### Claude Code CLI (Required)
 
-This project requires the Claude Code CLI to be installed. Install it using one of these methods:
+You need the Claude Code CLI installed. Pick your poison:
 
 **macOS / Linux:**
 ```bash
@@ -36,547 +47,228 @@ irm https://claude.ai/install.ps1 | iex
 
 ### Authentication
 
-You need one of the following:
+You'll need one of these:
 
-- **Claude Pro/Max Subscription** - Use `claude login` to authenticate (recommended for parallel agents)
-- **Anthropic API Key** - Pay-per-use from https://console.anthropic.com/
+- **Claude Pro/Max Subscription** - Run `claude login` (recommended, especially for parallel agents)
+- **Anthropic API Key** - From https://console.anthropic.com/ (pay-per-use)
 
 ---
 
-## Quick Start
+## Quick Start (The Easy Way)
 
-### Option 1: Web UI (Recommended)
-
-**Windows:**
-```cmd
-start_ui.bat
-```
-
-**macOS / Linux:**
-```bash
-./start_ui.sh
-```
-
-This launches the React-based web UI at `http://localhost:5173` with:
-- Project selection and creation
-- Kanban board view of features
-- Real-time agent output streaming
-- Start/pause/stop controls
-- **NEW:** Parallel agent controls
-- **NEW:** Model settings configuration
-- **NEW:** Knowledge base visualization
-
-### Option 2: CLI Mode
-
-**Windows:**
-```cmd
-start.bat
-```
-
-**macOS / Linux:**
-```bash
-./start.sh
-```
-
-The start script will:
-1. Check if Claude CLI is installed
-2. Check if you're authenticated (prompt to run `claude login` if not)
-3. Create a Python virtual environment
-4. Install dependencies
-5. Launch the main menu
-
-### Option 3: Parallel Agents (NEW!) ⚡
-
-**Run 3 agents in parallel for 3x faster development:**
+### Installation
 
 ```bash
-# CLI mode
-python agent_manager.py \
-  --project-dir ./your-project \
-  --parallel 3 \
-  --preset balanced
+# Clone this repo
+git clone https://github.com/YOUR-USERNAME/autocoder.git
+cd autocoder
 
-# Or via UI: Click "⚡ Parallel" button → Start 3 Agents
+# Install everything (including dev tools)
+pip install -e '.[dev]'
+
+# That's it. The CLI will auto-setup the UI on first run
 ```
 
-**Model Presets:**
-- `quality` - Opus only (maximum quality, highest cost)
-- `balanced` ⭐ - Opus + Haiku (recommended for Pro, best value)
-- `economy` - Opus + Sonnet + Haiku (cost optimization)
-- `cheap` - Sonnet + Haiku (budget-friendly)
-- `experimental` - All models with AI selection
+### Running It
 
----
-
-## How It Works
-
-### Two-Agent Pattern
-
-1. **Initializer Agent (First Session):** Reads your app specification, creates features in a SQLite database (`features.db`), sets up the project structure, and initializes git.
-
-2. **Coding Agent (Subsequent Sessions):** Picks up where the previous session left off, implements features one by one, and marks them as passing in the database.
-
-### NEW: Parallel Agent Mode 🚀
-
-**Traditional (Sequential):**
-```
-Feature 1 → Feature 2 → Feature 3 → Feature 4
-Total: 40 minutes
-```
-
-**Parallel (3 Agents):**
-```
-Agent 1: Feature 1 (10 min) ┐
-Agent 2: Feature 2 (10 min) ├> Total: 10 minutes (3x faster!)
-Agent 3: Feature 3 (10 min) ┘
-```
-
-**How it works:**
-1. Manager atomically claims 3 features from database
-2. Spawns 3 parallel agents with different models:
-   - Agent 1: Opus for backend (complex)
-   - Agent 2: Haiku for tests (simple)
-   - Agent 3: Opus for frontend (complex)
-3. All run simultaneously using real Claude agent sessions
-4. Knowledge base learns from each completion
-5. Database updates automatically
-
-**Benefits:**
-- 3x faster development (10 min vs 30 min for 3 features)
-- Smart cost optimization (Haiku for simple tasks)
-- Knowledge base gets smarter with each feature
-- No conflicts (atomic database locking)
-
-### NEW: Knowledge Base Learning 🧠
-
-The system learns from every feature implementation:
-
-```python
-# First time implementing "User Authentication"
-Feature: User Authentication (backend)
-Model: Opus
-Approach: JWT with refresh tokens
-Result: Success
-→ Stored in knowledge base
-
-# Second time implementing "Admin Authentication"
-Knowledge: "User Auth used JWT successfully (95% success rate with Opus)"
-Agent applies: JWT with variations for admin role
-Result: Success, faster (8 min vs 10 min)
-
-# Third time implementing "API Authentication"
-Knowledge: 2 similar features, both used JWT
-Agent knows: JWT is the proven approach
-Result: Success, even faster (6 min)
-```
-
-**What gets stored:**
-- Feature category, name, description
-- Implementation approach used
-- Files changed/created
-- Model used and success rate
-- Attempts needed
-- Lessons learned
-
-**How it helps:**
-- Finds similar past features
-- Recommends best approaches
-- Suggests optimal model for category
-- Provides reference examples in prompts
-- Tracks success rates over time
-
-### Smart Model Selection
-
-Automatic routing based on feature complexity:
-
-| Feature Type | Model | Why |
-|--------------|-------|-----|
-| Authentication | Opus | Security-critical |
-| Database Schema | Opus | Complex architecture |
-| Testing | Haiku | Simple, fast |
-| Documentation | Haiku | Straightforward |
-| Frontend | Opus | Complex UI logic |
-| CRUD | Haiku | Simple patterns |
-
----
-
-## Feature Management
-
-Features are stored in SQLite via SQLAlchemy and managed through an MCP server that exposes tools to the agent:
-
-**Core Tools:**
-- `feature_get_stats` - Progress statistics
-- `feature_get_next` - Get highest-priority pending feature
-- `feature_get_for_regression` - Random passing features for regression testing
-- `feature_mark_passing` - Mark feature complete
-- `feature_skip` - Move feature to end of queue
-- `feature_create_bulk` - Initialize all features (used by initializer)
-
-**NEW: Parallel Execution Tools:**
-- `feature_claim_batch(count, agent_id)` - Atomically claim multiple features
-- `feature_release(feature_id, status, notes)` - Release feature with completion status
-- `feature_get_claimed(agent_id)` - Get all currently claimed features
-
----
-
-## Session Management
-
-- Each session runs with a fresh context window
-- Progress is persisted via SQLite database and git commits
-- The agent auto-continues between sessions (3 second delay)
-- Press `Ctrl+C` to pause; run the start script again to resume
-
----
-
-## Important Timing Expectations
-
-> **Note: Building complete applications takes time!**
-
-- **First session (initialization):** The agent generates feature test cases. This takes several minutes and may appear to hang - this is normal.
-
-- **Subsequent sessions:** Each coding iteration can take **5-15 minutes** depending on complexity.
-
-- **Full app:** Building all features typically requires **many hours** of total runtime across multiple sessions.
-
-- **NEW with Parallel Agents:** 3 agents = **3x faster**! 10 features that took 100 minutes now take ~35 minutes.
-
-**Tip:** The feature count in the prompts determines scope. For faster demos, you can modify your app spec to target fewer features (e.g., 20-50 features for a quick demo).
-
----
-
-## Project Structure
-
-```
-autonomous-coding/
-├── start.bat                 # Windows CLI start script
-├── start.sh                  # macOS/Linux CLI start script
-├── start_ui.bat              # Windows Web UI start script
-├── start_ui.sh               # macOS/Linux Web UI start script
-├── start.py                  # CLI menu and project management
-├── start_ui.py               # Web UI backend (FastAPI server launcher)
-├── autonomous_agent_demo.py  # Agent entry point
-├── agent.py                  # Agent session logic
-├── agent_manager.py          # NEW: Parallel agent orchestrator
-├── client.py                 # Claude SDK client configuration
-├── model_settings.py         # NEW: Model selection system
-├── knowledge_base.py         # NEW: Knowledge base learning
-├── security.py               # Bash command allowlist and validation
-├── progress.py               # Progress tracking utilities
-├── prompts.py                # Prompt loading utilities
-├── api/
-│   └── database.py           # SQLAlchemy models (Feature table)
-├── mcp_server/
-│   └── feature_mcp.py        # MCP server for feature management tools
-├── server/
-│   ├── main.py               # FastAPI REST API server
-│   ├── websocket.py          # WebSocket handler for real-time updates
-│   ├── schemas.py            # Pydantic schemas
-│   ├── routers/              # API route handlers
-│   │   ├── model_settings.py      # NEW: Model settings API
-│   │   ├── parallel_agents.py     # NEW: Parallel agents API
-│   │   └── ...
-│   └── services/             # Business logic services
-├── ui/                       # React frontend
-│   ├── src/
-│   │   ├── App.tsx           # Main app component
-│   │   ├── components/
-│   │   │   ├── ModelSettingsPanel.tsx    # NEW: Model configuration
-│   │   │   ├── ParallelAgentsControl.tsx # NEW: Parallel control
-│   │   │   └── AgentStatusGrid.tsx       # NEW: Status display
-│   │   ├── hooks/            # React Query and WebSocket hooks
-│   │   │   ├── useModelSettings.ts        # NEW: Model hooks
-│   │   │   └── useParallelAgents.ts       # NEW: Parallel hooks
-│   │   └── lib/              # API client and types
-│   ├── package.json
-│   └── vite.config.ts
-├── .claude/
-│   ├── commands/
-│   │   └── create-spec.md    # /create-spec slash command
-│   ├── skills/               # Claude Code skills
-│   └── templates/            # Prompt templates
-├── research/                 # NEW: Research documentation
-│   ├── subagent-parallel-execution.md
-│   ├── repository-analysis-report.md
-│   ├── PARALLEL-IMPLEMENTATION-GUIDE.md
-│   └── COMPLETE-IMPLEMENTATION.md
-├── generations/              # Generated projects go here
-├── requirements.txt          # Python dependencies
-└── .env                      # Optional configuration (N8N webhook)
-```
-
----
-
-## Generated Project Structure
-
-After the agent runs, your project directory will contain:
-
-```
-generations/my_project/
-├── features.db               # SQLite database (feature test cases)
-├── knowledge.db              # NEW: Knowledge base (learned patterns)
-├── prompts/
-│   ├── app_spec.txt          # Your app specification
-│   ├── initializer_prompt.md # First session prompt
-│   └── coding_prompt.md      # Continuation session prompt
-├── init.sh                   # Environment setup script
-├── claude-progress.txt       # Session progress notes
-└── [application files]       # Generated application code
-```
-
----
-
-## Running the Generated Application
-
-After the agent completes (or pauses), you can run the generated application:
+Just run `autocoder` with no arguments:
 
 ```bash
-cd generations/my_project
-
-# Run the setup script created by the agent
-./init.sh
-
-# Or manually (typical for Node.js apps):
-npm install
-npm run dev
+autocoder
 ```
 
-The application will typically be available at `http://localhost:3000` or similar.
+**What happens next:**
+
+1. **Setup check** - It checks if you have Node.js, npm, Claude CLI, etc.
+2. **Auto-setup** - If the UI isn't built, it runs `npm install && npm run build` for you
+3. **Menu** - Asks if you want the CLI or Web UI
+4. **Launch** - Starts whichever you picked
+
+No more remembering 10 different scripts or running setup commands manually. I got tired of that.
 
 ---
 
-## Security Model
+## CLI Commands
 
-This project uses a defense-in-depth security approach (see `security.py` and `client.py`):
-
-1. **OS-level Sandbox:** Bash commands run in an isolated environment
-2. **Filesystem Restrictions:** File operations restricted to the project directory only
-3. **Bash Allowlist:** Only specific commands are permitted:
-   - File inspection: `ls`, `cat`, `head`, `tail`, `wc`, `grep`
-   - Node.js: `npm`, `node`
-   - Version control: `git`
-   - Process management: `ps`, `lsof`, `sleep`, `pkill` (dev processes only)
-
-Commands not in the allowlist are blocked by the security hook.
-
----
-
-## Web UI Development
-
-The React UI is located in the `ui/` directory.
-
-### Development Mode
+Once installed, you've got these options:
 
 ```bash
-cd ui
-npm install
-npm run dev      # Development server with hot reload
+# Interactive mode (asks if you want CLI or Web UI)
+autocoder
+
+# Run single agent directly
+autocoder agent --project-dir my-app
+autocoder agent --project-dir C:/Projects/my-app --yolo
+
+# Run parallel agents (3x faster!)
+autocoder parallel --project-dir my-app --parallel 3 --preset balanced
+
+# Launch Web UI directly
+autocoder-ui
 ```
 
-### Building for Production
+### Model Presets (for Parallel Mode)
+
+- `quality` - Opus only (best quality, highest cost)
+- `balanced` - Opus + Haiku (recommended)
+- `economy` - Opus + Sonnet + Haiku
+- `cheap` - Sonnet + Haiku
+- `experimental` - All models
+
+---
+
+## What I Changed from the Original
+
+### Package Structure (The Big One)
+
+**Before (original):**
+```
+autocoder/
+├── agent.py
+├── client.py
+├── start.py
+├── orchestrator.py
+├── ...everything in root...
+```
+
+**After (this fork):**
+```
+autocoder/
+├── pyproject.toml          # Modern packaging config
+├── src/autocoder/          # Proper package structure
+│   ├── core/               # Orchestrator, Gatekeeper, etc.
+│   ├── agent/              # Agent implementation
+│   ├── server/             # FastAPI backend
+│   ├── tools/              # MCP tools
+│   └── cli.py              # Unified CLI
+├── Root (backward compat)
+│   ├── start.py            # Still works (shim)
+│   ├── agent.py            # Still works (shim)
+│   └── ...                 # All old scripts still work
+```
+
+**Why?** Because Python packaging in 2025 shouldn't look like 2015. The `src/` layout is the modern standard, and it makes the codebase way more maintainable.
+
+### Auto-Setup Feature
+
+The original project expected you to:
+1. Create venv manually
+2. Run `pip install -r requirements.txt`
+3. `cd ui && npm install && npm run build`
+4. Hope nothing broke
+
+Now you just:
+1. Run `autocoder`
+2. It checks everything and fixes what it can
+3. You answer one question (CLI or UI?)
+4. Done
+
+### Unified CLI
+
+Instead of:
+- `python start.py`
+- `python autonomous_agent_demo.py`
+- `python orchestrator_demo.py`
+- `python start_ui.py`
+
+You've got:
+- `autocoder` (does everything, asks what you want)
+- `autocoder agent --project-dir ...`
+- `autocoder parallel --project-dir ...`
+- `autocoder-ui`
+
+All your old scripts still work (I made shims), but you don't need them anymore.
+
+---
+
+## Development Setup
 
 ```bash
-cd ui
-npm run build    # Builds to ui/dist/
-```
+# Install with dev tools (pytest, black, ruff, mypy)
+pip install -e '.[dev]'
 
-**Note:** The `start_ui.bat`/`start_ui.sh` scripts serve the pre-built UI from `ui/dist/`. After making UI changes, run `npm run build` to see them when using the start scripts.
+# Run tests
+pytest tests/
 
-### Tech Stack
+# Format code
+black .
 
-- React 18 with TypeScript
-- TanStack Query for data fetching
-- Tailwind CSS v4 with neobrutalism design
-- Radix UI components
-- WebSocket for real-time updates
+# Lint code
+ruff check .
 
-### Real-time Updates
-
-The UI receives live updates via WebSocket (`/ws/projects/{project_name}`):
-- `progress` - Test pass counts
-- `agent_status` - Running/paused/stopped/crashed
-- `log` - Agent output lines (streamed from subprocess stdout)
-- `feature_update` - Feature status changes
-
----
-
-## NEW: Parallel Agent Usage
-
-### Starting Parallel Agents
-
-**Via CLI:**
-```bash
-# Show available presets
-python agent_manager.py --show-presets
-
-# Start 3 agents with balanced preset (recommended)
-python agent_manager.py \
-  --project-dir ./your-project \
-  --parallel 3 \
-  --preset balanced
-
-# Custom model selection
-python agent_manager.py \
-  --project-dir ./your-project \
-  --parallel 3 \
-  --models opus,haiku
-
-# Maximum quality (Opus only)
-python agent_manager.py \
-  --project-dir ./your-project \
-  --parallel 2 \
-  --models opus
-```
-
-**Via UI:**
-1. Select a project
-2. Click **⚡ Parallel** button (or press `P`)
-3. Adjust agent count slider (1-5)
-4. Click "Start X Agents"
-5. Watch real-time status grid
-
-### Expected Performance
-
-| Features | Sequential | 3 Agents | Speedup |
-|----------|------------|----------|---------|
-| 5 | 50 min | 18 min | 2.8x |
-| 10 | 100 min | 35 min | 2.9x |
-| 20 | 200 min | 70 min | 2.9x |
-
----
-
-## NEW: Knowledge Base Usage
-
-### Inspecting Learned Knowledge
-
-```bash
-# See what the system has learned
-python inspect_knowledge.py
-
-# Output:
-# Knowledge Base Summary
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# Total Patterns: 15
-# Success Rate: 93%
-#
-# Best Models by Category:
-#   backend: opus (95% success)
-#   frontend: opus (100% success)
-#   testing: haiku (100% success)
-#   documentation: haiku (90% success)
-#
-# Common Approaches:
-#   Backend: "JWT authentication" (3 features)
-#   Frontend: "React hooks with useState" (4 features)
-#   Testing: "Jest with react-testing-library" (3 features)
-```
-
-### Knowledge Base Demo
-
-```bash
-# See knowledge base in action
-python knowledge_base_demo.py
-
-# Demonstrates:
-# - Storing implementation patterns
-# - Finding similar features
-# - Generating reference prompts
-# - Tracking model performance
+# Type check
+mypy src/autocoder
 ```
 
 ---
 
-## Configuration (Optional)
+## Project Structure (Post-Migration)
 
-### N8N Webhook Integration
-
-The agent can send progress notifications to an N8N webhook. Create a `.env` file:
-
-```bash
-# Optional: N8N webhook for progress notifications
-PROGRESS_N8N_WEBHOOK_URL=https://your-n8n-instance.com/webhook/your-webhook-id
+```
+autocoder/
+├── pyproject.toml           # Single source of truth
+├── src/autocoder/           # Main package
+│   ├── cli.py               # Unified CLI
+│   ├── core/                # Parallel agent system
+│   ├── agent/               # Agent implementation
+│   ├── server/              # FastAPI backend
+│   ├── tools/               # MCP tools
+│   └── api/                 # Database models
+├── ui/                      # React frontend
+├── docs/                    # Documentation
+├── tests/                   # Tests
+└── Root                     # Legacy shims (still work!)
 ```
 
-When test progress increases, the agent sends:
-
-```json
-{
-  "event": "test_progress",
-  "passing": 45,
-  "total": 200,
-  "percentage": 22.5,
-  "project": "my_project",
-  "timestamp": "2025-01-15T14:30:00.000Z"
-}
-```
+See [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) for the full breakdown.
 
 ---
 
-## Customization
+## Original Project Credits
 
-### Changing the Application
+This fork is built on top of the original Autonomous Coding Agent. All the core ideas (two-agent pattern, parallel execution, knowledge base, test framework detection, etc.) come from the original project. I just:
 
-Use the `/create-spec` command when creating a new project, or manually edit the files in your project's `prompts/` directory:
-- `app_spec.txt` - Your application specification
-- `initializer_prompt.md` - Controls feature generation
+- Modernized the packaging
+- Added auto-setup
+- Unified the CLI
+- Fixed a bunch of import issues
+- Made it feel like a proper tool instead of a collection of scripts
 
-### Modifying Allowed Commands
+**Original concept and architecture:** [Link to original repo when I find it]
 
-Edit `security.py` to add or remove commands from `ALLOWED_COMMANDS`.
-
-### NEW: Customizing Model Selection
-
-Edit `~/.autocoder/model_settings.json` or use the UI:
-
-```json
-{
-  "preset": "balanced",
-  "available_models": ["opus", "haiku"],
-  "auto_detect_simple": true,
-  "category_mapping": {
-    "frontend": "opus",
-    "backend": "opus",
-    "testing": "haiku",
-    "documentation": "haiku",
-    "infrastructure": "opus"
-  }
-}
-```
+**My contributions:** The packaging, auto-setup, and unified CLI layer on top of that solid foundation.
 
 ---
 
-## Troubleshooting
+## How the Parallel Agents Work (The Cool Part)
 
-**"Claude CLI not found"**
-Install the Claude Code CLI using the instructions in the Prerequisites section.
+This is the feature that makes this project special:
 
-**"Not authenticated with Claude"**
-Run `claude login` to authenticate. The start script will prompt you to do this automatically.
+1. **Orchestrator** spawns 3-5 agents in isolated git worktrees
+2. **Each agent** works on a different feature (from your feature database)
+3. **Knowledge Base** shares learnings between agents (if Agent 1 figured out how to test React components, Agent 2 benefits)
+4. **Gatekeeper** verifies each feature in a temporary worktree (never dirties your main branch)
+5. **Smart model routing** - Opus for complex tasks, Haiku for simple ones
 
-**"Appears to hang on first run"**
-This is normal. The initializer agent is generating detailed test cases, which takes significant time. Watch for `[Tool: ...]` output to confirm the agent is working.
-
-**"Command blocked by security hook"**
-The agent tried to run a command not in the allowlist. This is the security system working as intended. If needed, add the command to `ALLOWED_COMMANDS` in `security.py`.
-
-**NEW: "Agents conflicting on same feature"**
-This shouldn't happen! The atomic feature claiming (`with_for_update()` database locking) prevents race conditions. If you see this, there's a bug.
-
-**NEW: "Knowledge base not learning"**
-Check that `knowledge.db` exists and is writable. Run `python inspect_knowledge.py` to verify.
+Result: 3x faster development without sacrificing quality (thanks to the Gatekeeper).
 
 ---
 
-## Architecture Documentation
+## Known Issues / TODO
 
-Detailed documentation is available in the `research/` directory:
-
-- **subagent-parallel-execution.md** - Research on parallel agent execution
-- **repository-analysis-report.md** - Analysis of 4 open-source agent systems
-- **PARALLEL-IMPLEMENTATION-GUIDE.md** - Implementation guide for parallel execution
-- **COMPLETE-IMPLEMENTATION.md** - Status of all features
+- [ ] Need to find and link the original upstream repo
+- [ ] Auto-setup could handle venv creation too (currently warns but doesn't create it)
+- [ ] Some edge cases with Windows paths in the git worktree code
+- [ ] Documentation could use more examples of actual project specs
 
 ---
 
 ## License
 
-Internal Anthropic use.
+Same as the original project (will update once I find the proper upstream).
+
+---
+
+**Built by Gabi at [Booplex](https://booplex.com)** - "I tamed AI so you don't have to"
+
+*I only forked this because the original was brilliant but needed some UX love. All the hard stuff (making AI code autonomously) is theirs. I just made it easier to use.*

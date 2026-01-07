@@ -140,3 +140,4 @@ Pipfile.lock
 # Research and analysis directories
 to_check/
 .serena/
+research/

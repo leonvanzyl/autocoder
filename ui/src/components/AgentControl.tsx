@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Play, Pause, Square, Loader2, Zap } from 'lucide-react'
+import { Play, Pause, Square, Loader2, Zap, GitBranch, Users } from 'lucide-react'
 import {
   useStartAgent,
   useStopAgent,
@@ -12,10 +12,23 @@ interface AgentControlProps {
   projectName: string
   status: AgentStatus
   yoloMode?: boolean  // From server status - whether currently running in YOLO mode
+  parallelMode?: boolean  // From server status - whether currently running in parallel mode
+  parallelCount?: number | null  // From server status - number of parallel agents
+  modelPreset?: string | null  // From server status - model preset being used
 }
 
-export function AgentControl({ projectName, status, yoloMode = false }: AgentControlProps) {
+export function AgentControl({
+  projectName,
+  status,
+  yoloMode = false,
+  parallelMode = false,
+  parallelCount = null,
+  modelPreset = null,
+}: AgentControlProps) {
   const [yoloEnabled, setYoloEnabled] = useState(false)
+  const [parallelEnabled, setParallelEnabled] = useState(false)
+  const [agentCount, setAgentCount] = useState(3)
+  const [selectedPreset, setSelectedPreset] = useState<'quality' | 'balanced' | 'economy' | 'cheap' | 'experimental'>('balanced')
 
   const startAgent = useStartAgent(projectName)
   const stopAgent = useStopAgent(projectName)
@@ -28,45 +41,135 @@ export function AgentControl({ projectName, status, yoloMode = false }: AgentCon
     pauseAgent.isPending ||
     resumeAgent.isPending
 
-  const handleStart = () => startAgent.mutate(yoloEnabled)
+  const handleStart = () => {
+    // Disable YOLO when parallel is enabled (mutually exclusive)
+    if (parallelEnabled) {
+      startAgent.mutate({
+        parallel_mode: true,
+        parallel_count: agentCount,
+        model_preset: selectedPreset,
+        yolo_mode: false,
+      })
+    } else {
+      startAgent.mutate({ yolo_mode: yoloEnabled })
+    }
+  }
+
   const handleStop = () => stopAgent.mutate()
   const handlePause = () => pauseAgent.mutate()
   const handleResume = () => resumeAgent.mutate()
+
+  // Disable parallel toggle when YOLO is enabled
+  const isParallelDisabled = yoloEnabled
 
   return (
     <div className="flex items-center gap-2">
       {/* Status Indicator */}
       <StatusIndicator status={status} />
 
-      {/* YOLO Mode Indicator - shown when running in YOLO mode */}
-      {(status === 'running' || status === 'paused') && yoloMode && (
-        <div className="flex items-center gap-1 px-2 py-1 bg-[var(--color-neo-pending)] border-3 border-[var(--color-neo-border)]">
-          <Zap size={14} className="text-yellow-900" />
-          <span className="font-display font-bold text-xs uppercase text-yellow-900">
-            YOLO
-          </span>
-        </div>
+      {/* Mode Indicators - shown when running */}
+      {(status === 'running' || status === 'paused') && (
+        <>
+          {/* YOLO Mode Indicator */}
+          {yoloMode && (
+            <div className="flex items-center gap-1 px-2 py-1 bg-[var(--color-neo-pending)] border-3 border-[var(--color-neo-border)]">
+              <Zap size={14} className="text-yellow-900" />
+              <span className="font-display font-bold text-xs uppercase text-yellow-900">
+                YOLO
+              </span>
+            </div>
+          )}
+
+          {/* Parallel Mode Indicator */}
+          {parallelMode && (
+            <div className="flex items-center gap-1 px-2 py-1 bg-[var(--color-neo-progress)] border-3 border-[var(--color-neo-border)]">
+              <Users size={14} className="text-cyan-900" />
+              <span className="font-display font-bold text-xs uppercase text-cyan-900">
+                {parallelCount}x {modelPreset}
+              </span>
+            </div>
+          )}
+        </>
       )}
 
       {/* Control Buttons */}
       <div className="flex gap-1">
         {status === 'stopped' || status === 'crashed' ? (
           <>
-            {/* YOLO Toggle - only shown when stopped */}
+            {/* Mode Toggles - only shown when stopped */}
+            {/* YOLO Toggle */}
             <button
-              onClick={() => setYoloEnabled(!yoloEnabled)}
+              onClick={() => {
+                setYoloEnabled(!yoloEnabled)
+                if (parallelEnabled) setParallelEnabled(false)
+              }}
+              disabled={isLoading || parallelEnabled}
               className={`neo-btn text-sm py-2 px-3 ${
                 yoloEnabled ? 'neo-btn-warning' : 'neo-btn-secondary'
-              }`}
+              } ${isParallelDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
               title="YOLO Mode: Skip testing for rapid prototyping"
             >
               <Zap size={18} className={yoloEnabled ? 'text-yellow-900' : ''} />
             </button>
+
+            {/* Parallel Mode Toggle */}
+            <button
+              onClick={() => {
+                setParallelEnabled(!parallelEnabled)
+                if (yoloEnabled) setYoloEnabled(false)
+              }}
+              disabled={isLoading || yoloEnabled}
+              className={`neo-btn text-sm py-2 px-3 ${
+                parallelEnabled ? 'neo-btn-info' : 'neo-btn-secondary'
+              } ${yoloEnabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+              title="Parallel Mode: Run multiple agents simultaneously (3x faster)"
+            >
+              <GitBranch size={18} className={parallelEnabled ? 'text-cyan-900' : ''} />
+            </button>
+
+            {/* Parallel Settings - shown when parallel enabled */}
+            {parallelEnabled && (
+              <>
+                {/* Agent Count Selector */}
+                <select
+                  value={agentCount}
+                  onChange={(e) => setAgentCount(Number(e.target.value))}
+                  className="neo-btn text-sm py-2 px-3 bg-white border-3 border-[var(--color-neo-border)] font-display"
+                >
+                  <option value="1">1 Agent</option>
+                  <option value="2">2 Agents</option>
+                  <option value="3">3 Agents</option>
+                  <option value="4">4 Agents</option>
+                  <option value="5">5 Agents</option>
+                </select>
+
+                {/* Model Preset Selector */}
+                <select
+                  value={selectedPreset}
+                  onChange={(e) => setSelectedPreset(e.target.value as any)}
+                  className="neo-btn text-sm py-2 px-3 bg-white border-3 border-[var(--color-neo-border)] font-display"
+                >
+                  <option value="quality">Quality (Opus)</option>
+                  <option value="balanced">Balanced ⭐</option>
+                  <option value="economy">Economy</option>
+                  <option value="cheap">Cheap</option>
+                  <option value="experimental">Experimental</option>
+                </select>
+              </>
+            )}
+
+            {/* Start Button */}
             <button
               onClick={handleStart}
               disabled={isLoading}
               className="neo-btn neo-btn-success text-sm py-2 px-3"
-              title={yoloEnabled ? "Start Agent (YOLO Mode)" : "Start Agent"}
+              title={
+                parallelEnabled
+                  ? `Start ${agentCount} Parallel Agents (${selectedPreset})`
+                  : yoloEnabled
+                  ? "Start Agent (YOLO Mode)"
+                  : "Start Agent"
+              }
             >
               {isLoading ? (
                 <Loader2 size={18} className="animate-spin" />

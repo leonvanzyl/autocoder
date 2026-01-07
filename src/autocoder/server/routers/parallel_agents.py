@@ -18,10 +18,7 @@ from typing import Dict, List, Optional
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel, Field
 
-import sys
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
-from model_settings import ModelSettings
+from autocoder.core.model_settings import ModelSettings
 
 router = APIRouter(prefix="/parallel-agents", tags=["parallel-agents"])
 

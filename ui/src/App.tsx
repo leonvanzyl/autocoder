@@ -200,6 +200,9 @@ function App() {
                     projectName={selectedProject}
                     status={wsState.agentStatus}
                     yoloMode={agentStatusData?.yolo_mode ?? false}
+                    parallelMode={agentStatusData?.parallel_mode ?? false}
+                    parallelCount={agentStatusData?.parallel_count ?? null}
+                    modelPreset={agentStatusData?.model_preset ?? null}
                   />
                 </>
               )}

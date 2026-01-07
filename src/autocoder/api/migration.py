@@ -13,7 +13,7 @@ from typing import Optional
 
 from sqlalchemy.orm import sessionmaker, Session
 
-from api.database import Feature
+from autocoder.api.database import Feature
 
 
 def migrate_json_to_sqlite(

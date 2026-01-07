@@ -18,10 +18,7 @@ from typing import List, Literal
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-import sys
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
-from model_settings import ModelSettings, get_preset_info, parse_models_arg
+from autocoder.core.model_settings import ModelSettings, get_preset_info, parse_models_arg
 
 router = APIRouter(prefix="/model-settings", tags=["model-settings"])
 

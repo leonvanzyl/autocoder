@@ -75,6 +75,9 @@ class AgentProcessManager:
         self.started_at: datetime | None = None
         self._output_task: asyncio.Task | None = None
         self.yolo_mode: bool = False  # YOLO mode for rapid prototyping
+        self.parallel_mode: bool = False  # Parallel mode for multiple agents
+        self.parallel_count: int = 3  # Number of parallel agents
+        self.model_preset: str = "balanced"  # Model preset for parallel mode
 
         # Support multiple callbacks (for multiple WebSocket clients)
         self._output_callbacks: Set[Callable[[str], Awaitable[None]]] = set()
@@ -215,12 +218,21 @@ class AgentProcessManager:
                     self.status = "stopped"
                 self._remove_lock()
 
-    async def start(self, yolo_mode: bool = False) -> tuple[bool, str]:
+    async def start(
+        self,
+        yolo_mode: bool = False,
+        parallel_mode: bool = False,
+        parallel_count: int = 3,
+        model_preset: str = "balanced"
+    ) -> tuple[bool, str]:
         """
         Start the agent as a subprocess.
 
         Args:
             yolo_mode: If True, run in YOLO mode (no browser testing)
+            parallel_mode: If True, run multiple agents in parallel
+            parallel_count: Number of parallel agents (1-5)
+            model_preset: Model preset for parallel mode
 
         Returns:
             Tuple of (success, message)
@@ -231,20 +243,41 @@ class AgentProcessManager:
         if not self._check_lock():
             return False, "Another agent instance is already running for this project"
 
-        # Store YOLO mode for status queries
+        # Store mode settings for status queries
         self.yolo_mode = yolo_mode
+        self.parallel_mode = parallel_mode
+        self.parallel_count = parallel_count
+        self.model_preset = model_preset
 
-        # Build command - pass absolute path to project directory
-        cmd = [
-            sys.executable,
-            str(self.root_dir / "autonomous_agent_demo.py"),
-            "--project-dir",
-            str(self.project_dir.resolve()),
-        ]
+        # Choose entry point based on mode
+        if parallel_mode:
+            entry_point = "orchestrator_demo.py"
+            cmd = [
+                sys.executable,
+                str(self.root_dir / entry_point),
+                "--project-dir",
+                str(self.project_dir.resolve()),
+                "--parallel",
+                str(parallel_count),
+                "--preset",
+                model_preset,
+            ]
+            mode_desc = f"Parallel mode ({parallel_count} agents, {model_preset} preset)"
+        else:
+            entry_point = "autonomous_agent_demo.py"
+            cmd = [
+                sys.executable,
+                str(self.root_dir / entry_point),
+                "--project-dir",
+                str(self.project_dir.resolve()),
+            ]
 
-        # Add --yolo flag if YOLO mode is enabled
-        if yolo_mode:
-            cmd.append("--yolo")
+            # Add --yolo flag if YOLO mode is enabled
+            if yolo_mode:
+                cmd.append("--yolo")
+                mode_desc = "YOLO mode (rapid prototyping)"
+            else:
+                mode_desc = "Standard mode"
 
         try:
             # Start subprocess with piped stdout/stderr
@@ -263,7 +296,7 @@ class AgentProcessManager:
             # Start output streaming task
             self._output_task = asyncio.create_task(self._stream_output())
 
-            return True, f"Agent started with PID {self.process.pid}"
+            return True, f"Agent started with PID {self.process.pid} ({mode_desc})"
         except Exception as e:
             logger.exception("Failed to start agent")
             return False, f"Failed to start agent: {e}"
@@ -388,6 +421,9 @@ class AgentProcessManager:
             "pid": self.pid,
             "started_at": self.started_at.isoformat() if self.started_at else None,
             "yolo_mode": self.yolo_mode,
+            "parallel_mode": self.parallel_mode,
+            "parallel_count": self.parallel_count if self.parallel_mode else None,
+            "model_preset": self.model_preset if self.parallel_mode else None,
         }
 
 

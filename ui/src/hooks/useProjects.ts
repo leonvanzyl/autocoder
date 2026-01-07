@@ -4,7 +4,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import * as api from '../lib/api'
-import type { FeatureCreate } from '../lib/types'
+import type { FeatureCreate, AgentStartRequest } from '../lib/types'
 
 // ============================================================================
 // Projects
@@ -111,7 +111,7 @@ export function useStartAgent(projectName: string) {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (yoloMode: boolean = false) => api.startAgent(projectName, yoloMode),
+    mutationFn: (options: AgentStartRequest = {}) => api.startAgent(projectName, options),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['agent-status', projectName] })
     },

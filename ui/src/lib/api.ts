@@ -11,6 +11,7 @@ import type {
   FeatureCreate,
   AgentStatusResponse,
   AgentActionResponse,
+  AgentStartRequest,
   SetupStatus,
   DirectoryListResponse,
   PathValidationResponse,
@@ -121,11 +122,16 @@ export async function getAgentStatus(projectName: string): Promise<AgentStatusRe
 
 export async function startAgent(
   projectName: string,
-  yoloMode: boolean = false
+  options: AgentStartRequest = {}
 ): Promise<AgentActionResponse> {
   return fetchJSON(`/projects/${encodeURIComponent(projectName)}/agent/start`, {
     method: 'POST',
-    body: JSON.stringify({ yolo_mode: yoloMode }),
+    body: JSON.stringify({
+      yolo_mode: options.yolo_mode || false,
+      parallel_mode: options.parallel_mode || false,
+      parallel_count: options.parallel_count || 3,
+      model_preset: options.model_preset || 'balanced',
+    }),
   })
 }
 

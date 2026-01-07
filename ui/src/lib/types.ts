@@ -90,12 +90,22 @@ export interface AgentStatusResponse {
   pid: number | null
   started_at: string | null
   yolo_mode: boolean
+  parallel_mode: boolean
+  parallel_count: number | null
+  model_preset: string | null
 }
 
 export interface AgentActionResponse {
   success: boolean
   status: AgentStatus
   message: string
+}
+
+export interface AgentStartRequest {
+  yolo_mode?: boolean
+  parallel_mode?: boolean
+  parallel_count?: number
+  model_preset?: 'quality' | 'balanced' | 'economy' | 'cheap' | 'experimental'
 }
 
 // Setup types

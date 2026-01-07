@@ -2,13 +2,13 @@
 """
 LEGACY SHIM - For backward compatibility
 
-This file maintains compatibility with existing scripts that use autonomous_agent_demo.py.
+This file maintains compatibility with existing scripts that use orchestrator_demo.py.
 Please update your scripts to use the new CLI:
 
-    autocoder agent --project-dir my-app
+    autocoder parallel --project-dir my-app --parallel 3 --preset balanced
 
 Or use the programmatic interface:
-    from autocoder.agent import run_autonomous_agent
+    from autocoder.core import Orchestrator
 """
 
 import sys
@@ -21,6 +21,6 @@ sys.path.insert(0, str(Path(__file__).parent / "src"))
 from autocoder.cli import main
 
 if __name__ == "__main__":
-    # Redirect to run agent mode
-    sys.argv.insert(1, "agent")
+    # Redirect to run parallel mode
+    sys.argv.insert(1, "parallel")
     main()

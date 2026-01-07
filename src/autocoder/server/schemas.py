@@ -103,6 +103,9 @@ class FeatureListResponse(BaseModel):
 class AgentStartRequest(BaseModel):
     """Request schema for starting the agent."""
     yolo_mode: bool = False
+    parallel_mode: bool = False
+    parallel_count: int = 3
+    model_preset: Literal["quality", "balanced", "economy", "cheap", "experimental"] = "balanced"
 
 
 class AgentStatus(BaseModel):
@@ -111,6 +114,9 @@ class AgentStatus(BaseModel):
     pid: int | None = None
     started_at: datetime | None = None
     yolo_mode: bool = False
+    parallel_mode: bool = False
+    parallel_count: int | None = None
+    model_preset: str | None = None
 
 
 class AgentActionResponse(BaseModel):

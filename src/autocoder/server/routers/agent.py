@@ -69,6 +69,9 @@ async def get_agent_status(project_name: str):
         pid=manager.pid,
         started_at=manager.started_at,
         yolo_mode=manager.yolo_mode,
+        parallel_mode=manager.parallel_mode,
+        parallel_count=manager.parallel_count if manager.parallel_mode else None,
+        model_preset=manager.model_preset if manager.parallel_mode else None,
     )
 
 
@@ -80,7 +83,20 @@ async def start_agent(
     """Start the agent for a project."""
     manager = get_project_manager(project_name)
 
-    success, message = await manager.start(yolo_mode=request.yolo_mode)
+    # Parallel and YOLO modes are mutually exclusive
+    if request.parallel_mode and request.yolo_mode:
+        return AgentActionResponse(
+            success=False,
+            status=manager.status,
+            message="Cannot enable both parallel mode and YOLO mode",
+        )
+
+    success, message = await manager.start(
+        yolo_mode=request.yolo_mode,
+        parallel_mode=request.parallel_mode,
+        parallel_count=request.parallel_count,
+        model_preset=request.model_preset,
+    )
 
     return AgentActionResponse(
         success=success,

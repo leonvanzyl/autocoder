@@ -53,7 +53,7 @@ export function useStartAgents() {
 
       return response.json();
     },
-    onSuccess: (data, variables) => {
+    onSuccess: (_data, variables) => {
       // Invalidate status query for this project
       queryClient.invalidateQueries({
         queryKey: ['parallel-agents', 'status', variables.project_dir],
@@ -78,7 +78,7 @@ export function useStopAgents() {
 
       return response.json();
     },
-    onSuccess: (data, variables) => {
+    onSuccess: (_data, variables) => {
       // Invalidate status query for this project
       queryClient.invalidateQueries({
         queryKey: ['parallel-agents', 'status', variables],

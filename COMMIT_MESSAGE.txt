@@ -1,0 +1,30 @@
+Modernize packaging to 2026 standards + auto-setup + unified CLI
+
+This is a big refactor that probably should've been multiple commits, but
+honestly, I wasn't planning to do all this when I started. One thing led
+to another and suddenly we've got a proper Python package instead of a
+collection of scripts.
+
+What changed:
+- Added pyproject.toml with proper packaging, entry points, and dev extras
+- Moved everything to src/autocoder/ package structure (the modern way)
+- Created unified CLI that asks what you want (CLI vs Web UI)
+- Added auto-setup - runs npm install && npm run build automatically
+- Fixed all the import errors from the restructure
+- Kept backward compatibility with legacy shims (old scripts still work)
+
+Why this matters:
+- pip install -e '.[dev]' now works like a real package
+- Entry points (autocoder, autocoder-ui) appear automatically
+- One command instead of remembering start.py, agent_manager.py, etc.
+- Auto-setup means you don't need to remember 10 setup steps
+- Actually maintainable codebase instead of "everything in root"
+
+Breaking changes:
+- None! Legacy shims handle backward compatibility
+
+Credits:
+- The core agent system, parallel execution, knowledge base, etc. are all
+  from the original project. I just modernized the packaging and UX.
+
+- Gabi

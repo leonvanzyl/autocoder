@@ -33,10 +33,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy.sql.expression import func
 
 # Add parent directory to path so we can import from api module
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from api.database import Feature, create_database
-from api.migration import migrate_json_to_sqlite
+from autocoder.api.database import Feature, create_database
+from autocoder.api.migration import migrate_json_to_sqlite
 
 # Configuration from environment
 PROJECT_DIR = Path(os.environ.get("PROJECT_DIR", ".")).resolve()
