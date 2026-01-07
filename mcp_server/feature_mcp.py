@@ -133,10 +133,28 @@ async def server_lifespan(server: FastMCP):
 mcp = FastMCP("features", lifespan=server_lifespan)
 
 
+def init_database_direct(project_dir: Path) -> None:
+    """
+    Initialize database directly without running the MCP server.
+
+    Used by parallel_coordinator.py to call MCP tools directly.
+    Must be called before any tool function is invoked.
+    """
+    global _session_maker, _engine, PROJECT_DIR
+
+    if _session_maker is not None:
+        return  # Already initialized
+
+    PROJECT_DIR = project_dir
+    PROJECT_DIR.mkdir(parents=True, exist_ok=True)
+    _engine, _session_maker = create_database(PROJECT_DIR)
+    migrate_json_to_sqlite(PROJECT_DIR, _session_maker)
+
+
 def get_session():
     """Get a new database session."""
     if _session_maker is None:
-        raise RuntimeError("Database not initialized")
+        raise RuntimeError("Database not initialized. Call init_database_direct() first.")
     return _session_maker()
 
 
@@ -200,6 +218,33 @@ def feature_get_next() -> str:
 
         if feature is None:
             return json.dumps({"error": "All features are passing! No more work to do."})
+
+        return json.dumps(feature.to_dict(), indent=2)
+    finally:
+        session.close()
+
+
+@mcp.tool()
+def feature_get_by_id(
+    feature_id: Annotated[int, Field(description="The ID of the feature to retrieve", ge=1)]
+) -> str:
+    """Get a specific feature by its ID.
+
+    Use this when a coordinator has already claimed a feature and the worker
+    needs to retrieve its details. This is the preferred method in parallel mode.
+
+    Args:
+        feature_id: The ID of the feature to retrieve
+
+    Returns:
+        JSON with feature details or error message if not found.
+    """
+    session = get_session()
+    try:
+        feature = session.query(Feature).filter(Feature.id == feature_id).first()
+
+        if feature is None:
+            return json.dumps({"error": f"Feature with id {feature_id} not found."})
 
         return json.dumps(feature.to_dict(), indent=2)
     finally:

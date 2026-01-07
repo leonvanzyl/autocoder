@@ -31,6 +31,7 @@ class WorktreeManager:
         self.worktree_base = project_dir / ".worktrees"
         self._created_worktrees: list[Path] = []
         self._created_branches: list[str] = []
+        self._target_branch: Optional[str] = None  # Captured at startup
 
     async def _run_git(
         self,
@@ -132,10 +133,39 @@ class WorktreeManager:
         Returns:
             Dict mapping worker_id to worktree path
         """
+        # Capture the target branch BEFORE creating any worktrees
+        # This is the branch we'll merge completed features into
+        await self._capture_target_branch()
+
         worktrees = {}
         for i in range(self.worker_count):
             worktrees[i] = await self.setup_worktree(i)
         return worktrees
+
+    async def _capture_target_branch(self) -> None:
+        """
+        Capture the current branch name as the merge target.
+
+        Must be called before any merges. Fails if HEAD is detached.
+        """
+        # Get symbolic ref to current branch (fails if detached)
+        try:
+            branch = await self._run_git_output("symbolic-ref", "--short", "HEAD")
+            self._target_branch = branch
+            logger.info(f"Target branch for merges: {self._target_branch}")
+        except RuntimeError:
+            # HEAD is detached - fall back to default branch
+            try:
+                # Try to get the default branch from origin
+                default = await self._run_git_output("symbolic-ref", "--short", "refs/remotes/origin/HEAD")
+                # Extract branch name (e.g., "origin/main" -> "main")
+                self._target_branch = default.split("/")[-1]
+                logger.warning(f"HEAD is detached, falling back to default branch: {self._target_branch}")
+            except RuntimeError:
+                raise RuntimeError(
+                    "Cannot determine target branch: HEAD is detached and no default branch found. "
+                    "Please checkout a branch before running parallel mode."
+                )
 
     async def checkout_feature_branch(
         self,
@@ -184,10 +214,10 @@ class WorktreeManager:
         worktree_path: Path
     ) -> tuple[bool, str]:
         """
-        Attempt to merge a feature branch into main.
+        Attempt to merge a feature branch into the target branch.
 
         First tries fast-forward merge. If that fails, rebases the
-        feature branch onto main and tries again.
+        feature branch onto the target and tries again.
 
         Args:
             feature_branch: Name of the feature branch to merge
@@ -196,8 +226,11 @@ class WorktreeManager:
         Returns:
             Tuple of (success, message)
         """
-        # First, ensure main is up to date in the worktree
-        await self._run_git("checkout", "HEAD", cwd=self.project_dir, check=False)
+        if not self._target_branch:
+            raise RuntimeError("Target branch not captured. Call setup_all_worktrees first.")
+
+        # Ensure we're on the target branch (NOT detached HEAD)
+        await self._run_git("checkout", self._target_branch, cwd=self.project_dir, check=False)
 
         # Try fast-forward merge
         proc = await self._run_git(
@@ -207,18 +240,18 @@ class WorktreeManager:
         )
 
         if proc.returncode == 0:
-            logger.info(f"Fast-forward merged: {feature_branch}")
+            logger.info(f"Fast-forward merged {feature_branch} into {self._target_branch}")
             return True, "Fast-forward merge successful"
 
         # Fast-forward failed, try rebase
-        logger.info(f"Fast-forward failed for {feature_branch}, attempting rebase")
+        logger.info(f"Fast-forward failed for {feature_branch}, attempting rebase onto {self._target_branch}")
 
-        # Get current main ref
-        main_ref = await self._run_git_output("rev-parse", "HEAD")
+        # Get current target branch ref
+        target_ref = await self._run_git_output("rev-parse", self._target_branch)
 
-        # Rebase feature branch onto main
+        # Rebase feature branch onto target
         proc = await self._run_git(
-            "rebase", main_ref,
+            "rebase", target_ref,
             cwd=worktree_path,
             check=False
         )
@@ -237,7 +270,7 @@ class WorktreeManager:
         )
 
         if proc.returncode == 0:
-            logger.info(f"Merged after rebase: {feature_branch}")
+            logger.info(f"Merged {feature_branch} into {self._target_branch} after rebase")
             return True, "Merged after rebase"
 
         logger.warning(f"Merge still failed after rebase for {feature_branch}")

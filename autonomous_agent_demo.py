@@ -96,6 +96,21 @@ Authentication:
         help="Enable YOLO mode: rapid prototyping without browser testing",
     )
 
+    # Parallel execution arguments (used by parallel_coordinator.py)
+    parser.add_argument(
+        "--worktree-path",
+        type=str,
+        default=None,
+        help="Git worktree path for code changes (parallel mode only)",
+    )
+
+    parser.add_argument(
+        "--feature-id",
+        type=int,
+        default=None,
+        help="Feature ID to implement (parallel mode only - binds to claimed feature)",
+    )
+
     return parser.parse_args()
 
 
@@ -127,14 +142,19 @@ def main() -> None:
             print("Use an absolute path or register the project first.")
             return
 
+    # In parallel mode, use worktree for code changes
+    work_dir = Path(args.worktree_path) if args.worktree_path else project_dir
+
     try:
         # Run the agent (MCP server handles feature database)
         asyncio.run(
             run_autonomous_agent(
-                project_dir=project_dir,
+                project_dir=project_dir,  # For DB/prompts
+                work_dir=work_dir,  # For code changes (may be worktree)
                 model=args.model,
                 max_iterations=args.max_iterations,
                 yolo_mode=args.yolo,
+                feature_id=args.feature_id,  # Bound to claimed feature (parallel mode)
             )
         )
     except KeyboardInterrupt:

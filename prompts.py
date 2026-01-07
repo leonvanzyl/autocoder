@@ -80,6 +80,57 @@ def get_coding_prompt_yolo(project_dir: Path | None = None) -> str:
     return load_prompt("coding_prompt_yolo", project_dir)
 
 
+def get_coding_prompt_parallel(
+    project_dir: Path,
+    feature_id: int,
+    yolo_mode: bool = False,
+) -> str:
+    """
+    Load the coding prompt for parallel mode with a specific feature binding.
+
+    In parallel mode, the coordinator has already claimed the feature.
+    This prompt overrides feature_get_next behavior to use the bound feature_id.
+
+    Args:
+        project_dir: Project directory for prompts
+        feature_id: The feature ID claimed by the coordinator
+        yolo_mode: If True, use YOLO prompt as base
+
+    Returns:
+        Modified coding prompt that binds to the specified feature
+    """
+    # Load base prompt
+    if yolo_mode:
+        base_prompt = get_coding_prompt_yolo(project_dir)
+    else:
+        base_prompt = get_coding_prompt(project_dir)
+
+    # Prepend parallel mode instructions that override feature_get_next
+    parallel_preamble = f"""
+## PARALLEL MODE - BOUND FEATURE
+
+**CRITICAL: You are running in parallel mode with a pre-assigned feature.**
+
+The coordinator has already claimed Feature ID {feature_id} for you.
+You MUST work on this specific feature and NO OTHER.
+
+**OVERRIDE INSTRUCTIONS:**
+1. Do NOT use `feature_get_next` - your feature is already assigned
+2. Do NOT use `feature_mark_in_progress` - the coordinator handles this
+3. Use `feature_get_by_id` with feature_id={feature_id} to get your assigned feature details
+4. When done, use `feature_mark_passing` with feature_id={feature_id}
+
+**Your first action should be:**
+```
+Use the feature_get_by_id tool with feature_id={feature_id}
+```
+
+---
+
+"""
+    return parallel_preamble + base_prompt
+
+
 def get_app_spec(project_dir: Path) -> str:
     """
     Load the app spec from the project.

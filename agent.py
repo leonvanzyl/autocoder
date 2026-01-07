@@ -25,6 +25,7 @@ from prompts import (
     get_initializer_prompt,
     get_coding_prompt,
     get_coding_prompt_yolo,
+    get_coding_prompt_parallel,
     copy_spec_to_project,
 )
 
@@ -112,20 +113,35 @@ async def run_autonomous_agent(
     model: str,
     max_iterations: Optional[int] = None,
     yolo_mode: bool = False,
+    work_dir: Optional[Path] = None,
+    feature_id: Optional[int] = None,
 ) -> None:
     """
     Run the autonomous agent loop.
 
     Args:
-        project_dir: Directory for the project
+        project_dir: Directory for prompts and features.db
         model: Claude model to use
         max_iterations: Maximum number of iterations (None for unlimited)
         yolo_mode: If True, skip browser testing and use YOLO prompt
+        work_dir: Directory for code changes (default: same as project_dir)
+                  In parallel mode, this is the git worktree path.
+        feature_id: If provided, work on this specific feature (parallel mode).
+                    Worker is bound to this feature and won't use feature_get_next.
     """
+    # work_dir defaults to project_dir if not specified
+    if work_dir is None:
+        work_dir = project_dir
+
+    is_parallel_mode = feature_id is not None
+
     print("\n" + "=" * 70)
     print("  AUTONOMOUS CODING AGENT DEMO")
     print("=" * 70)
     print(f"\nProject directory: {project_dir}")
+    if is_parallel_mode:
+        print(f"Worktree path: {work_dir}")
+        print(f"Bound to feature ID: {feature_id}")
     print(f"Model: {model}")
     if yolo_mode:
         print("Mode: YOLO (testing disabled)")
@@ -137,8 +153,9 @@ async def run_autonomous_agent(
         print("Max iterations: Unlimited (will run until completion)")
     print()
 
-    # Create project directory
+    # Create directories
     project_dir.mkdir(parents=True, exist_ok=True)
+    work_dir.mkdir(parents=True, exist_ok=True)
 
     # Check if this is a fresh start or continuation
     # Uses has_features() which checks if the database actually has features,
@@ -176,15 +193,19 @@ async def run_autonomous_agent(
         print_session_header(iteration, is_first_run)
 
         # Create client (fresh context)
-        client = create_client(project_dir, model, yolo_mode=yolo_mode)
+        # In parallel mode, work_dir is the worktree; project_dir has DB/prompts
+        client = create_client(project_dir, model, yolo_mode=yolo_mode, work_dir=work_dir)
 
         # Choose prompt based on session type
         # Pass project_dir to enable project-specific prompts
         if is_first_run:
             prompt = get_initializer_prompt(project_dir)
             is_first_run = False  # Only use initializer once
+        elif is_parallel_mode:
+            # Parallel mode: use feature_id-bound prompt
+            prompt = get_coding_prompt_parallel(project_dir, feature_id, yolo_mode)
         else:
-            # Use YOLO prompt if in YOLO mode
+            # Single agent mode: use YOLO or standard prompt
             if yolo_mode:
                 prompt = get_coding_prompt_yolo(project_dir)
             else:

@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Optional
 
 from worktree_manager import WorktreeManager
+from mcp_server.feature_mcp import init_database_direct
 
 logger = logging.getLogger(__name__)
 
@@ -130,12 +131,10 @@ class WorkerProcess:
         """
         Run an MCP tool by calling feature_mcp.py directly.
 
-        This imports and calls the tool function directly rather than
-        using subprocess or MCP protocol for simplicity.
+        Database must be initialized via init_database_direct() before calling.
         """
-        sys.path.insert(0, str(self.project_dir.parent))
-
         try:
+            # Import the tool functions (DB already initialized in coordinator.run())
             from mcp_server.feature_mcp import (
                 feature_claim_next,
                 feature_heartbeat,
@@ -183,10 +182,16 @@ class WorkerProcess:
         try:
             # Run the agent subprocess in the worktree
             # Uses create_subprocess_exec (safe, no shell injection)
+            # CRITICAL: --project-dir points to ORIGINAL project (for shared DB)
+            #           --worktree-path is where code changes happen
+            #           --feature-id binds worker to coordinator's claimed feature
             cmd = [
                 sys.executable,
                 str(Path(__file__).parent / "autonomous_agent_demo.py"),
-                "--project-dir", str(self.worktree_path),
+                "--project-dir", str(self.project_dir),  # Shared DB location
+                "--worktree-path", str(self.worktree_path),  # Code changes location
+                "--feature-id", str(feature["id"]),  # Bound to claimed feature
+                "--model", self.model,  # Pass model through
                 "--max-iterations", "1",
             ]
 
@@ -276,6 +281,11 @@ class ParallelCoordinator:
         logger.info(f"Starting parallel coordinator with {self.worker_count} workers")
         logger.info(f"Project: {self.project_dir}")
         logger.info(f"Mode: {'YOLO' if self.yolo_mode else 'Standard'}")
+
+        # Initialize database BEFORE any MCP tool calls
+        # Uses project_dir (not worktree) so all workers share the same DB
+        init_database_direct(self.project_dir)
+        logger.info("Database initialized for parallel execution")
 
         # Verify git repo
         if not await self.worktree_mgr.is_git_repo():
