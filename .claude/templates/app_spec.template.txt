@@ -1,0 +1,331 @@
+<!--
+  Project Specification Template
+  ==============================
+
+  This is a placeholder template. Replace with your actual project specification.
+
+  You can either:
+  1. Use the /create-spec command to generate this interactively with Claude
+  2. Manually edit this file following the structure below
+
+  See existing projects in generations/ for examples of complete specifications.
+-->
+
+<project_specification>
+  <project_name>YOUR_PROJECT_NAME</project_name>
+
+  <overview>
+    Describe your project in 2-3 sentences. What are you building? What problem
+    does it solve? Who is it for? Include key features and design goals.
+  </overview>
+
+  <technology_stack>
+    <frontend>
+      <framework>React with Vite</framework>
+      <styling>Tailwind CSS</styling>
+      <state_management>React hooks and context</state_management>
+      <routing>React Router for navigation</routing>
+      <port>3000</port>
+    </frontend>
+    <backend>
+      <runtime>Node.js with Express</runtime>
+      <database>SQLite with better-sqlite3</database>
+      <port>3001</port>
+    </backend>
+    <communication>
+      <api>RESTful endpoints</api>
+    </communication>
+  </technology_stack>
+
+  <prerequisites>
+    <environment_setup>
+      - Node.js 18+ installed
+      - npm or pnpm package manager
+      - Any API keys or external services needed
+    </environment_setup>
+  </prerequisites>
+
+  <core_features>
+    <!--
+      List features grouped by category. Each feature should be:
+      - Specific and testable
+      - Independent where possible
+      - Written as a capability ("User can...", "System displays...")
+    -->
+
+    <authentication>
+      - User registration with email/password
+      - User login with session management
+      - User logout
+      - Password reset flow
+      - Profile management
+    </authentication>
+
+    <main_functionality>
+      <!-- Replace with your app's primary features -->
+      - Create new items
+      - View list of items with pagination
+      - Edit existing items
+      - Delete items with confirmation
+      - Search and filter items
+    </main_functionality>
+
+    <user_interface>
+      - Responsive layout (mobile, tablet, desktop)
+      - Dark/light theme toggle
+      - Loading states and skeletons
+      - Error handling with user feedback
+      - Toast notifications for actions
+    </user_interface>
+
+    <data_management>
+      - Data validation on forms
+      - Auto-save drafts
+      - Export data functionality
+      - Import data functionality
+    </data_management>
+
+    <!-- Add more feature categories as needed -->
+  </core_features>
+
+  <database_schema>
+    <tables>
+      <users>
+        - id (PRIMARY KEY)
+        - email (UNIQUE, NOT NULL)
+        - password_hash (NOT NULL)
+        - name
+        - avatar_url
+        - preferences (JSON)
+        - created_at, updated_at
+      </users>
+
+      <!-- Add more tables for your domain entities -->
+      <items>
+        - id (PRIMARY KEY)
+        - user_id (FOREIGN KEY -> users.id)
+        - title (NOT NULL)
+        - description
+        - status (enum: draft, active, archived)
+        - created_at, updated_at
+      </items>
+
+      <!-- Add additional tables as needed -->
+    </tables>
+  </database_schema>
+
+  <api_endpoints_summary>
+    <authentication>
+      - POST /api/auth/register
+      - POST /api/auth/login
+      - POST /api/auth/logout
+      - GET /api/auth/me
+      - PUT /api/auth/profile
+      - POST /api/auth/forgot-password
+      - POST /api/auth/reset-password
+    </authentication>
+
+    <items>
+      - GET /api/items (list with pagination, search, filters)
+      - POST /api/items (create)
+      - GET /api/items/:id (get single)
+      - PUT /api/items/:id (update)
+      - DELETE /api/items/:id (delete)
+    </items>
+
+    <!-- Add more endpoint categories as needed -->
+  </api_endpoints_summary>
+
+  <ui_layout>
+    <main_structure>
+      Describe the overall layout structure:
+      - Header with navigation and user menu
+      - Sidebar for navigation (collapsible on mobile)
+      - Main content area
+      - Footer (optional)
+    </main_structure>
+
+    <sidebar>
+      - Logo/brand at top
+      - Navigation links
+      - Quick actions
+      - User profile at bottom
+    </sidebar>
+
+    <main_content>
+      - Page header with title and actions
+      - Content area with cards/lists/forms
+      - Pagination or infinite scroll
+    </main_content>
+
+    <modals_overlays>
+      - Confirmation dialogs
+      - Form modals for create/edit
+      - Settings modal
+      - Help/keyboard shortcuts reference
+    </modals_overlays>
+  </ui_layout>
+
+  <design_system>
+    <color_palette>
+      - Primary: #3B82F6 (blue)
+      - Secondary: #10B981 (green)
+      - Accent: #F59E0B (amber)
+      - Background: #FFFFFF (light), #1A1A1A (dark)
+      - Surface: #F5F5F5 (light), #2A2A2A (dark)
+      - Text: #1F2937 (light), #E5E5E5 (dark)
+      - Border: #E5E5E5 (light), #404040 (dark)
+      - Error: #EF4444
+      - Success: #10B981
+      - Warning: #F59E0B
+    </color_palette>
+
+    <typography>
+      - Font family: Inter, system-ui, -apple-system, sans-serif
+      - Headings: font-semibold
+      - Body: font-normal, leading-relaxed
+      - Code: JetBrains Mono, Consolas, monospace
+    </typography>
+
+    <components>
+      <buttons>
+        - Primary: colored background, white text, rounded
+        - Secondary: border style, hover fill
+        - Ghost: transparent, hover background
+        - Icon buttons: square with hover state
+      </buttons>
+
+      <inputs>
+        - Rounded borders with focus ring
+        - Clear placeholder text
+        - Error states with red border
+        - Disabled state styling
+      </inputs>
+
+      <cards>
+        - Subtle border or shadow
+        - Rounded corners (8px)
+        - Hover state for interactive cards
+      </cards>
+    </components>
+
+    <animations>
+      - Smooth transitions (150-300ms)
+      - Fade in for new content
+      - Slide animations for modals/sidebars
+      - Loading spinners
+      - Skeleton loaders
+    </animations>
+  </design_system>
+
+  <key_interactions>
+    <!-- Describe the main user flows -->
+    <user_flow_1>
+      1. User arrives at landing page
+      2. Clicks "Get Started" or "Sign Up"
+      3. Fills registration form
+      4. Receives confirmation
+      5. Redirected to main dashboard
+    </user_flow_1>
+
+    <user_flow_2>
+      1. User clicks "Create New"
+      2. Form modal opens
+      3. User fills in details
+      4. Clicks save
+      5. Item appears in list with success toast
+    </user_flow_2>
+
+    <!-- Add more key interactions as needed -->
+  </key_interactions>
+
+  <implementation_steps>
+    <step number="1">
+      <title>Project Setup and Database</title>
+      <tasks>
+        - Initialize frontend with Vite + React
+        - Set up Express backend
+        - Create SQLite database with schema
+        - Configure CORS and middleware
+        - Set up environment variables
+      </tasks>
+    </step>
+
+    <step number="2">
+      <title>Authentication System</title>
+      <tasks>
+        - Implement user registration
+        - Build login/logout flow
+        - Add session management
+        - Create protected routes
+        - Build user profile page
+      </tasks>
+    </step>
+
+    <step number="3">
+      <title>Core Features</title>
+      <tasks>
+        - Build main CRUD operations
+        - Implement list views with pagination
+        - Add search and filtering
+        - Create form validation
+        - Handle error states
+      </tasks>
+    </step>
+
+    <step number="4">
+      <title>UI Polish and Responsiveness</title>
+      <tasks>
+        - Implement responsive design
+        - Add dark/light theme
+        - Create loading states
+        - Add animations and transitions
+        - Implement toast notifications
+      </tasks>
+    </step>
+
+    <step number="5">
+      <title>Testing and Refinement</title>
+      <tasks>
+        - Test all user flows
+        - Fix edge cases
+        - Optimize performance
+        - Ensure accessibility
+        - Final UI polish
+      </tasks>
+    </step>
+  </implementation_steps>
+
+  <success_criteria>
+    <functionality>
+      - All features work as specified
+      - No console errors in browser
+      - Proper error handling throughout
+      - Data persists correctly in database
+    </functionality>
+
+    <user_experience>
+      - Intuitive navigation and workflows
+      - Responsive on all device sizes
+      - Fast load times (< 2s)
+      - Clear feedback for all actions
+      - Accessible (keyboard navigation, ARIA labels)
+    </user_experience>
+
+    <technical_quality>
+      - Clean, maintainable code structure
+      - Consistent coding style
+      - Proper separation of concerns
+      - Secure authentication
+      - Input validation and sanitization
+    </technical_quality>
+
+    <design_polish>
+      - Consistent visual design
+      - Smooth animations
+      - Professional appearance
+      - Both themes fully implemented
+      - No layout issues or overflow
+    </design_polish>
+  </success_criteria>
+</project_specification>
