@@ -111,10 +111,13 @@ class WorktreeManager:
         result = self._run_git("rev-parse", "HEAD")
         if result.returncode != 0:
             # No commits yet, create one
-            self._run_git("commit", "--allow-empty", "-m", "Initial commit")
+            commit_result = self._run_git("commit", "--allow-empty", "-m", "Initial commit")
+            if commit_result.returncode != 0:
+                logger.error(f"Failed to create initial commit: {commit_result.stderr}")
+                return None
             result = self._run_git("rev-parse", "HEAD")
             if result.returncode != 0:
-                logger.error("Failed to get HEAD ref")
+                logger.error(f"Failed to get HEAD ref after initial commit: {result.stderr}")
                 return None
 
         base_ref = result.stdout.strip()
@@ -166,17 +169,19 @@ class WorktreeManager:
                 worktree_db.symlink_to(features_db)
                 logger.debug(f"Created symlink to features.db in {worktree_path}")
             except OSError as e:
-                # Symlink failed - this breaks shared DB coordination
-                # The MCP server uses PROJECT_DIR env var which points to worktree,
-                # so we need the features.db to be accessible there
-                logger.warning(
-                    f"Symlink creation failed ({e}). "
-                    f"Ensure MCP server is configured to use {features_db} directly."
+                # Symlink failed (common on Windows without admin privileges)
+                # This is OK because parallel_agent_runner.py sets PROJECT_DIR
+                # environment variable to the main project directory, and the
+                # MCP server uses that env var to locate features.db
+                logger.info(
+                    f"Symlink creation failed ({e}), but this is OK - "
+                    f"MCP server uses PROJECT_DIR env var to access {features_db}"
                 )
-                # Write a marker file to indicate the absolute DB path
+                # Write a marker file for debugging purposes only
+                # (not read by MCP server, just useful for troubleshooting)
                 db_path_file = worktree_path / ".features_db_path"
                 db_path_file.write_text(str(features_db))
-                logger.info(f"Wrote features.db path to {db_path_file}")
+                logger.debug(f"Wrote features.db path marker to {db_path_file}")
 
         # Copy prompts directory if it exists
         prompts_dir = self.project_dir / "prompts"

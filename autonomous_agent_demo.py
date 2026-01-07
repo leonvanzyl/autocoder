@@ -167,6 +167,7 @@ def main() -> None:
                     num_agents=num_agents,
                     yolo_mode=args.yolo,
                     model=args.model,
+                    max_iterations=args.max_iterations,
                 )
                 print(f"\nStarted agents: {results}")
 
@@ -175,7 +176,16 @@ def main() -> None:
                     health = await orchestrator.healthcheck()
                     running = sum(1 for v in health.values() if v)
                     if running == 0:
+                        # Distinguish between completion and crashes
+                        statuses = orchestrator.get_all_statuses()
+                        crashed = [s["agent_id"] for s in statuses if s["status"] == "crashed"]
+                        stopped = [s["agent_id"] for s in statuses if s["status"] == "stopped"]
+
                         print("\nAll agents have finished.")
+                        if crashed:
+                            print(f"  Crashed: {', '.join(crashed)}")
+                        if stopped:
+                            print(f"  Completed: {', '.join(stopped)}")
                         break
                     await asyncio.sleep(5)
 

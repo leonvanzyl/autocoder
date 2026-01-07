@@ -129,6 +129,7 @@ class ParallelAgentStartRequest(BaseModel):
     """Request schema for starting parallel agents."""
     num_agents: int = Field(default=2, ge=1, le=10, description="Number of agents to start")
     yolo_mode: bool = False
+    max_iterations: int | None = Field(default=None, ge=1, description="Maximum iterations per agent")
 
 
 class ParallelAgentInfo(BaseModel):

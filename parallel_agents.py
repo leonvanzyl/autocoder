@@ -103,6 +103,7 @@ class ParallelAgentOrchestrator:
         num_agents: int,
         yolo_mode: bool = False,
         model: str = "claude-sonnet-4-5-20250929",
+        max_iterations: Optional[int] = None,
     ) -> dict[str, bool]:
         """
         Start multiple agents in parallel.
@@ -111,6 +112,7 @@ class ParallelAgentOrchestrator:
             num_agents: Number of agents to start (capped at max_agents)
             yolo_mode: Enable YOLO mode (no browser testing)
             model: Claude model to use
+            max_iterations: Maximum iterations per agent (default: unlimited)
 
         Returns:
             Dict mapping agent_id to success status
@@ -125,7 +127,7 @@ class ParallelAgentOrchestrator:
 
         # Start agents concurrently for faster initialization
         agent_ids = [self.generate_agent_id(i) for i in range(num_agents)]
-        tasks = [self.start_agent(agent_id, yolo_mode, model) for agent_id in agent_ids]
+        tasks = [self.start_agent(agent_id, yolo_mode, model, max_iterations) for agent_id in agent_ids]
 
         # Gather results, allowing individual failures
         start_results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -144,6 +146,7 @@ class ParallelAgentOrchestrator:
         agent_id: str,
         yolo_mode: bool = False,
         model: str = "claude-sonnet-4-5-20250929",
+        max_iterations: Optional[int] = None,
     ) -> bool:
         """
         Start a single agent.
@@ -152,6 +155,7 @@ class ParallelAgentOrchestrator:
             agent_id: Unique agent identifier
             yolo_mode: Enable YOLO mode
             model: Claude model to use
+            max_iterations: Maximum iterations (default: unlimited)
 
         Returns:
             True if started successfully
@@ -178,6 +182,9 @@ class ParallelAgentOrchestrator:
 
         if yolo_mode:
             cmd.append("--yolo")
+
+        if max_iterations is not None:
+            cmd.extend(["--max-iterations", str(max_iterations)])
 
         try:
             process = subprocess.Popen(

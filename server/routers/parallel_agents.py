@@ -102,6 +102,7 @@ async def start_parallel_agents(
     results = await orchestrator.start_agents(
         num_agents=request.num_agents,
         yolo_mode=request.yolo_mode,
+        max_iterations=request.max_iterations,
     )
 
     all_success = all(results.values())
