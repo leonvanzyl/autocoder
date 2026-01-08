@@ -255,7 +255,10 @@ export function useChatToFeatures({
           }
 
           case 'feature_created': {
-            // Remove from pending suggestions
+            // Remove from pending suggestions by name matching
+            // Note: This assumes feature names are unique within pending suggestions.
+            // If duplicate names are possible, consider tracking the accepted index
+            // and filtering by index instead.
             setPendingSuggestions((prev: FeatureSuggestion[]) =>
               prev.filter((s: FeatureSuggestion) => s.name !== data.feature.name)
             )

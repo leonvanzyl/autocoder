@@ -314,8 +314,11 @@ async def chat_to_features_websocket(websocket: WebSocket, project_name: str):
 
 @router.get("/{project_name}/chat/sessions")
 async def list_chat_sessions(project_name: str):
-    """List all active chat-to-features sessions."""
-    return {"sessions": list_sessions()}
+    """List active chat-to-features sessions for this project."""
+    all_sessions = list_sessions()
+    # Filter to only include sessions matching this project
+    project_sessions = [s for s in all_sessions if s == project_name]
+    return {"sessions": project_sessions}
 
 
 @router.delete("/{project_name}/chat/sessions")

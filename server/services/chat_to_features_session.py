@@ -96,6 +96,7 @@ class ChatToFeaturesSession:
         self.created_at = datetime.now()
         self._client_entered: bool = False
         self._context: Optional[str] = None
+        self._feature_suggestions: dict[int, dict] = {}  # index -> feature data
 
     async def close(self) -> None:
         """Clean up resources and close the Claude client."""
@@ -500,6 +501,8 @@ Now, let's help the user define their features!"""
                             # Yield any new features we haven't sent yet
                             while feature_index < len(features):
                                 feature = features[feature_index]
+                                # Store the suggestion for later retrieval
+                                self._feature_suggestions[feature_index] = feature
                                 yield {
                                     "type": "feature_suggestion",
                                     "index": feature_index,
@@ -524,6 +527,33 @@ Now, let's help the user define their features!"""
     def get_messages(self) -> list[dict]:
         """Get all messages in the conversation."""
         return self.messages.copy()
+
+    def get_feature_suggestion(self, index: int) -> Optional[dict]:
+        """
+        Get a feature suggestion by its index.
+
+        Args:
+            index: The feature suggestion index
+
+        Returns:
+            The feature data dict or None if not found
+        """
+        return self._feature_suggestions.get(index)
+
+    def remove_feature_suggestion(self, index: int) -> bool:
+        """
+        Remove a feature suggestion by its index.
+
+        Args:
+            index: The feature suggestion index to remove
+
+        Returns:
+            True if removed, False if not found
+        """
+        if index in self._feature_suggestions:
+            del self._feature_suggestions[index]
+            return True
+        return False
 
 
 # Session registry with thread safety

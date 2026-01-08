@@ -73,7 +73,7 @@ export function ChatToFeaturesPanel({
               hover:bg-white/30
               text-[var(--color-neo-text)]
             "
-            title="Close Feature Suggestions (Ctrl+F)"
+            title="Close Feature Suggestions (F)"
             aria-label="Close Feature Suggestions"
           >
             <X size={18} />

@@ -74,8 +74,16 @@ def restore_claude_settings(backed_up_paths: list[Path]) -> None:
     """
     for backup_path in backed_up_paths:
         if backup_path.exists():
-            # Handle the suffix case (.json.autocoder_backup -> .json)
-            original_name = backup_path.name.replace(".autocoder_backup", "")
+            # Handle both regular and timestamped backup names:
+            # - Regular: settings.json.autocoder_backup -> settings.json
+            # - Timestamped: settings.json.autocoder_backup.1234567890 -> settings.json
+            name = backup_path.name
+            if ".autocoder_backup." in name:
+                # Timestamped backup: split on .autocoder_backup. and take left part
+                original_name = name.split(".autocoder_backup.")[0]
+            else:
+                # Regular backup: just remove .autocoder_backup suffix
+                original_name = name.replace(".autocoder_backup", "")
             original_path = backup_path.parent / original_name
 
             # Check if a new file was created at the original path during the run
