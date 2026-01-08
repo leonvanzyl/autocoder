@@ -46,6 +46,14 @@ def backup_existing_claude_settings(project_dir: Path) -> list[Path]:
         settings_path = claude_dir / filename
         if settings_path.exists():
             backup_path = claude_dir / f"{filename}.autocoder_backup"
+            # Remove existing backup if present (from previous failed run)
+            if backup_path.exists():
+                try:
+                    backup_path.unlink()
+                    print(f"   - Removed stale backup: {backup_path.name}")
+                except OSError as e:
+                    print(f"   - Warning: Could not remove stale backup {backup_path}: {e}")
+                    continue
             try:
                 shutil.move(str(settings_path), str(backup_path))
                 backed_up.append(backup_path)
@@ -67,6 +75,19 @@ def restore_claude_settings(backed_up_paths: list[Path]) -> None:
             # Handle the suffix case (.json.autocoder_backup -> .json)
             original_name = backup_path.name.replace(".autocoder_backup", "")
             original_path = backup_path.parent / original_name
+
+            # Check if a new file was created at the original path during the run
+            if original_path.exists():
+                print(f"   - Warning: {original_path.name} was recreated during agent run, keeping both")
+                # Keep the backup with a different name to preserve both versions
+                archive_path = backup_path.parent / f"{original_name}.pre_autocoder"
+                try:
+                    shutil.move(str(backup_path), str(archive_path))
+                    print(f"   - Archived original settings as: {archive_path.name}")
+                except OSError as e:
+                    print(f"   - Warning: Could not archive {backup_path}: {e}")
+                continue
+
             try:
                 shutil.move(str(backup_path), str(original_path))
                 print(f"   - Restored settings: {original_path.name}")
