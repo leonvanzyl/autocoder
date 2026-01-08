@@ -532,7 +532,7 @@ def context_read_all(
     try:
         content = load_all_context(PROJECT_DIR, max_chars)
         if not content:
-            return json.dumps({"success": False, "message": "No context documentation found. Run analyzer first."})
+            return json.dumps({"success": False, "error": "No context documentation found. Run analyzer first."})
         return json.dumps({"success": True, "content": content}, indent=2)
     except Exception as e:
         return json.dumps({"success": False, "error": str(e)})

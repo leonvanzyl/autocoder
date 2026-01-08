@@ -64,10 +64,7 @@ def restore_claude_settings(backed_up_paths: list[Path]) -> None:
     """
     for backup_path in backed_up_paths:
         if backup_path.exists():
-            original_path = backup_path.with_suffix("").with_suffix(
-                backup_path.suffix.replace(".autocoder_backup", "")
-            )
-            # Handle the double suffix case (.json.autocoder_backup -> .json)
+            # Handle the suffix case (.json.autocoder_backup -> .json)
             original_name = backup_path.name.replace(".autocoder_backup", "")
             original_path = backup_path.parent / original_name
             try:
