@@ -40,6 +40,7 @@ interface ChatToFeaturesFeatureSuggestionMessage {
 
 interface ChatToFeaturesFeatureCreatedMessage {
   type: 'feature_created'
+  feature_index: number
   feature_id: number
   feature: Feature
 }
@@ -283,12 +284,9 @@ export function useChatToFeatures({
           }
 
           case 'feature_created': {
-            // Remove from pending suggestions by name matching
-            // Note: This assumes feature names are unique within pending suggestions.
-            // If duplicate names are possible, consider tracking the accepted index
-            // and filtering by index instead.
+            // Remove from pending suggestions by index (server echoes back feature_index)
             setPendingSuggestions((prev: FeatureSuggestion[]) =>
-              prev.filter((s: FeatureSuggestion) => s.name !== data.feature.name)
+              prev.filter((s: FeatureSuggestion) => s.index !== data.feature_index)
             )
 
             // Add system message about creation

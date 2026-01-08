@@ -232,9 +232,10 @@ async def chat_to_features_websocket(websocket: WebSocket, project_name: str):
                         # Remove the suggestion from the session (mark as accepted)
                         session.remove_feature_suggestion(feature_index, status="accepted")
 
-                        # Send success response
+                        # Send success response (include feature_index for client-side removal)
                         await websocket.send_json({
                             "type": "feature_created",
+                            "feature_index": feature_index,
                             "feature_id": result["feature_id"],
                             "feature": result["feature"]
                         })

@@ -79,6 +79,42 @@ def _get_registry_functions():
     return register_project, unregister_project, get_project_path, list_registered_projects, validate_project_path
 
 
+# Source code detection constants
+_SOURCE_EXTENSIONS = {'.py', '.js', '.ts', '.tsx', '.jsx', '.java', '.go', '.rs', '.rb', '.php', '.vue', '.svelte', '.c', '.cpp', '.h', '.cs'}
+_SKIP_DIRS = {'node_modules', '.git', 'venv', '__pycache__', 'dist', 'build', '.next', 'target', '.venv', 'vendor', 'bower_components'}
+
+
+def _has_source_code(project_path: Path, max_depth: int = 3) -> bool:
+    """
+    Check if directory contains source code files.
+
+    Uses bounded depth-limited search to prevent timeouts on large repositories.
+    Skips common dependency/build directories for efficiency.
+
+    Args:
+        project_path: Root directory to search
+        max_depth: Maximum directory depth to traverse (default: 3)
+
+    Returns:
+        True if source code files are found, False otherwise
+    """
+    def check_dir(path: Path, depth: int) -> bool:
+        if depth > max_depth:
+            return False
+        try:
+            for item in path.iterdir():
+                if item.is_file() and item.suffix.lower() in _SOURCE_EXTENSIONS:
+                    return True
+                if item.is_dir() and item.name not in _SKIP_DIRS:
+                    if check_dir(item, depth + 1):
+                        return True
+        except PermissionError:
+            pass
+        return False
+
+    return check_dir(project_path, 0)
+
+
 router = APIRouter(prefix="/api/projects", tags=["projects"])
 
 
@@ -231,15 +267,8 @@ async def import_project(project: ProjectImport):
             detail="Path is not a directory"
         )
 
-    # Check if the directory has some source code
-    has_source_files = False
-    source_extensions = {'.py', '.js', '.ts', '.tsx', '.jsx', '.java', '.go', '.rs', '.rb', '.php', '.vue', '.svelte', '.c', '.cpp', '.h', '.cs'}
-    for item in project_path.rglob('*'):
-        if item.is_file() and item.suffix.lower() in source_extensions:
-            has_source_files = True
-            break
-
-    if not has_source_files:
+    # Check if the directory has some source code (bounded search to prevent timeouts)
+    if not _has_source_code(project_path):
         raise HTTPException(
             status_code=400,
             detail="Directory does not appear to contain source code files"
