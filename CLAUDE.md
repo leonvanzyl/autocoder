@@ -71,6 +71,42 @@ python autonomous_agent_demo.py --project-dir my-app --yolo
 
 **When to use:** Early prototyping when you want to quickly scaffold features without verification overhead. Switch back to standard mode for production-quality development.
 
+### Parallel Agents Mode
+
+Run multiple agents simultaneously to speed up project completion:
+
+```bash
+# CLI: Run 3 agents in parallel
+python autonomous_agent_demo.py --project-dir my-app --num-agents 3
+
+# Combine with YOLO mode for fastest iteration
+python autonomous_agent_demo.py --project-dir my-app --num-agents 3 --yolo
+
+# API: Start parallel agents via REST
+POST /api/projects/{project_name}/parallel-agents/start
+Body: { "num_agents": 3, "yolo_mode": false }
+```
+
+**How it works:**
+- Each agent gets its own **git worktree** for code isolation
+- All agents share the same **features.db** for task coordination
+- Features are **atomically claimed** to prevent conflicts
+- Agent assignment is tracked via `assigned_agent_id` on features
+
+**API Endpoints:**
+- `GET /api/projects/{name}/parallel-agents/status` - Get status of all agents
+- `POST /api/projects/{name}/parallel-agents/start` - Start N agents
+- `POST /api/projects/{name}/parallel-agents/stop` - Stop all agents
+- `POST /api/projects/{name}/parallel-agents/merge` - Merge worktree changes
+- `POST /api/projects/{name}/parallel-agents/cleanup` - Stop and cleanup
+
+**MCP Tools for Parallel Agents:**
+- `feature_claim_next(agent_id)` - Atomically claim next available feature
+- `feature_release(feature_id, agent_id)` - Release feature back to queue
+- `feature_get_next(agent_id)` - Get next feature (excludes others' assignments)
+
+**When to use:** When you have many independent features and want to parallelize implementation. Best combined with YOLO mode for maximum speed.
+
 ### React UI (in ui/ directory)
 
 ```bash

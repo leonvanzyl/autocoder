@@ -84,6 +84,7 @@ class FeatureResponse(FeatureBase):
     priority: int
     passes: bool
     in_progress: bool
+    assigned_agent_id: str | None = None  # Agent working on this feature
 
     class Config:
         from_attributes = True
@@ -117,6 +118,40 @@ class AgentActionResponse(BaseModel):
     """Response for agent control actions."""
     success: bool
     status: str
+    message: str = ""
+
+
+# ============================================================================
+# Parallel Agent Schemas
+# ============================================================================
+
+class ParallelAgentStartRequest(BaseModel):
+    """Request schema for starting parallel agents."""
+    num_agents: int = Field(default=2, ge=1, le=10, description="Number of agents to start")
+    yolo_mode: bool = False
+    max_iterations: int | None = Field(default=None, ge=1, description="Maximum iterations per agent")
+
+
+class ParallelAgentInfo(BaseModel):
+    """Information about a single parallel agent."""
+    agent_id: str
+    status: Literal["stopped", "running", "paused", "crashed", "unknown"]
+    pid: int | None = None
+    started_at: datetime | None = None
+    worktree_path: str | None = None
+
+
+class ParallelAgentsStatus(BaseModel):
+    """Status of all parallel agents."""
+    agents: list[ParallelAgentInfo]
+    total_running: int
+    max_agents: int
+
+
+class ParallelAgentActionResponse(BaseModel):
+    """Response for parallel agent control actions."""
+    success: bool
+    agents: dict[str, bool]  # agent_id -> success
     message: str = ""
 
 

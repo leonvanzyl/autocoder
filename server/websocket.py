@@ -51,6 +51,7 @@ class ConnectionManager:
     """Manages WebSocket connections per project."""
 
     def __init__(self):
+        """Initialize the connection manager with empty connection registry."""
         # project_name -> set of WebSocket connections
         self.active_connections: dict[str, Set[WebSocket]] = {}
         self._lock = asyncio.Lock()

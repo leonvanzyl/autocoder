@@ -66,6 +66,7 @@ export interface Feature {
   steps: string[]
   passes: boolean
   in_progress: boolean
+  assigned_agent_id: string | null  // Agent working on this feature
 }
 
 export interface FeatureListResponse {
@@ -95,6 +96,27 @@ export interface AgentStatusResponse {
 export interface AgentActionResponse {
   success: boolean
   status: AgentStatus
+  message: string
+}
+
+// Parallel agent types
+export interface ParallelAgentInfo {
+  agent_id: string
+  status: 'stopped' | 'running' | 'paused' | 'crashed' | 'unknown'
+  pid: number | null
+  started_at: string | null
+  worktree_path: string | null
+}
+
+export interface ParallelAgentsStatus {
+  agents: ParallelAgentInfo[]
+  total_running: number
+  max_agents: number
+}
+
+export interface ParallelAgentActionResponse {
+  success: boolean
+  agents: Record<string, boolean>
   message: string
 }
 

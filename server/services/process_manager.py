@@ -85,10 +85,12 @@ class AgentProcessManager:
 
     @property
     def status(self) -> Literal["stopped", "running", "paused", "crashed"]:
+        """Get the current agent process status."""
         return self._status
 
     @status.setter
     def status(self, value: Literal["stopped", "running", "paused", "crashed"]):
+        """Set status and notify callbacks if changed."""
         old_status = self._status
         self._status = value
         if old_status != value:
@@ -137,6 +139,7 @@ class AgentProcessManager:
 
     @property
     def pid(self) -> int | None:
+        """Get the process ID of the running agent, or None if not running."""
         return self.process.pid if self.process else None
 
     def _check_lock(self) -> bool:

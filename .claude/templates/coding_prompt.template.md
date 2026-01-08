@@ -3,6 +3,20 @@
 You are continuing work on a long-running autonomous development task.
 This is a FRESH context window - you have no memory of previous sessions.
 
+### PARALLEL AGENT MODE
+
+Check if you're running as a parallel agent:
+
+```bash
+echo "AGENT_ID: $AGENT_ID"
+```
+
+**If AGENT_ID is set (e.g., "agent-1", "agent-2"):**
+- You are one of multiple agents working in parallel on this project
+- You MUST use `feature_claim_next` instead of `feature_get_next` to avoid conflicts
+- Other agents are working in separate git worktrees on the same codebase
+- The features database is shared - atomic claiming prevents race conditions
+
 ### STEP 1: GET YOUR BEARINGS (MANDATORY)
 
 Start by orienting yourself:
@@ -95,6 +109,17 @@ Features are **test cases** that drive development. This is test-driven developm
 - RIGHT: "Flashcard page doesn't exist yet" → build flashcard page → implement filter → test feature
 
 Get the next feature to implement:
+
+**If running in PARALLEL MODE (AGENT_ID is set):**
+
+```
+# Atomically claim the next feature (prevents race conditions with other agents)
+Use the feature_claim_next tool with agent_id=$AGENT_ID
+```
+
+This single call gets AND claims the feature atomically - no need to call `feature_mark_in_progress` separately.
+
+**If running in SINGLE AGENT MODE (AGENT_ID is not set):**
 
 ```
 # Get the highest-priority pending feature
@@ -273,7 +298,7 @@ Use the feature_mark_passing tool with feature_id=42
 
 **ONLY MARK A FEATURE AS PASSING AFTER VERIFICATION WITH SCREENSHOTS.**
 
-### STEP 8: COMMIT YOUR PROGRESS
+### STEP 8: COMMIT AND MERGE YOUR PROGRESS
 
 Make a descriptive git commit:
 
@@ -284,9 +309,40 @@ git commit -m "Implement [feature name] - verified end-to-end
 - Added [specific changes]
 - Tested with browser automation
 - Marked feature #X as passing
-- Screenshots in verification/ directory
 "
 ```
+
+**If running in PARALLEL MODE (AGENT_ID is set), merge your changes immediately:**
+
+After each completed feature, integrate your changes so other agents can benefit.
+
+**IMPORTANT:** You're in a git worktree, so you cannot checkout the main branch directly.
+Use this worktree-safe approach:
+
+```bash
+# 1. Determine the main branch name
+MAIN_BRANCH=$(cd "$(git rev-parse --git-common-dir)/.." && git branch --show-current 2>/dev/null || echo "main")
+
+# 2. Pull latest main into your branch (get others' changes first)
+git fetch origin $MAIN_BRANCH 2>/dev/null || true
+git merge origin/$MAIN_BRANCH --no-edit 2>/dev/null || git merge FETCH_HEAD --no-edit 2>/dev/null || true
+
+# 3. Push your branch to main (worktree-safe merge)
+git push . HEAD:$MAIN_BRANCH
+```
+
+The `git push . HEAD:main` command merges your current branch into main without needing to checkout main.
+
+**If merge conflicts occur:**
+- On step 2 (pulling main): Resolve conflicts, then `git add . && git commit -m "Merge main"`
+- On step 3 (pushing to main): This means main has changes not in your branch
+  - Run step 2 again to get those changes, then retry step 3
+- If complex conflicts: Skip merging for now, continue working. Use UI "Merge" button later.
+
+**Why merge after each feature?**
+- Other agents immediately get your improvements
+- Prevents large conflict pile-ups at the end
+- Each agent stays closer to the "true" state of the project
 
 ### STEP 9: UPDATE PROGRESS NOTES
 
@@ -369,9 +425,13 @@ The feature tools exist to reduce token usage. **DO NOT make exploratory queries
 feature_get_stats
 
 # 2. Get the NEXT feature to work on (one feature only)
+#    - SINGLE AGENT MODE: Use feature_get_next
+#    - PARALLEL MODE: Use feature_claim_next with agent_id=$AGENT_ID (atomic claim)
 feature_get_next
+feature_claim_next with agent_id={agent_id}  # PARALLEL MODE ONLY
 
 # 3. Mark a feature as in-progress (call immediately after feature_get_next)
+#    NOTE: Skip this if you used feature_claim_next (it claims automatically)
 feature_mark_in_progress with feature_id={id}
 
 # 4. Get up to 3 random passing features for regression testing
@@ -385,6 +445,9 @@ feature_skip with feature_id={id}
 
 # 7. Clear in-progress status (when abandoning a feature)
 feature_clear_in_progress with feature_id={id}
+
+# 8. Release a feature back to the queue (PARALLEL MODE - if you can't complete it)
+feature_release with feature_id={id} agent_id={agent_id}
 ```
 
 ### RULES:

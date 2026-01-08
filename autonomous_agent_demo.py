@@ -19,6 +19,9 @@ Example Usage:
 
     # YOLO mode: rapid prototyping without browser testing
     python autonomous_agent_demo.py --project-dir my-app --yolo
+
+    # Parallel agents: run multiple agents simultaneously
+    python autonomous_agent_demo.py --project-dir my-app --num-agents 3
 """
 
 import argparse
@@ -95,6 +98,13 @@ Authentication:
         help="Enable YOLO mode: rapid prototyping without browser testing",
     )
 
+    parser.add_argument(
+        "--num-agents",
+        type=int,
+        default=1,
+        help="Number of parallel agents to run (default: 1, max: 10)",
+    )
+
     return parser.parse_args()
 
 
@@ -126,22 +136,92 @@ def main() -> None:
             print("Use an absolute path or register the project first.")
             return
 
-    try:
-        # Run the agent (MCP server handles feature database)
-        asyncio.run(
-            run_autonomous_agent(
-                project_dir=project_dir,
-                model=args.model,
-                max_iterations=args.max_iterations,
-                yolo_mode=args.yolo,
-            )
+    # Check if parallel mode requested
+    num_agents = min(args.num_agents, 10)  # Cap at 10 agents
+
+    if num_agents > 1:
+        # Parallel agent mode
+        from parallel_agents import ParallelAgentOrchestrator
+
+        print(f"\n{'=' * 70}")
+        print(f"  PARALLEL AGENT MODE - {num_agents} AGENTS")
+        print("=" * 70)
+        print(f"\nProject directory: {project_dir}")
+        print(f"Model: {args.model}")
+        print(f"Number of agents: {num_agents}")
+        if args.yolo:
+            print("Mode: YOLO (testing disabled)")
+        print()
+
+        root_dir = Path(__file__).parent
+        orchestrator = ParallelAgentOrchestrator(
+            project_dir=project_dir,
+            root_dir=root_dir,
+            max_agents=num_agents,
         )
-    except KeyboardInterrupt:
-        print("\n\nInterrupted by user")
-        print("To resume, run the same command again")
-    except Exception as e:
-        print(f"\nFatal error: {e}")
-        raise
+
+        async def run_parallel():
+            """Run multiple agents in parallel and wait for completion."""
+            try:
+                results = await orchestrator.start_agents(
+                    num_agents=num_agents,
+                    yolo_mode=args.yolo,
+                    model=args.model,
+                    max_iterations=args.max_iterations,
+                )
+                print(f"\nStarted agents: {results}")
+
+                # Wait for all agents to complete (or user interrupt)
+                while True:
+                    health = await orchestrator.healthcheck()
+                    running = sum(1 for v in health.values() if v)
+                    if running == 0:
+                        # Distinguish between completion and crashes
+                        statuses = orchestrator.get_all_statuses()
+                        crashed = [s["agent_id"] for s in statuses if s["status"] == "crashed"]
+                        stopped = [s["agent_id"] for s in statuses if s["status"] == "stopped"]
+
+                        print("\nAll agents have finished.")
+                        if crashed:
+                            print(f"  Crashed: {', '.join(crashed)}")
+                        if stopped:
+                            print(f"  Completed: {', '.join(stopped)}")
+                        break
+                    await asyncio.sleep(5)
+
+            except KeyboardInterrupt:
+                print("\n\nInterrupted - stopping all agents...")
+                await orchestrator.stop_all_agents()
+            finally:
+                # Optional: merge worktree changes
+                print("\nCleaning up worktrees...")
+                await orchestrator.cleanup()
+
+        try:
+            asyncio.run(run_parallel())
+        except KeyboardInterrupt:
+            print("\n\nInterrupted by user")
+        except Exception as e:
+            print(f"\nFatal error: {e}")
+            raise
+    else:
+        # Single agent mode (original behavior)
+        try:
+            # Run the agent (MCP server handles feature database)
+            asyncio.run(
+                run_autonomous_agent(
+                    project_dir=project_dir,
+                    model=args.model,
+                    max_iterations=args.max_iterations,
+                    yolo_mode=args.yolo,
+                )
+            )
+        except KeyboardInterrupt:
+            print("\n\nInterrupted by user")
+            print("To resume, run the same command again")
+        except Exception as e:
+            print(f"\nFatal error: {e}")
+            raise
 
 
 if __name__ == "__main__":

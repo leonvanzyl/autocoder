@@ -111,6 +111,7 @@ async def run_autonomous_agent(
     model: str,
     max_iterations: Optional[int] = None,
     yolo_mode: bool = False,
+    agent_id: Optional[str] = None,
 ) -> None:
     """
     Run the autonomous agent loop.
@@ -120,20 +121,28 @@ async def run_autonomous_agent(
         model: Claude model to use
         max_iterations: Maximum number of iterations (None for unlimited)
         yolo_mode: If True, skip browser testing and use YOLO prompt
+        agent_id: Optional agent identifier for parallel execution
     """
+    prefix = f"[{agent_id}] " if agent_id else ""
+
     print("\n" + "=" * 70)
-    print("  AUTONOMOUS CODING AGENT DEMO")
+    if agent_id:
+        print(f"  AUTONOMOUS CODING AGENT - {agent_id}")
+    else:
+        print("  AUTONOMOUS CODING AGENT DEMO")
     print("=" * 70)
-    print(f"\nProject directory: {project_dir}")
-    print(f"Model: {model}")
+    print(f"\n{prefix}Project directory: {project_dir}")
+    print(f"{prefix}Model: {model}")
+    if agent_id:
+        print(f"{prefix}Agent ID: {agent_id}")
     if yolo_mode:
-        print("Mode: YOLO (testing disabled)")
+        print(f"{prefix}Mode: YOLO (testing disabled)")
     else:
-        print("Mode: Standard (full testing)")
+        print(f"{prefix}Mode: Standard (full testing)")
     if max_iterations:
-        print(f"Max iterations: {max_iterations}")
+        print(f"{prefix}Max iterations: {max_iterations}")
     else:
-        print("Max iterations: Unlimited (will run until completion)")
+        print(f"{prefix}Max iterations: Unlimited (will run until completion)")
     print()
 
     # Create project directory
@@ -175,7 +184,7 @@ async def run_autonomous_agent(
         print_session_header(iteration, is_first_run)
 
         # Create client (fresh context)
-        client = create_client(project_dir, model, yolo_mode=yolo_mode)
+        client = create_client(project_dir, model, yolo_mode=yolo_mode, agent_id=agent_id)
 
         # Choose prompt based on session type
         # Pass project_dir to enable project-specific prompts

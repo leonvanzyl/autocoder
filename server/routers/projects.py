@@ -277,6 +277,7 @@ async def get_project_prompts(name: str):
     prompts_dir = _get_project_prompts_dir(project_dir)
 
     def read_file(filename: str) -> str:
+        """Read a prompt file, returning empty string if not found."""
         filepath = prompts_dir / filename
         if filepath.exists():
             try:
@@ -311,6 +312,7 @@ async def update_project_prompts(name: str, prompts: ProjectPromptsUpdate):
     prompts_dir.mkdir(parents=True, exist_ok=True)
 
     def write_file(filename: str, content: str | None):
+        """Write content to a prompt file if content is not None."""
         if content is not None:
             filepath = prompts_dir / filename
             filepath.write_text(content, encoding="utf-8")

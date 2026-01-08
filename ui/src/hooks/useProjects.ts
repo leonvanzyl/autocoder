@@ -152,6 +152,91 @@ export function useResumeAgent(projectName: string) {
 }
 
 // ============================================================================
+// Parallel Agents
+// ============================================================================
+
+export function useParallelAgentsStatus(projectName: string | null) {
+  return useQuery({
+    queryKey: ['parallel-agents-status', projectName],
+    queryFn: () => api.getParallelAgentsStatus(projectName!),
+    enabled: !!projectName,
+    refetchInterval: 3000, // Poll every 3 seconds
+  })
+}
+
+export function useStartParallelAgents(projectName: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ numAgents, yoloMode }: { numAgents: number; yoloMode?: boolean }) =>
+      api.startParallelAgents(projectName, numAgents, yoloMode),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['parallel-agents-status', projectName] })
+      queryClient.invalidateQueries({ queryKey: ['agent-status', projectName] })
+    },
+  })
+}
+
+export function useStopParallelAgents(projectName: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: () => api.stopParallelAgents(projectName),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['parallel-agents-status', projectName] })
+      queryClient.invalidateQueries({ queryKey: ['agent-status', projectName] })
+    },
+  })
+}
+
+export function usePauseParallelAgents(projectName: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: () => api.pauseParallelAgents(projectName),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['parallel-agents-status', projectName] })
+      queryClient.invalidateQueries({ queryKey: ['agent-status', projectName] })
+    },
+  })
+}
+
+export function useResumeParallelAgents(projectName: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: () => api.resumeParallelAgents(projectName),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['parallel-agents-status', projectName] })
+      queryClient.invalidateQueries({ queryKey: ['agent-status', projectName] })
+    },
+  })
+}
+
+export function useMergeParallelWorktrees(projectName: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: () => api.mergeParallelWorktrees(projectName),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['parallel-agents-status', projectName] })
+    },
+  })
+}
+
+export function useCleanupParallelAgents(projectName: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: () => api.cleanupParallelAgents(projectName),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['parallel-agents-status', projectName] })
+      queryClient.invalidateQueries({ queryKey: ['agent-status', projectName] })
+    },
+  })
+}
+
+// ============================================================================
 // Setup
 // ============================================================================
 

@@ -16,6 +16,8 @@ import type {
   PathValidationResponse,
   AssistantConversation,
   AssistantConversationDetail,
+  ParallelAgentsStatus,
+  ParallelAgentActionResponse,
 } from './types'
 
 const API_BASE = '/api'
@@ -143,6 +145,67 @@ export async function pauseAgent(projectName: string): Promise<AgentActionRespon
 
 export async function resumeAgent(projectName: string): Promise<AgentActionResponse> {
   return fetchJSON(`/projects/${encodeURIComponent(projectName)}/agent/resume`, {
+    method: 'POST',
+  })
+}
+
+// ============================================================================
+// Parallel Agents API
+// ============================================================================
+
+export async function getParallelAgentsStatus(
+  projectName: string
+): Promise<ParallelAgentsStatus> {
+  return fetchJSON(`/projects/${encodeURIComponent(projectName)}/parallel-agents/status`)
+}
+
+export async function startParallelAgents(
+  projectName: string,
+  numAgents: number = 2,
+  yoloMode: boolean = false
+): Promise<ParallelAgentActionResponse> {
+  return fetchJSON(`/projects/${encodeURIComponent(projectName)}/parallel-agents/start`, {
+    method: 'POST',
+    body: JSON.stringify({ num_agents: numAgents, yolo_mode: yoloMode }),
+  })
+}
+
+export async function stopParallelAgents(
+  projectName: string
+): Promise<ParallelAgentActionResponse> {
+  return fetchJSON(`/projects/${encodeURIComponent(projectName)}/parallel-agents/stop`, {
+    method: 'POST',
+  })
+}
+
+export async function pauseParallelAgents(
+  projectName: string
+): Promise<ParallelAgentActionResponse> {
+  return fetchJSON(`/projects/${encodeURIComponent(projectName)}/parallel-agents/pause`, {
+    method: 'POST',
+  })
+}
+
+export async function resumeParallelAgents(
+  projectName: string
+): Promise<ParallelAgentActionResponse> {
+  return fetchJSON(`/projects/${encodeURIComponent(projectName)}/parallel-agents/resume`, {
+    method: 'POST',
+  })
+}
+
+export async function mergeParallelWorktrees(
+  projectName: string
+): Promise<{ success: boolean; agents: Record<string, boolean>; message: string }> {
+  return fetchJSON(`/projects/${encodeURIComponent(projectName)}/parallel-agents/merge`, {
+    method: 'POST',
+  })
+}
+
+export async function cleanupParallelAgents(
+  projectName: string
+): Promise<{ success: boolean; message: string }> {
+  return fetchJSON(`/projects/${encodeURIComponent(projectName)}/parallel-agents/cleanup`, {
     method: 'POST',
   })
 }

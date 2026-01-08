@@ -25,6 +25,9 @@ FEATURE_MCP_TOOLS = [
     "mcp__features__feature_mark_passing",
     "mcp__features__feature_skip",
     "mcp__features__feature_create_bulk",
+    "mcp__features__feature_claim_next",       # Atomic claim for parallel agents
+    "mcp__features__feature_release",          # Release feature back to queue
+    "mcp__features__feature_clear_in_progress",
 ]
 
 # Playwright MCP tools for browser automation
@@ -73,7 +76,12 @@ BUILTIN_TOOLS = [
 ]
 
 
-def create_client(project_dir: Path, model: str, yolo_mode: bool = False):
+def create_client(
+    project_dir: Path,
+    model: str,
+    yolo_mode: bool = False,
+    agent_id: str | None = None,
+):
     """
     Create a Claude Agent SDK client with multi-layered security.
 
@@ -81,6 +89,7 @@ def create_client(project_dir: Path, model: str, yolo_mode: bool = False):
         project_dir: Directory for the project
         model: Claude model to use
         yolo_mode: If True, skip Playwright MCP server for rapid prototyping
+        agent_id: Optional agent identifier for parallel execution
 
     Returns:
         Configured ClaudeSDKClient (from claude_agent_sdk)
@@ -149,6 +158,8 @@ def create_client(project_dir: Path, model: str, yolo_mode: bool = False):
     else:
         print("   - MCP servers: playwright (browser), features (database)")
     print("   - Project settings enabled (skills, commands, CLAUDE.md)")
+    if agent_id:
+        print(f"   - Parallel mode: Agent ID = {agent_id}")
     print()
 
     # Use system Claude CLI instead of bundled one (avoids Bun runtime crash on Windows)
@@ -159,17 +170,23 @@ def create_client(project_dir: Path, model: str, yolo_mode: bool = False):
         print("   - Warning: System Claude CLI not found, using bundled CLI")
 
     # Build MCP servers config - features is always included, playwright only in standard mode
+    mcp_env = {
+        # Inherit parent environment (PATH, ANTHROPIC_API_KEY, etc.)
+        **os.environ,
+        # Add custom variables
+        "PROJECT_DIR": str(project_dir.resolve()),
+        "PYTHONPATH": str(Path(__file__).parent.resolve()),
+    }
+
+    # Add agent_id for parallel execution
+    if agent_id:
+        mcp_env["AGENT_ID"] = agent_id
+
     mcp_servers = {
         "features": {
             "command": sys.executable,  # Use the same Python that's running this script
             "args": ["-m", "mcp_server.feature_mcp"],
-            "env": {
-                # Inherit parent environment (PATH, ANTHROPIC_API_KEY, etc.)
-                **os.environ,
-                # Add custom variables
-                "PROJECT_DIR": str(project_dir.resolve()),
-                "PYTHONPATH": str(Path(__file__).parent.resolve()),
-            },
+            "env": mcp_env,
         },
     }
     if not yolo_mode:
