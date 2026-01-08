@@ -27,6 +27,16 @@ FEATURE_MCP_TOOLS = [
     "mcp__features__feature_create_bulk",
 ]
 
+# Context MCP tools for analyzer mode documentation
+CONTEXT_MCP_TOOLS = [
+    "mcp__features__context_list",
+    "mcp__features__context_read",
+    "mcp__features__context_read_all",
+    "mcp__features__context_write",
+    "mcp__features__context_get_progress",
+    "mcp__features__context_update_index",
+]
+
 # Playwright MCP tools for browser automation
 PLAYWRIGHT_TOOLS = [
     # Core navigation & screenshots
@@ -96,7 +106,8 @@ def create_client(project_dir: Path, model: str, yolo_mode: bool = False):
     """
     # Build allowed tools list based on mode
     # In YOLO mode, exclude Playwright tools for faster prototyping
-    allowed_tools = [*BUILTIN_TOOLS, *FEATURE_MCP_TOOLS]
+    # Context tools are always included for analyzer mode documentation
+    allowed_tools = [*BUILTIN_TOOLS, *FEATURE_MCP_TOOLS, *CONTEXT_MCP_TOOLS]
     if not yolo_mode:
         allowed_tools.extend(PLAYWRIGHT_TOOLS)
 
@@ -116,6 +127,8 @@ def create_client(project_dir: Path, model: str, yolo_mode: bool = False):
         "WebSearch",
         # Allow Feature MCP tools for feature management
         *FEATURE_MCP_TOOLS,
+        # Allow Context MCP tools for analyzer mode documentation
+        *CONTEXT_MCP_TOOLS,
     ]
     if not yolo_mode:
         # Allow Playwright MCP tools for browser automation (standard mode only)
