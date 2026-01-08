@@ -90,6 +90,7 @@ def feature_to_response(f) -> FeatureResponse:
         steps=f.steps if isinstance(f.steps, list) else [],
         passes=f.passes,
         in_progress=f.in_progress,
+        assigned_agent_id=f.assigned_agent_id,
     )
 
 

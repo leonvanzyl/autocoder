@@ -151,13 +151,21 @@ def feature_get_next(
     and is not currently being worked on by another agent.
     Use this at the start of each coding session to determine what to implement next.
 
+    NOTE: In parallel agent mode (AGENT_ID env var set), this automatically claims
+    the feature to prevent race conditions with other agents.
+
     Args:
         agent_id: Optional agent ID. If provided, excludes features assigned to other agents.
+                  Auto-detected from AGENT_ID environment variable if not provided.
 
     Returns:
         JSON with feature details (id, priority, category, name, description, steps, passes, in_progress, assigned_agent_id)
         or error message if all features are passing or assigned.
     """
+    # Auto-detect agent_id from environment if not provided
+    if not agent_id:
+        agent_id = os.environ.get("AGENT_ID", "")
+
     session = get_session()
     try:
         query = session.query(Feature).filter(Feature.passes == False)
@@ -173,6 +181,13 @@ def feature_get_next(
 
         if feature is None:
             return json.dumps({"error": "All features are passing or assigned to other agents! No more work to do."})
+
+        # In parallel mode, automatically claim the feature to prevent race conditions
+        if agent_id and not feature.in_progress:
+            feature.in_progress = True
+            feature.assigned_agent_id = agent_id
+            session.commit()
+            session.refresh(feature)
 
         return json.dumps(feature.to_dict(), indent=2)
     finally:

@@ -1,12 +1,12 @@
 import { useState } from 'react'
 import {
   Play,
+  Pause,
   Square,
   Loader2,
   Zap,
   Users,
   Bot,
-  GitMerge,
   Trash2,
   Minus,
   Plus,
@@ -15,7 +15,8 @@ import {
   useParallelAgentsStatus,
   useStartParallelAgents,
   useStopParallelAgents,
-  useMergeParallelWorktrees,
+  usePauseParallelAgents,
+  useResumeParallelAgents,
   useCleanupParallelAgents,
 } from '../hooks/useProjects'
 import type { ParallelAgentInfo } from '../lib/types'
@@ -62,16 +63,27 @@ export function ParallelAgentControl({
 
   const startAgents = useStartParallelAgents(projectName)
   const stopAgents = useStopParallelAgents(projectName)
-  const mergeWorktrees = useMergeParallelWorktrees(projectName)
+  const pauseAgents = usePauseParallelAgents(projectName)
+  const resumeAgents = useResumeParallelAgents(projectName)
   const cleanupAgents = useCleanupParallelAgents(projectName)
 
   const isLoading =
     startAgents.isPending ||
     stopAgents.isPending ||
-    mergeWorktrees.isPending ||
+    pauseAgents.isPending ||
+    resumeAgents.isPending ||
     cleanupAgents.isPending
 
-  const hasRunningAgents = (status?.total_running ?? 0) > 0
+  const runningCount = status?.agents.filter(a => a.status === 'running').length ?? 0
+  const pausedCount = status?.agents.filter(a => a.status === 'paused').length ?? 0
+  const hasAgents = (status?.agents.length ?? 0) > 0
+  const hasRunningAgents = runningCount > 0
+  const hasPausedAgents = pausedCount > 0
+  const allPaused = hasAgents && pausedCount === status?.agents.length
+  const allStopped = hasAgents && runningCount === 0 && pausedCount === 0
+
+  // Show start controls when no agents exist OR all agents are stopped
+  const showStartControls = !hasAgents || allStopped
 
   const handleToggleMode = () => {
     const newMode = !isParallelMode
@@ -87,14 +99,19 @@ export function ParallelAgentControl({
     stopAgents.mutate()
   }
 
-  const handleMerge = () => {
-    mergeWorktrees.mutate()
+  const handlePause = () => {
+    pauseAgents.mutate()
+  }
+
+  const handleResume = () => {
+    resumeAgents.mutate()
   }
 
   const handleCleanup = () => {
     cleanupAgents.mutate()
   }
 
+  // Collapsed state - just show button
   if (!isParallelMode) {
     return (
       <button
@@ -108,16 +125,35 @@ export function ParallelAgentControl({
     )
   }
 
+  // Expanded state
   return (
     <div className="flex flex-col gap-3 p-4 bg-white border-3 border-[var(--color-neo-border)] shadow-neo">
-      {/* Header */}
+      {/* Header with Status */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           <Users size={18} className="text-[var(--color-neo-primary)]" />
           <span className="font-display font-bold text-sm uppercase">
             Parallel Agents
           </span>
+
+          {/* Status Indicator */}
+          {hasAgents && (
+            <StatusIndicator
+              runningCount={runningCount}
+              pausedCount={pausedCount}
+              totalCount={status?.agents.length ?? 0}
+            />
+          )}
+
+          {/* YOLO Badge when running */}
+          {hasAgents && yoloEnabled && (
+            <div className="flex items-center gap-1 px-2 py-1 bg-[var(--color-neo-pending)] border-2 border-yellow-600 rounded">
+              <Zap size={12} className="text-yellow-900" />
+              <span className="text-xs font-bold text-yellow-900">YOLO</span>
+            </div>
+          )}
         </div>
+
         <button
           onClick={handleToggleMode}
           className="text-xs text-[var(--color-neo-text-secondary)] hover:text-[var(--color-neo-text)] underline"
@@ -128,7 +164,7 @@ export function ParallelAgentControl({
 
       {/* Agent Status Grid */}
       {status && status.agents.length > 0 && (
-        <div className="grid grid-cols-5 sm:grid-cols-5 gap-2">
+        <div className="grid grid-cols-5 gap-2">
           {status.agents.map((agent) => (
             <AgentStatusBadge key={agent.agent_id} agent={agent} />
           ))}
@@ -136,7 +172,8 @@ export function ParallelAgentControl({
       )}
 
       {/* Controls */}
-      {!hasRunningAgents ? (
+      {showStartControls ? (
+        // No agents or all stopped - show start controls
         <div className="flex flex-col gap-2">
           {/* Agent Count Selector */}
           <div className="flex items-center gap-2">
@@ -162,12 +199,15 @@ export function ParallelAgentControl({
             {/* YOLO Toggle */}
             <button
               onClick={() => setYoloEnabled(!yoloEnabled)}
-              className={`neo-btn text-sm py-1 px-2 ml-auto ${
+              className={`neo-btn text-sm py-1 px-2 ml-auto flex items-center gap-1 ${
                 yoloEnabled ? 'neo-btn-warning' : 'neo-btn-secondary'
               }`}
               title="YOLO Mode: Skip testing for rapid prototyping"
             >
               <Zap size={14} className={yoloEnabled ? 'text-yellow-900' : ''} />
+              <span className={`text-xs font-bold ${yoloEnabled ? 'text-yellow-900' : ''}`}>
+                YOLO
+              </span>
             </button>
           </div>
 
@@ -177,36 +217,53 @@ export function ParallelAgentControl({
             disabled={isLoading}
             className="neo-btn neo-btn-success text-sm py-2 px-4 flex items-center justify-center gap-2"
           >
-            {isLoading ? (
+            {startAgents.isPending ? (
               <Loader2 size={16} className="animate-spin" />
             ) : (
               <>
                 <Play size={16} />
-                Start {numAgents} Agents
+                Start {numAgents} Agent{numAgents !== 1 ? 's' : ''}
               </>
             )}
           </button>
         </div>
       ) : (
+        // Has agents - show control buttons
         <div className="flex flex-col gap-2">
-          {/* Running indicator */}
-          <div className="flex items-center gap-2 text-sm">
-            <span
-              className="w-2 h-2 rounded-full bg-[var(--color-neo-done)] animate-pulse"
-            />
-            <span className="text-[var(--color-neo-text-secondary)]">
-              {status?.total_running} agent{status?.total_running !== 1 ? 's' : ''} running
-            </span>
-            {yoloEnabled && (
-              <div className="flex items-center gap-1 px-2 py-0.5 bg-[var(--color-neo-pending)] border border-yellow-600 rounded">
-                <Zap size={12} className="text-yellow-900" />
-                <span className="text-xs font-bold text-yellow-900">YOLO</span>
-              </div>
-            )}
-          </div>
-
-          {/* Action Buttons */}
+          {/* Primary Action Buttons */}
           <div className="flex gap-2">
+            {/* Pause/Resume Button */}
+            {hasRunningAgents && !allPaused ? (
+              <button
+                onClick={handlePause}
+                disabled={isLoading}
+                className="neo-btn neo-btn-warning text-sm py-2 px-3 flex items-center gap-1 flex-1"
+                title="Pause All Agents"
+              >
+                {pauseAgents.isPending ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <Pause size={14} />
+                )}
+                <span>Pause</span>
+              </button>
+            ) : hasPausedAgents ? (
+              <button
+                onClick={handleResume}
+                disabled={isLoading}
+                className="neo-btn neo-btn-success text-sm py-2 px-3 flex items-center gap-1 flex-1"
+                title="Resume All Agents"
+              >
+                {resumeAgents.isPending ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <Play size={14} />
+                )}
+                <span>Resume</span>
+              </button>
+            ) : null}
+
+            {/* Stop Button */}
             <button
               onClick={handleStop}
               disabled={isLoading}
@@ -220,23 +277,14 @@ export function ParallelAgentControl({
               )}
               <span>Stop</span>
             </button>
-            <button
-              onClick={handleMerge}
-              disabled={isLoading}
-              className="neo-btn neo-btn-primary text-sm py-2 px-3 flex items-center gap-1 flex-1"
-              title="Merge Worktree Changes"
-            >
-              {mergeWorktrees.isPending ? (
-                <Loader2 size={14} className="animate-spin" />
-              ) : (
-                <GitMerge size={14} />
-              )}
-              <span>Merge</span>
-            </button>
+          </div>
+
+          {/* Secondary Action Button */}
+          <div className="flex gap-2">
             <button
               onClick={handleCleanup}
               disabled={isLoading}
-              className="neo-btn neo-btn-secondary text-sm py-2 px-3 flex items-center gap-1"
+              className="neo-btn neo-btn-secondary text-sm py-2 px-3 flex items-center gap-1 flex-1"
               title="Stop All & Cleanup Worktrees"
             >
               {cleanupAgents.isPending ? (
@@ -244,6 +292,7 @@ export function ParallelAgentControl({
               ) : (
                 <Trash2 size={14} />
               )}
+              <span>Cleanup</span>
             </button>
           </div>
         </div>
@@ -255,6 +304,49 @@ export function ParallelAgentControl({
           <Loader2 size={16} className="animate-spin text-[var(--color-neo-text-secondary)]" />
         </div>
       )}
+    </div>
+  )
+}
+
+function StatusIndicator({
+  runningCount,
+  pausedCount,
+  totalCount
+}: {
+  runningCount: number
+  pausedCount: number
+  totalCount: number
+}) {
+  const stoppedCount = totalCount - runningCount - pausedCount
+
+  let color: string
+  let label: string
+  let pulse = false
+
+  if (runningCount > 0) {
+    color = 'var(--color-neo-done)'
+    label = `${runningCount} Running`
+    pulse = true
+  } else if (pausedCount > 0) {
+    color = 'var(--color-neo-pending)'
+    label = `${pausedCount} Paused`
+  } else {
+    color = 'var(--color-neo-text-secondary)'
+    label = `${stoppedCount} Stopped`
+  }
+
+  return (
+    <div className="flex items-center gap-2 px-2 py-1 bg-white border-2 border-[var(--color-neo-border)] rounded">
+      <span
+        className={`w-2 h-2 rounded-full ${pulse ? 'animate-pulse' : ''}`}
+        style={{ backgroundColor: color }}
+      />
+      <span
+        className="text-xs font-bold uppercase"
+        style={{ color }}
+      >
+        {label}
+      </span>
     </div>
   )
 }

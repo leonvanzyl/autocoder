@@ -178,6 +178,22 @@ export async function stopParallelAgents(
   })
 }
 
+export async function pauseParallelAgents(
+  projectName: string
+): Promise<ParallelAgentActionResponse> {
+  return fetchJSON(`/projects/${encodeURIComponent(projectName)}/parallel-agents/pause`, {
+    method: 'POST',
+  })
+}
+
+export async function resumeParallelAgents(
+  projectName: string
+): Promise<ParallelAgentActionResponse> {
+  return fetchJSON(`/projects/${encodeURIComponent(projectName)}/parallel-agents/resume`, {
+    method: 'POST',
+  })
+}
+
 export async function mergeParallelWorktrees(
   projectName: string
 ): Promise<{ success: boolean; agents: Record<string, boolean>; message: string }> {

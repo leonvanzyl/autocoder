@@ -138,6 +138,54 @@ async def stop_all_parallel_agents(project_name: str):
     )
 
 
+@router.post("/pause", response_model=ParallelAgentActionResponse)
+async def pause_all_parallel_agents(project_name: str):
+    """Pause all running parallel agents for a project."""
+    orchestrator = get_orchestrator(project_name)
+
+    running_agents = [
+        aid for aid, agent in orchestrator.agents.items()
+        if agent.status == "running"
+    ]
+
+    results = {}
+    for aid in running_agents:
+        success = await orchestrator.pause_agent(aid)
+        results[aid] = success
+
+    paused_count = sum(1 for v in results.values() if v)
+
+    return ParallelAgentActionResponse(
+        success=paused_count == len(running_agents),
+        agents=results,
+        message=f"Paused {paused_count}/{len(running_agents)} agents",
+    )
+
+
+@router.post("/resume", response_model=ParallelAgentActionResponse)
+async def resume_all_parallel_agents(project_name: str):
+    """Resume all paused parallel agents for a project."""
+    orchestrator = get_orchestrator(project_name)
+
+    paused_agents = [
+        aid for aid, agent in orchestrator.agents.items()
+        if agent.status == "paused"
+    ]
+
+    results = {}
+    for aid in paused_agents:
+        success = await orchestrator.resume_agent(aid)
+        results[aid] = success
+
+    resumed_count = sum(1 for v in results.values() if v)
+
+    return ParallelAgentActionResponse(
+        success=resumed_count == len(paused_agents),
+        agents=results,
+        message=f"Resumed {resumed_count}/{len(paused_agents)} agents",
+    )
+
+
 @router.post("/{agent_id}/start")
 async def start_single_agent(
     project_name: str,

@@ -189,6 +189,30 @@ export function useStopParallelAgents(projectName: string) {
   })
 }
 
+export function usePauseParallelAgents(projectName: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: () => api.pauseParallelAgents(projectName),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['parallel-agents-status', projectName] })
+      queryClient.invalidateQueries({ queryKey: ['agent-status', projectName] })
+    },
+  })
+}
+
+export function useResumeParallelAgents(projectName: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: () => api.resumeParallelAgents(projectName),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['parallel-agents-status', projectName] })
+      queryClient.invalidateQueries({ queryKey: ['agent-status', projectName] })
+    },
+  })
+}
+
 export function useMergeParallelWorktrees(projectName: string) {
   const queryClient = useQueryClient()
 
