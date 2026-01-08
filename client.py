@@ -53,7 +53,9 @@ def backup_existing_claude_settings(project_dir: Path) -> list[Path]:
                     print(f"   - Removed stale backup: {backup_path.name}")
                 except OSError as e:
                     print(f"   - Warning: Could not remove stale backup {backup_path}: {e}")
-                    continue
+                    # Use a unique backup name with timestamp instead of skipping
+                    import time
+                    backup_path = claude_dir / f"{filename}.autocoder_backup.{int(time.time())}"
             try:
                 shutil.move(str(settings_path), str(backup_path))
                 backed_up.append(backup_path)
