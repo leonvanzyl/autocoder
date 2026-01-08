@@ -639,8 +639,9 @@ def context_update_index(
         # Update status entries in the markdown table
         for area, status in status_updates.items():
             # Look for table rows like "| Architecture | Pending | architecture.md |"
-            pattern = rf"\|\s*{re.escape(area)}\s*\|\s*\w+\s*\|"
-            replacement = f"| {area} | {status} |"
+            # Capture the area and filename columns, only replace the status
+            pattern = rf"(\|\s*{re.escape(area)}\s*\|)\s*\w+\s*(\|[^|\n]*\|)"
+            replacement = rf"\g<1> {status} \2"
             new_content, count = re.subn(pattern, replacement, content, flags=re.IGNORECASE)
             if count > 0:
                 content = new_content
