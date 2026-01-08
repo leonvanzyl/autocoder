@@ -7,13 +7,13 @@ WebSocket and REST endpoints for the read-only project assistant.
 
 import json
 import logging
-import re
 from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 
+from ..validators import is_valid_project_name
 from ..services.assistant_chat_session import (
     AssistantChatSession,
     create_session,
@@ -45,11 +45,6 @@ def _get_project_path(project_name: str) -> Optional[Path]:
 
     from registry import get_project_path
     return get_project_path(project_name)
-
-
-def validate_project_name(name: str) -> bool:
-    """Validate project name to prevent path traversal."""
-    return bool(re.match(r'^[a-zA-Z0-9_-]{1,50}$', name))
 
 
 # ============================================================================
@@ -98,7 +93,7 @@ class SessionInfo(BaseModel):
 @router.get("/conversations/{project_name}", response_model=list[ConversationSummary])
 async def list_project_conversations(project_name: str):
     """List all conversations for a project."""
-    if not validate_project_name(project_name):
+    if not is_valid_project_name(project_name):
         raise HTTPException(status_code=400, detail="Invalid project name")
 
     project_dir = _get_project_path(project_name)
@@ -112,7 +107,7 @@ async def list_project_conversations(project_name: str):
 @router.get("/conversations/{project_name}/{conversation_id}", response_model=ConversationDetail)
 async def get_project_conversation(project_name: str, conversation_id: int):
     """Get a specific conversation with all messages."""
-    if not validate_project_name(project_name):
+    if not is_valid_project_name(project_name):
         raise HTTPException(status_code=400, detail="Invalid project name")
 
     project_dir = _get_project_path(project_name)
@@ -136,7 +131,7 @@ async def get_project_conversation(project_name: str, conversation_id: int):
 @router.post("/conversations/{project_name}", response_model=ConversationSummary)
 async def create_project_conversation(project_name: str):
     """Create a new conversation for a project."""
-    if not validate_project_name(project_name):
+    if not is_valid_project_name(project_name):
         raise HTTPException(status_code=400, detail="Invalid project name")
 
     project_dir = _get_project_path(project_name)
@@ -157,7 +152,7 @@ async def create_project_conversation(project_name: str):
 @router.delete("/conversations/{project_name}/{conversation_id}")
 async def delete_project_conversation(project_name: str, conversation_id: int):
     """Delete a conversation."""
-    if not validate_project_name(project_name):
+    if not is_valid_project_name(project_name):
         raise HTTPException(status_code=400, detail="Invalid project name")
 
     project_dir = _get_project_path(project_name)
@@ -184,7 +179,7 @@ async def list_active_sessions():
 @router.get("/sessions/{project_name}", response_model=SessionInfo)
 async def get_session_info(project_name: str):
     """Get information about an active session."""
-    if not validate_project_name(project_name):
+    if not is_valid_project_name(project_name):
         raise HTTPException(status_code=400, detail="Invalid project name")
 
     session = get_session(project_name)
@@ -201,7 +196,7 @@ async def get_session_info(project_name: str):
 @router.delete("/sessions/{project_name}")
 async def close_session(project_name: str):
     """Close an active session."""
-    if not validate_project_name(project_name):
+    if not is_valid_project_name(project_name):
         raise HTTPException(status_code=400, detail="Invalid project name")
 
     session = get_session(project_name)
@@ -236,7 +231,7 @@ async def assistant_chat_websocket(websocket: WebSocket, project_name: str):
     - {"type": "error", "content": "..."} - Error message
     - {"type": "pong"} - Keep-alive pong
     """
-    if not validate_project_name(project_name):
+    if not is_valid_project_name(project_name):
         await websocket.close(code=4000, reason="Invalid project name")
         return
 

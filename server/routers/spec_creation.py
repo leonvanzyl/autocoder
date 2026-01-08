@@ -7,13 +7,13 @@ WebSocket and REST endpoints for interactive spec creation with Claude.
 
 import json
 import logging
-import re
 from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, ValidationError
 
+from ..validators import is_valid_project_name
 from ..schemas import ImageAttachment
 from ..services.spec_chat_session import (
     SpecChatSession,
@@ -42,11 +42,6 @@ def _get_project_path(project_name: str) -> Path:
     return get_project_path(project_name)
 
 
-def validate_project_name(name: str) -> bool:
-    """Validate project name to prevent path traversal."""
-    return bool(re.match(r'^[a-zA-Z0-9_-]{1,50}$', name))
-
-
 # ============================================================================
 # REST Endpoints
 # ============================================================================
@@ -68,7 +63,7 @@ async def list_spec_sessions():
 @router.get("/sessions/{project_name}", response_model=SpecSessionStatus)
 async def get_session_status(project_name: str):
     """Get status of a spec creation session."""
-    if not validate_project_name(project_name):
+    if not is_valid_project_name(project_name):
         raise HTTPException(status_code=400, detail="Invalid project name")
 
     session = get_session(project_name)
@@ -86,7 +81,7 @@ async def get_session_status(project_name: str):
 @router.delete("/sessions/{project_name}")
 async def cancel_session(project_name: str):
     """Cancel and remove a spec creation session."""
-    if not validate_project_name(project_name):
+    if not is_valid_project_name(project_name):
         raise HTTPException(status_code=400, detail="Invalid project name")
 
     session = get_session(project_name)
@@ -114,7 +109,7 @@ async def get_spec_file_status(project_name: str):
     This is used for polling to detect when Claude has finished writing spec files.
     Claude writes this status file as the final step after completing all spec work.
     """
-    if not validate_project_name(project_name):
+    if not is_valid_project_name(project_name):
         raise HTTPException(status_code=400, detail="Invalid project name")
 
     project_dir = _get_project_path(project_name)
@@ -184,7 +179,7 @@ async def spec_chat_websocket(websocket: WebSocket, project_name: str):
     - {"type": "error", "content": "..."} - Error message
     - {"type": "pong"} - Keep-alive pong
     """
-    if not validate_project_name(project_name):
+    if not is_valid_project_name(project_name):
         await websocket.close(code=4000, reason="Invalid project name")
         return
 

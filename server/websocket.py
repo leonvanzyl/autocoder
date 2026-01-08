@@ -8,13 +8,13 @@ Real-time updates for project progress and agent output.
 import asyncio
 import json
 import logging
-import re
 from datetime import datetime
 from pathlib import Path
 from typing import Set
 
 from fastapi import WebSocket, WebSocketDisconnect
 
+from .validators import is_valid_project_name
 from .services.process_manager import get_manager
 
 # Lazy imports
@@ -104,11 +104,6 @@ manager = ConnectionManager()
 ROOT_DIR = Path(__file__).parent.parent
 
 
-def validate_project_name(name: str) -> bool:
-    """Validate project name to prevent path traversal."""
-    return bool(re.match(r'^[a-zA-Z0-9_-]{1,50}$', name))
-
-
 async def poll_progress(websocket: WebSocket, project_name: str, project_dir: Path):
     """Poll database for progress changes and send updates."""
     count_passing_tests = _get_count_passing_tests()
@@ -152,7 +147,7 @@ async def project_websocket(websocket: WebSocket, project_name: str):
     - Agent status changes
     - Agent stdout/stderr lines
     """
-    if not validate_project_name(project_name):
+    if not is_valid_project_name(project_name):
         await websocket.close(code=4000, reason="Invalid project name")
         return
 

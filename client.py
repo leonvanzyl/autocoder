@@ -16,6 +16,94 @@ from claude_agent_sdk.types import HookMatcher
 
 from security import bash_security_hook
 
+
+def backup_existing_claude_settings(project_dir: Path) -> list[Path]:
+    """Backup existing Claude settings that might conflict with autocoder.
+
+    When importing projects that have their own .claude/ configuration,
+    those settings can conflict with autocoder's sandbox permissions.
+    This function backs up conflicting settings files.
+
+    Args:
+        project_dir: The project directory to check
+
+    Returns:
+        List of paths that were backed up (for later restoration)
+    """
+    backed_up = []
+    claude_dir = project_dir / ".claude"
+
+    if not claude_dir.exists():
+        return backed_up
+
+    # Settings files that can conflict with autocoder's permissions
+    conflicting_files = [
+        "settings.local.json",
+        "settings.json",
+    ]
+
+    for filename in conflicting_files:
+        settings_path = claude_dir / filename
+        if settings_path.exists():
+            backup_path = claude_dir / f"{filename}.autocoder_backup"
+            # Remove existing backup if present (from previous failed run)
+            if backup_path.exists():
+                try:
+                    backup_path.unlink()
+                    print(f"   - Removed stale backup: {backup_path.name}")
+                except OSError as e:
+                    print(f"   - Warning: Could not remove stale backup {backup_path}: {e}")
+                    # Use a unique backup name with timestamp instead of skipping
+                    import time
+                    backup_path = claude_dir / f"{filename}.autocoder_backup.{int(time.time())}"
+            try:
+                shutil.move(str(settings_path), str(backup_path))
+                backed_up.append(backup_path)
+                print(f"   - Backed up conflicting settings: {settings_path.name} -> {backup_path.name}")
+            except OSError as e:
+                print(f"   - Warning: Could not backup {settings_path}: {e}")
+
+    return backed_up
+
+
+def restore_claude_settings(backed_up_paths: list[Path]) -> None:
+    """Restore Claude settings that were backed up.
+
+    Args:
+        backed_up_paths: List of backup paths returned by backup_existing_claude_settings
+    """
+    for backup_path in backed_up_paths:
+        if backup_path.exists():
+            # Handle both regular and timestamped backup names:
+            # - Regular: settings.json.autocoder_backup -> settings.json
+            # - Timestamped: settings.json.autocoder_backup.1234567890 -> settings.json
+            name = backup_path.name
+            if ".autocoder_backup." in name:
+                # Timestamped backup: split on .autocoder_backup. and take left part
+                original_name = name.split(".autocoder_backup.")[0]
+            else:
+                # Regular backup: just remove .autocoder_backup suffix
+                original_name = name.replace(".autocoder_backup", "")
+            original_path = backup_path.parent / original_name
+
+            # Check if a new file was created at the original path during the run
+            if original_path.exists():
+                print(f"   - Warning: {original_path.name} was recreated during agent run, keeping both")
+                # Keep the backup with a different name to preserve both versions
+                archive_path = backup_path.parent / f"{original_name}.pre_autocoder"
+                try:
+                    shutil.move(str(backup_path), str(archive_path))
+                    print(f"   - Archived original settings as: {archive_path.name}")
+                except OSError as e:
+                    print(f"   - Warning: Could not archive {backup_path}: {e}")
+                continue
+
+            try:
+                shutil.move(str(backup_path), str(original_path))
+                print(f"   - Restored settings: {original_path.name}")
+            except OSError as e:
+                print(f"   - Warning: Could not restore {backup_path}: {e}")
+
 # Feature MCP tools for feature/test management
 FEATURE_MCP_TOOLS = [
     "mcp__features__feature_get_stats",
@@ -25,6 +113,16 @@ FEATURE_MCP_TOOLS = [
     "mcp__features__feature_mark_passing",
     "mcp__features__feature_skip",
     "mcp__features__feature_create_bulk",
+]
+
+# Context MCP tools for analyzer mode documentation
+CONTEXT_MCP_TOOLS = [
+    "mcp__features__context_list",
+    "mcp__features__context_read",
+    "mcp__features__context_read_all",
+    "mcp__features__context_write",
+    "mcp__features__context_get_progress",
+    "mcp__features__context_update_index",
 ]
 
 # Playwright MCP tools for browser automation
@@ -73,7 +171,7 @@ BUILTIN_TOOLS = [
 ]
 
 
-def create_client(project_dir: Path, model: str, yolo_mode: bool = False):
+def create_client(project_dir: Path, model: str, yolo_mode: bool = False) -> tuple["ClaudeSDKClient", list[Path]]:
     """
     Create a Claude Agent SDK client with multi-layered security.
 
@@ -83,7 +181,9 @@ def create_client(project_dir: Path, model: str, yolo_mode: bool = False):
         yolo_mode: If True, skip Playwright MCP server for rapid prototyping
 
     Returns:
-        Configured ClaudeSDKClient (from claude_agent_sdk)
+        Tuple of (ClaudeSDKClient, backed_up_paths) where backed_up_paths
+        contains paths to settings files that were backed up and should be
+        restored after the agent completes using restore_claude_settings().
 
     Security layers (defense in depth):
     1. Sandbox - OS-level bash command isolation prevents filesystem escape
@@ -94,9 +194,12 @@ def create_client(project_dir: Path, model: str, yolo_mode: bool = False):
     Note: Authentication is handled by start.bat/start.sh before this runs.
     The Claude SDK auto-detects credentials from ~/.claude/.credentials.json
     """
+    # Backup any existing Claude settings that might conflict with autocoder
+    backed_up_paths = backup_existing_claude_settings(project_dir)
     # Build allowed tools list based on mode
     # In YOLO mode, exclude Playwright tools for faster prototyping
-    allowed_tools = [*BUILTIN_TOOLS, *FEATURE_MCP_TOOLS]
+    # Context tools are always included for analyzer mode documentation
+    allowed_tools = [*BUILTIN_TOOLS, *FEATURE_MCP_TOOLS, *CONTEXT_MCP_TOOLS]
     if not yolo_mode:
         allowed_tools.extend(PLAYWRIGHT_TOOLS)
 
@@ -116,6 +219,8 @@ def create_client(project_dir: Path, model: str, yolo_mode: bool = False):
         "WebSearch",
         # Allow Feature MCP tools for feature management
         *FEATURE_MCP_TOOLS,
+        # Allow Context MCP tools for analyzer mode documentation
+        *CONTEXT_MCP_TOOLS,
     ]
     if not yolo_mode:
         # Allow Playwright MCP tools for browser automation (standard mode only)
@@ -179,7 +284,7 @@ def create_client(project_dir: Path, model: str, yolo_mode: bool = False):
             "args": ["@playwright/mcp@latest", "--viewport-size", "1280x720"],
         }
 
-    return ClaudeSDKClient(
+    client = ClaudeSDKClient(
         options=ClaudeAgentOptions(
             model=model,
             cli_path=system_cli,  # Use system CLI to avoid bundled Bun crash (exit code 3)
@@ -198,3 +303,5 @@ def create_client(project_dir: Path, model: str, yolo_mode: bool = False):
             settings=str(settings_file.resolve()),  # Use absolute path
         )
     )
+
+    return client, backed_up_paths

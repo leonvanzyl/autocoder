@@ -118,3 +118,56 @@ def get_db() -> Session:
         yield db
     finally:
         db.close()
+
+
+def ensure_database_exists(project_dir: Path) -> bool:
+    """
+    Ensure the features database exists for a project.
+
+    If the database doesn't exist, creates an empty one with the schema.
+    If it exists, ensures it has the latest schema (migrations).
+
+    Args:
+        project_dir: The project directory
+
+    Returns:
+        True if database was created, False if it already existed
+    """
+    db_path = get_database_path(project_dir)
+    was_created = not db_path.exists()
+
+    # create_database handles both creation and migration
+    create_database(project_dir)
+
+    return was_created
+
+
+def database_has_features(project_dir: Path) -> bool:
+    """
+    Check if a project's database has any features.
+
+    Args:
+        project_dir: The project directory
+
+    Returns:
+        True if the database exists and has at least one feature
+    """
+    db_path = get_database_path(project_dir)
+    if not db_path.exists():
+        return False
+
+    engine = None
+    try:
+        engine, SessionLocal = create_database(project_dir)
+        session = SessionLocal()
+        try:
+            count = session.query(Feature).count()
+            return count > 0
+        finally:
+            session.close()
+    except Exception as e:
+        print(f"Warning: Error checking features for {project_dir}: {e}")
+        return False
+    finally:
+        if engine:
+            engine.dispose()

@@ -24,6 +24,29 @@ cat claude-progress.txt
 git log --oneline -20
 ```
 
+**FOR IMPORTED PROJECTS - Load Context Documentation:**
+
+If this is an imported/existing codebase (check for `prompts/context/` directory):
+
+```bash
+# Check if context documentation exists
+ls prompts/context/ 2>/dev/null
+
+# If context exists, read the index first
+cat prompts/context/_index.md 2>/dev/null
+
+# Then read any relevant context files for your work
+# Priority files (read what exists):
+cat prompts/context/architecture.md 2>/dev/null
+cat prompts/context/database_schema.md 2>/dev/null
+cat prompts/context/api_endpoints.md 2>/dev/null
+cat prompts/context/services.md 2>/dev/null
+```
+
+**Important:** The context documentation contains analysis of the existing codebase.
+Use this information to understand existing patterns, conventions, and architecture
+before implementing new features or making changes.
+
 Then use MCP tools to check feature status:
 
 ```
@@ -36,6 +59,10 @@ Use the feature_get_next tool
 
 Understanding the `app_spec.txt` is critical - it contains the full requirements
 for the application you're building.
+
+**For imported projects:** The context files in `prompts/context/` contain detailed
+documentation about the existing codebase structure, patterns, and conventions.
+Always reference this context when implementing features to maintain consistency.
 
 ### STEP 2: START SERVERS (IF NOT RUNNING)
 
@@ -297,6 +324,24 @@ Update `claude-progress.txt` with:
 - Any issues discovered or fixed
 - What should be worked on next
 - Current completion status (e.g., "45/200 tests passing")
+
+**FOR ANALYSIS FEATURES (Imported Projects):**
+
+If you just completed an analysis feature (features in "analysis" category), you should:
+
+1. Create/update the corresponding context file in `prompts/context/`:
+   - `architecture.md` - System architecture, design patterns, code organization
+   - `database_schema.md` - Tables, models, relationships
+   - `api_endpoints.md` - Routes, methods, request/response formats
+   - `components.md` - UI components, hierarchy, props
+   - `services.md` - Business logic, external integrations
+   - `configuration.md` - Config files, environment variables, setup
+
+2. Update the index file `prompts/context/_index.md` to reflect completion
+
+3. Mark the analysis feature as passing after creating the documentation
+
+This builds up persistent context that will be available in future sessions.
 
 ### STEP 10: END SESSION CLEANLY
 

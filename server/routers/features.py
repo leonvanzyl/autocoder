@@ -6,12 +6,12 @@ API endpoints for feature/test case management.
 """
 
 import logging
-import re
 from contextlib import contextmanager
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 
+from ..validators import validate_project_name
 from ..schemas import (
     FeatureCreate,
     FeatureListResponse,
@@ -52,16 +52,6 @@ def _get_db_classes():
 
 
 router = APIRouter(prefix="/api/projects/{project_name}/features", tags=["features"])
-
-
-def validate_project_name(name: str) -> str:
-    """Validate and sanitize project name to prevent path traversal."""
-    if not re.match(r'^[a-zA-Z0-9_-]{1,50}$', name):
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid project name"
-        )
-    return name
 
 
 @contextmanager

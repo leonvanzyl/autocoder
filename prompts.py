@@ -79,6 +79,11 @@ def get_coding_prompt_yolo(project_dir: Path | None = None) -> str:
     return load_prompt("coding_prompt_yolo", project_dir)
 
 
+def get_analyzer_prompt(project_dir: Path | None = None) -> str:
+    """Load the analyzer agent prompt for importing existing projects."""
+    return load_prompt("analyzer_prompt", project_dir)
+
+
 def get_app_spec(project_dir: Path) -> str:
     """
     Load the app spec from the project.
@@ -226,3 +231,304 @@ def copy_spec_to_project(project_dir: Path) -> None:
             return
 
     print("Warning: No app_spec.txt found to copy to project directory")
+
+
+def migrate_project_prompts(project_dir: Path) -> Path:
+    """
+    Set up prompts directory for an imported existing project.
+
+    Unlike scaffold_project_prompts(), this only copies the coding prompts
+    (not app_spec.txt or initializer_prompt.md) since the analyzer agent
+    will create the app_spec.txt based on the existing codebase.
+
+    Args:
+        project_dir: The absolute path to the existing project directory
+
+    Returns:
+        The path to the project prompts directory
+    """
+    project_prompts = get_project_prompts_dir(project_dir)
+    project_prompts.mkdir(parents=True, exist_ok=True)
+
+    # For imported projects, only copy coding prompts
+    # The analyzer_prompt will be used first, then coding_prompt for ongoing work
+    templates = [
+        ("coding_prompt.template.md", "coding_prompt.md"),
+        ("coding_prompt_yolo.template.md", "coding_prompt_yolo.md"),
+        ("analyzer_prompt.template.md", "analyzer_prompt.md"),
+    ]
+
+    copied_files = []
+    for template_name, dest_name in templates:
+        template_path = TEMPLATES_DIR / template_name
+        dest_path = project_prompts / dest_name
+
+        # Only copy if template exists and destination doesn't
+        if template_path.exists() and not dest_path.exists():
+            try:
+                shutil.copy(template_path, dest_path)
+                copied_files.append(dest_name)
+            except (OSError, PermissionError) as e:
+                print(f"  Warning: Could not copy {dest_name}: {e}")
+
+    if copied_files:
+        print(f"  Created prompt files for import: {', '.join(copied_files)}")
+
+    return project_prompts
+
+
+def is_analyzer_mode(project_dir: Path) -> bool:
+    """
+    Check if a project should run in analyzer mode.
+
+    Analyzer mode is triggered when:
+    1. The .analyze_mode marker file exists, OR
+    2. No features.db exists AND no valid app_spec.txt exists
+       (indicating an imported project that needs analysis)
+
+    Args:
+        project_dir: The project directory to check
+
+    Returns:
+        True if analyzer mode should be used
+    """
+    # Explicit marker file takes precedence
+    marker_file = project_dir / ".analyze_mode"
+    if marker_file.exists():
+        return True
+
+    # Check if this looks like an imported project needing analysis
+    features_db = project_dir / "features.db"
+    has_features_db = features_db.exists()
+
+    # If we have features, we're past analyzer phase
+    if has_features_db:
+        return False
+
+    # Check if we have a valid app_spec
+    has_valid_spec = has_project_prompts(project_dir)
+
+    # No features AND no valid spec = needs analyzer
+    return not has_valid_spec
+
+
+def set_analyzer_mode(project_dir: Path, enabled: bool = True) -> None:
+    """
+    Set or clear the analyzer mode marker for a project.
+
+    Args:
+        project_dir: The project directory
+        enabled: If True, enable analyzer mode; if False, disable it
+    """
+    marker_file = project_dir / ".analyze_mode"
+
+    if enabled:
+        marker_file.touch()
+        print(f"  Analyzer mode enabled for {project_dir.name}")
+    else:
+        if marker_file.exists():
+            marker_file.unlink()
+            print(f"  Analyzer mode disabled for {project_dir.name}")
+
+
+# =============================================================================
+# Context Management for Large Projects
+# =============================================================================
+
+def get_context_dir(project_dir: Path) -> Path:
+    """Get the context directory path for persistent codebase documentation."""
+    return project_dir / "prompts" / "context"
+
+
+def ensure_context_dir(project_dir: Path) -> Path:
+    """
+    Ensure the context directory exists for storing codebase documentation.
+
+    Args:
+        project_dir: The project directory
+
+    Returns:
+        Path to the context directory
+    """
+    context_dir = get_context_dir(project_dir)
+    context_dir.mkdir(parents=True, exist_ok=True)
+    return context_dir
+
+
+def get_context_index_path(project_dir: Path) -> Path:
+    """Get the path to the context index file."""
+    return get_context_dir(project_dir) / "_index.md"
+
+
+def has_context(project_dir: Path) -> bool:
+    """
+    Check if a project has context documentation.
+
+    Args:
+        project_dir: The project directory
+
+    Returns:
+        True if context index exists and has content
+    """
+    index_path = get_context_index_path(project_dir)
+    if not index_path.exists():
+        return False
+
+    try:
+        content = index_path.read_text(encoding="utf-8")
+        return len(content.strip()) > 100  # More than just a header
+    except (OSError, PermissionError):
+        return False
+
+
+def list_context_files(project_dir: Path) -> list[tuple[str, Path]]:
+    """
+    List all context documentation files.
+
+    Args:
+        project_dir: The project directory
+
+    Returns:
+        List of (name, path) tuples for each context file
+    """
+    context_dir = get_context_dir(project_dir)
+    if not context_dir.exists():
+        return []
+
+    files = []
+    for f in sorted(context_dir.glob("*.md")):
+        if f.is_file():
+            # Extract name without extension, skip index
+            name = f.stem
+            files.append((name, f))
+
+    return files
+
+
+def load_context_file(project_dir: Path, name: str) -> str | None:
+    """
+    Load a specific context file.
+
+    Args:
+        project_dir: The project directory
+        name: Context file name (without .md extension)
+
+    Returns:
+        File content or None if not found
+    """
+    context_dir = get_context_dir(project_dir)
+    file_path = context_dir / f"{name}.md"
+
+    if not file_path.exists():
+        return None
+
+    try:
+        return file_path.read_text(encoding="utf-8")
+    except (OSError, PermissionError):
+        return None
+
+
+def load_all_context(project_dir: Path, max_chars: int = 50000) -> str:
+    """
+    Load all context documentation as a single string.
+
+    Combines all context files with headers for use in prompts.
+    Prioritizes the index file, then loads other files alphabetically.
+
+    Args:
+        project_dir: The project directory
+        max_chars: Maximum characters to include (to avoid context overflow)
+
+    Returns:
+        Combined context string, or empty string if no context
+    """
+    context_dir = get_context_dir(project_dir)
+    if not context_dir.exists():
+        return ""
+
+    parts = []
+    total_chars = 0
+
+    # Priority order for context files
+    priority_files = [
+        "_index",           # Overview/index always first
+        "architecture",     # High-level architecture
+        "database_schema",  # Database structure
+        "api_endpoints",    # API reference
+        "components",       # UI components
+        "services",         # Business logic
+    ]
+
+    # Get all context files
+    all_files = {f.stem: f for f in context_dir.glob("*.md") if f.is_file()}
+
+    # Process in priority order first
+    processed = set()
+    for name in priority_files:
+        if name in all_files and total_chars < max_chars:
+            try:
+                content = all_files[name].read_text(encoding="utf-8")
+                if total_chars + len(content) <= max_chars:
+                    parts.append(f"## Context: {name}\n\n{content}")
+                    total_chars += len(content)
+                    processed.add(name)
+            except (OSError, PermissionError):
+                continue
+
+    # Then add remaining files
+    for name, path in sorted(all_files.items()):
+        if name not in processed and total_chars < max_chars:
+            try:
+                content = path.read_text(encoding="utf-8")
+                if total_chars + len(content) <= max_chars:
+                    parts.append(f"## Context: {name}\n\n{content}")
+                    total_chars += len(content)
+            except (OSError, PermissionError):
+                continue
+
+    if not parts:
+        return ""
+
+    return "# PROJECT CONTEXT DOCUMENTATION\n\n" + "\n\n---\n\n".join(parts)
+
+
+def get_analysis_progress(project_dir: Path) -> dict:
+    """
+    Get the current analysis progress for a project.
+
+    Reads the _index.md file to determine what areas have been analyzed.
+
+    Args:
+        project_dir: The project directory
+
+    Returns:
+        Dictionary with analysis status:
+        {
+            "analyzed_areas": ["architecture", "database", ...],
+            "pending_areas": ["api", "frontend", ...],
+            "total_files": int,
+            "is_complete": bool
+        }
+    """
+    context_files = list_context_files(project_dir)
+    analyzed = [name for name, _ in context_files if name != "_index"]
+
+    # Standard areas we expect for a complete analysis
+    expected_areas = {
+        "architecture",
+        "database_schema",
+        "api_endpoints",
+        "components",
+        "services",
+        "configuration",
+    }
+
+    analyzed_set = set(analyzed)
+    pending = expected_areas - analyzed_set
+
+    return {
+        "analyzed_areas": analyzed,
+        "pending_areas": list(pending),
+        "total_files": len(context_files),
+        "is_complete": len(pending) == 0 and len(analyzed) >= 3,
+    }

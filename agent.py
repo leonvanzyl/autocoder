@@ -19,13 +19,16 @@ if sys.platform == "win32":
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
-from client import create_client
+from client import create_client, restore_claude_settings
 from progress import has_features, print_progress_summary, print_session_header
 from prompts import (
     copy_spec_to_project,
+    get_analyzer_prompt,
     get_coding_prompt,
     get_coding_prompt_yolo,
     get_initializer_prompt,
+    is_analyzer_mode,
+    set_analyzer_mode,
 )
 
 # Configuration
@@ -139,12 +142,24 @@ async def run_autonomous_agent(
     # Create project directory
     project_dir.mkdir(parents=True, exist_ok=True)
 
+    # Check for analyzer mode (imported existing project)
+    use_analyzer = is_analyzer_mode(project_dir)
+
     # Check if this is a fresh start or continuation
     # Uses has_features() which checks if the database actually has features,
     # not just if the file exists (empty db should still trigger initializer)
     is_first_run = not has_features(project_dir)
 
-    if is_first_run:
+    if use_analyzer:
+        print("ANALYZER MODE - will analyze existing codebase")
+        print()
+        print("=" * 70)
+        print("  NOTE: Analyzer session takes 10-20+ minutes!")
+        print("  The agent is exploring your codebase and creating features.")
+        print("  This may appear to hang - it's working. Watch for [Tool: ...] output.")
+        print("=" * 70)
+        print()
+    elif is_first_run:
         print("Fresh start - will use initializer agent")
         print()
         print("=" * 70)
@@ -161,53 +176,69 @@ async def run_autonomous_agent(
 
     # Main loop
     iteration = 0
+    backed_up_paths = []  # Track backed up settings for restoration
 
-    while True:
-        iteration += 1
+    try:
+        while True:
+            iteration += 1
 
-        # Check max iterations
-        if max_iterations and iteration > max_iterations:
-            print(f"\nReached max iterations ({max_iterations})")
-            print("To continue, run the script again without --max-iterations")
-            break
+            # Check max iterations
+            if max_iterations and iteration > max_iterations:
+                print(f"\nReached max iterations ({max_iterations})")
+                print("To continue, run the script again without --max-iterations")
+                break
 
-        # Print session header
-        print_session_header(iteration, is_first_run)
+            # Print session header
+            print_session_header(iteration, is_first_run)
 
-        # Create client (fresh context)
-        client = create_client(project_dir, model, yolo_mode=yolo_mode)
+            # Create client (fresh context)
+            # On first iteration, store backed_up_paths for later restoration
+            client, session_backed_up = create_client(project_dir, model, yolo_mode=yolo_mode)
+            if iteration == 1:
+                backed_up_paths = session_backed_up
 
-        # Choose prompt based on session type
-        # Pass project_dir to enable project-specific prompts
-        if is_first_run:
-            prompt = get_initializer_prompt(project_dir)
-            is_first_run = False  # Only use initializer once
-        else:
-            # Use YOLO prompt if in YOLO mode
-            if yolo_mode:
-                prompt = get_coding_prompt_yolo(project_dir)
+            # Choose prompt based on session type
+            # Pass project_dir to enable project-specific prompts
+            if use_analyzer:
+                prompt = get_analyzer_prompt(project_dir)
+                # Clear analyzer mode after first use - subsequent sessions use coding prompt
+                set_analyzer_mode(project_dir, enabled=False)
+                use_analyzer = False
+            elif is_first_run:
+                prompt = get_initializer_prompt(project_dir)
+                is_first_run = False  # Only use initializer once
             else:
-                prompt = get_coding_prompt(project_dir)
+                # Use YOLO prompt if in YOLO mode
+                if yolo_mode:
+                    prompt = get_coding_prompt_yolo(project_dir)
+                else:
+                    prompt = get_coding_prompt(project_dir)
 
-        # Run session with async context manager
-        async with client:
-            status, response = await run_agent_session(client, prompt, project_dir)
+            # Run session with async context manager
+            async with client:
+                status, response = await run_agent_session(client, prompt, project_dir)
 
-        # Handle status
-        if status == "continue":
-            print(f"\nAgent will auto-continue in {AUTO_CONTINUE_DELAY_SECONDS}s...")
-            print_progress_summary(project_dir)
-            await asyncio.sleep(AUTO_CONTINUE_DELAY_SECONDS)
+            # Handle status
+            if status == "continue":
+                print(f"\nAgent will auto-continue in {AUTO_CONTINUE_DELAY_SECONDS}s...")
+                print_progress_summary(project_dir)
+                await asyncio.sleep(AUTO_CONTINUE_DELAY_SECONDS)
 
-        elif status == "error":
-            print("\nSession encountered an error")
-            print("Will retry with a fresh session...")
-            await asyncio.sleep(AUTO_CONTINUE_DELAY_SECONDS)
+            elif status == "error":
+                print("\nSession encountered an error")
+                print("Will retry with a fresh session...")
+                await asyncio.sleep(AUTO_CONTINUE_DELAY_SECONDS)
 
-        # Small delay between sessions
-        if max_iterations is None or iteration < max_iterations:
-            print("\nPreparing next session...\n")
-            await asyncio.sleep(1)
+            # Small delay between sessions
+            if max_iterations is None or iteration < max_iterations:
+                print("\nPreparing next session...\n")
+                await asyncio.sleep(1)
+
+    finally:
+        # Always restore backed up Claude settings when agent completes
+        if backed_up_paths:
+            print("\nRestoring original Claude settings...")
+            restore_claude_settings(backed_up_paths)
 
     # Final summary
     print("\n" + "=" * 70)

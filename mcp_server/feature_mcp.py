@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-MCP Server for Feature Management
-==================================
+MCP Server for Feature and Context Management
+==============================================
 
-Provides tools to manage features in the autonomous coding system,
-replacing the previous FastAPI-based REST API.
+Provides tools to manage features and context documentation
+in the autonomous coding system.
 
-Tools:
+Feature Tools:
 - feature_get_stats: Get progress statistics
 - feature_get_next: Get next feature to implement
 - feature_get_for_regression: Get random passing features for testing
@@ -15,16 +15,42 @@ Tools:
 - feature_mark_in_progress: Mark a feature as in-progress
 - feature_clear_in_progress: Clear in-progress status
 - feature_create_bulk: Create multiple features at once
+
+Context Tools (for imported/analyzed projects):
+- context_list: List available context documentation files
+- context_read: Read a specific context file
+- context_read_all: Read all context files combined
+- context_write: Write/update a context documentation file
+- context_get_progress: Get analysis progress status
+- context_update_index: Update status in the context index
 """
 
 import json
 import os
+import re
 import sys
 from contextlib import asynccontextmanager
+from datetime import datetime
 from pathlib import Path
 from typing import Annotated
 
 from mcp.server.fastmcp import FastMCP
+
+
+def _validate_context_name(name: str) -> str | None:
+    """Validate context file name to prevent path traversal.
+
+    Returns None if valid, error message if invalid.
+    """
+    if not name:
+        return "Context file name cannot be empty"
+    if not re.match(r'^[a-zA-Z0-9_-]+$', name):
+        return "Invalid context file name. Use only alphanumeric characters, underscores, and hyphens."
+    if '..' in name or '/' in name or '\\' in name:
+        return "Invalid context file name. Path traversal not allowed."
+    return None
+
+
 from pydantic import BaseModel, Field
 from sqlalchemy.sql.expression import func
 
@@ -33,6 +59,14 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from api.database import Feature, create_database
 from api.migration import migrate_json_to_sqlite
+from prompts import (
+    get_context_dir,
+    ensure_context_dir,
+    list_context_files,
+    load_context_file,
+    load_all_context,
+    get_analysis_progress,
+)
 
 # Configuration from environment
 PROJECT_DIR = Path(os.environ.get("PROJECT_DIR", ".")).resolve()
@@ -411,6 +445,247 @@ def feature_create_bulk(
         return json.dumps({"error": str(e)})
     finally:
         session.close()
+
+
+# =============================================================================
+# Context Management Tools (for imported/analyzed projects)
+# =============================================================================
+
+@mcp.tool()
+def context_list() -> str:
+    """List all available context documentation files.
+
+    Returns the list of context files in the prompts/context/ directory.
+    These files contain analysis documentation for imported projects.
+
+    Returns:
+        JSON with: files (list of {name, path, size_kb}), total_files (int)
+    """
+    try:
+        files = list_context_files(PROJECT_DIR)
+        result = []
+        for name, path in files:
+            try:
+                size_kb = round(path.stat().st_size / 1024, 1)
+            except OSError:
+                size_kb = 0
+            result.append({
+                "name": name,
+                "path": str(path),
+                "size_kb": size_kb
+            })
+
+        return json.dumps({
+            "files": result,
+            "total_files": len(result)
+        }, indent=2)
+    except Exception as e:
+        return json.dumps({"success": False, "error": str(e)})
+
+
+@mcp.tool()
+def context_read(
+    name: Annotated[str, Field(description="Name of the context file to read (without .md extension)")]
+) -> str:
+    """Read a specific context documentation file.
+
+    Use this to load detailed analysis about a specific area of the codebase.
+    Common context file names: _index, architecture, database_schema,
+    api_endpoints, components, services, configuration.
+
+    Args:
+        name: The name of the context file (without .md extension)
+
+    Returns:
+        The content of the context file, or error if not found.
+    """
+    try:
+        # Validate name to prevent path traversal
+        validation_error = _validate_context_name(name)
+        if validation_error:
+            return json.dumps({"success": False, "error": validation_error})
+
+        content = load_context_file(PROJECT_DIR, name)
+        if content is None:
+            return json.dumps({"success": False, "error": f"Context file '{name}' not found"})
+        return json.dumps({"success": True, "content": content}, indent=2)
+    except Exception as e:
+        return json.dumps({"success": False, "error": str(e)})
+
+
+@mcp.tool()
+def context_read_all(
+    max_chars: Annotated[int, Field(default=50000, ge=1000, le=100000, description="Maximum characters to return")] = 50000
+) -> str:
+    """Read all context documentation combined.
+
+    Loads all context files in priority order (index, architecture, database,
+    API, components, services) up to the character limit. Use this to get
+    a full overview of the analyzed codebase.
+
+    Args:
+        max_chars: Maximum characters to return (default 50000)
+
+    Returns:
+        Combined context documentation with section headers.
+    """
+    try:
+        content = load_all_context(PROJECT_DIR, max_chars)
+        if not content:
+            return json.dumps({"success": False, "error": "No context documentation found. Run analyzer first."})
+        return json.dumps({"success": True, "content": content}, indent=2)
+    except Exception as e:
+        return json.dumps({"success": False, "error": str(e)})
+
+
+@mcp.tool()
+def context_write(
+    name: Annotated[str, Field(description="Name of the context file (without .md extension)")],
+    content: Annotated[str, Field(description="The markdown content to write")]
+) -> str:
+    """Write or update a context documentation file.
+
+    Use this after analyzing a specific area of the codebase to save
+    the documentation for future sessions.
+
+    Common context file names:
+    - _index: Overview and progress tracking
+    - architecture: System architecture, patterns, code organization
+    - database_schema: Tables, models, relationships
+    - api_endpoints: Routes, methods, request/response formats
+    - components: UI components, hierarchy, props
+    - services: Business logic, external integrations
+    - configuration: Config files, environment variables
+
+    Args:
+        name: The name of the context file (without .md extension)
+        content: The markdown content to write
+
+    Returns:
+        JSON with: success (bool), path (str), message (str)
+    """
+    try:
+        # Validate name to prevent path traversal
+        validation_error = _validate_context_name(name)
+        if validation_error:
+            return json.dumps({"success": False, "error": validation_error})
+
+        # Ensure context directory exists
+        context_dir = ensure_context_dir(PROJECT_DIR)
+        file_path = context_dir / f"{name}.md"
+
+        # Additional safety: verify resolved path is within context_dir
+        if not file_path.resolve().is_relative_to(context_dir.resolve()):
+            return json.dumps({"success": False, "error": "Invalid file path"})
+
+        # Write the content
+        file_path.write_text(content, encoding="utf-8")
+
+        return json.dumps({
+            "success": True,
+            "path": str(file_path),
+            "message": f"Context file '{name}.md' written successfully"
+        }, indent=2)
+    except Exception as e:
+        return json.dumps({"success": False, "error": str(e)})
+
+
+@mcp.tool()
+def context_get_progress() -> str:
+    """Get the analysis progress for the project.
+
+    Returns which areas have been analyzed and which are still pending.
+    Use this to understand what analysis work remains.
+
+    Returns:
+        JSON with: analyzed_areas (list), pending_areas (list),
+                   total_files (int), is_complete (bool)
+    """
+    try:
+        progress = get_analysis_progress(PROJECT_DIR)
+        return json.dumps(progress, indent=2)
+    except Exception as e:
+        return json.dumps({"success": False, "error": str(e)})
+
+
+@mcp.tool()
+def context_update_index(
+    status_updates: Annotated[dict, Field(description="Dictionary mapping area names to their status (Pending/Complete/In Progress)")]
+) -> str:
+    """Update the analysis status in the context index file.
+
+    Use this to mark analysis areas as complete or in-progress.
+    The index file tracks overall analysis progress.
+
+    Args:
+        status_updates: Dict mapping area names to status strings.
+                       Example: {"architecture": "Complete", "database_schema": "In Progress"}
+
+    Returns:
+        JSON with: success (bool), updated_areas (list), message (str)
+    """
+    # Valid status values for consistency
+    valid_statuses = {"Pending", "Complete", "In Progress"}
+
+    try:
+        # Validate status values before processing
+        for area, status in status_updates.items():
+            if status not in valid_statuses:
+                return json.dumps({
+                    "success": False,
+                    "error": f"Invalid status '{status}' for area '{area}'. Must be one of: {', '.join(sorted(valid_statuses))}"
+                })
+
+        context_dir = ensure_context_dir(PROJECT_DIR)
+        index_path = context_dir / "_index.md"
+
+        if not index_path.exists():
+            return json.dumps({
+                "success": False,
+                "error": "Index file does not exist. Create it first using context_write."
+            })
+
+        content = index_path.read_text(encoding="utf-8")
+        updated_areas = []
+
+        # Update status entries in the markdown table
+        for area, status in status_updates.items():
+            # Look for table rows like "| Architecture | Pending | architecture.md |"
+            # Capture the area and filename columns, only replace the status
+            # Use case-sensitive matching for precise table row targeting
+            # Match only valid status values explicitly to avoid false matches
+            status_pattern = r"(?:Pending|Complete|In Progress)"
+            pattern = rf"(\|\s*{re.escape(area)}\s*\|)\s*{status_pattern}\s*(\|[^|\n]*\|)"
+            replacement = rf"\g<1> {status} \2"
+            new_content, count = re.subn(pattern, replacement, content)
+            if count > 0:
+                content = new_content
+                updated_areas.append(area)
+
+        # Add last updated timestamp if there's a placeholder
+        content = content.replace(
+            "**Status:** Initial scan complete",
+            f"**Status:** Updated {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+        )
+
+        # Write back
+        index_path.write_text(content, encoding="utf-8")
+
+        # Warn if no updates occurred
+        if len(updated_areas) == 0:
+            return json.dumps({
+                "success": False,
+                "updated_areas": [],
+                "error": "No areas were updated. Check that area names match the index table exactly."
+            }, indent=2)
+
+        return json.dumps({
+            "success": True,
+            "updated_areas": updated_areas,
+            "message": f"Updated {len(updated_areas)} area(s) in index"
+        }, indent=2)
+    except Exception as e:
+        return json.dumps({"success": False, "error": str(e)})
 
 
 if __name__ == "__main__":

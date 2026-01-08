@@ -18,6 +18,7 @@ from fastapi.staticfiles import StaticFiles
 from .routers import (
     agent_router,
     assistant_chat_router,
+    chat_to_features_router,
     features_router,
     filesystem_router,
     projects_router,
@@ -25,6 +26,7 @@ from .routers import (
 )
 from .schemas import SetupStatus
 from .services.assistant_chat_session import cleanup_all_sessions as cleanup_assistant_sessions
+from .services.chat_to_features_session import cleanup_all_sessions as cleanup_chat_to_features_sessions
 from .services.process_manager import cleanup_all_managers
 from .websocket import project_websocket
 
@@ -38,9 +40,10 @@ async def lifespan(app: FastAPI):
     """Lifespan context manager for startup and shutdown."""
     # Startup
     yield
-    # Shutdown - cleanup all running agents and assistant sessions
+    # Shutdown - cleanup all running agents and chat sessions
     await cleanup_all_managers()
     await cleanup_assistant_sessions()
+    await cleanup_chat_to_features_sessions()
 
 
 # Create FastAPI app
@@ -92,6 +95,7 @@ app.include_router(agent_router)
 app.include_router(spec_creation_router)
 app.include_router(filesystem_router)
 app.include_router(assistant_chat_router)
+app.include_router(chat_to_features_router)
 
 
 # ============================================================================
