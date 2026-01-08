@@ -56,6 +56,13 @@ export async function createProject(
   })
 }
 
+export async function importProject(name: string, path: string): Promise<ProjectSummary> {
+  return fetchJSON('/projects/import', {
+    method: 'POST',
+    body: JSON.stringify({ name, path }),
+  })
+}
+
 export async function getProject(name: string): Promise<ProjectDetail> {
   return fetchJSON(`/projects/${encodeURIComponent(name)}`)
 }

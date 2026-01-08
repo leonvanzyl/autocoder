@@ -23,9 +23,12 @@ from client import create_client
 from progress import has_features, print_progress_summary, print_session_header
 from prompts import (
     copy_spec_to_project,
+    get_analyzer_prompt,
     get_coding_prompt,
     get_coding_prompt_yolo,
     get_initializer_prompt,
+    is_analyzer_mode,
+    set_analyzer_mode,
 )
 
 # Configuration
@@ -139,12 +142,24 @@ async def run_autonomous_agent(
     # Create project directory
     project_dir.mkdir(parents=True, exist_ok=True)
 
+    # Check for analyzer mode (imported existing project)
+    use_analyzer = is_analyzer_mode(project_dir)
+
     # Check if this is a fresh start or continuation
     # Uses has_features() which checks if the database actually has features,
     # not just if the file exists (empty db should still trigger initializer)
     is_first_run = not has_features(project_dir)
 
-    if is_first_run:
+    if use_analyzer:
+        print("ANALYZER MODE - will analyze existing codebase")
+        print()
+        print("=" * 70)
+        print("  NOTE: Analyzer session takes 10-20+ minutes!")
+        print("  The agent is exploring your codebase and creating features.")
+        print("  This may appear to hang - it's working. Watch for [Tool: ...] output.")
+        print("=" * 70)
+        print()
+    elif is_first_run:
         print("Fresh start - will use initializer agent")
         print()
         print("=" * 70)
@@ -179,7 +194,12 @@ async def run_autonomous_agent(
 
         # Choose prompt based on session type
         # Pass project_dir to enable project-specific prompts
-        if is_first_run:
+        if use_analyzer:
+            prompt = get_analyzer_prompt(project_dir)
+            # Clear analyzer mode after first use - subsequent sessions use coding prompt
+            set_analyzer_mode(project_dir, enabled=False)
+            use_analyzer = False
+        elif is_first_run:
             prompt = get_initializer_prompt(project_dir)
             is_first_run = False  # Only use initializer once
         else:

@@ -79,6 +79,11 @@ def get_coding_prompt_yolo(project_dir: Path | None = None) -> str:
     return load_prompt("coding_prompt_yolo", project_dir)
 
 
+def get_analyzer_prompt(project_dir: Path | None = None) -> str:
+    """Load the analyzer agent prompt for importing existing projects."""
+    return load_prompt("analyzer_prompt", project_dir)
+
+
 def get_app_spec(project_dir: Path) -> str:
     """
     Load the app spec from the project.
@@ -226,3 +231,101 @@ def copy_spec_to_project(project_dir: Path) -> None:
             return
 
     print("Warning: No app_spec.txt found to copy to project directory")
+
+
+def migrate_project_prompts(project_dir: Path) -> Path:
+    """
+    Set up prompts directory for an imported existing project.
+
+    Unlike scaffold_project_prompts(), this only copies the coding prompts
+    (not app_spec.txt or initializer_prompt.md) since the analyzer agent
+    will create the app_spec.txt based on the existing codebase.
+
+    Args:
+        project_dir: The absolute path to the existing project directory
+
+    Returns:
+        The path to the project prompts directory
+    """
+    project_prompts = get_project_prompts_dir(project_dir)
+    project_prompts.mkdir(parents=True, exist_ok=True)
+
+    # For imported projects, only copy coding prompts
+    # The analyzer_prompt will be used first, then coding_prompt for ongoing work
+    templates = [
+        ("coding_prompt.template.md", "coding_prompt.md"),
+        ("coding_prompt_yolo.template.md", "coding_prompt_yolo.md"),
+        ("analyzer_prompt.template.md", "analyzer_prompt.md"),
+    ]
+
+    copied_files = []
+    for template_name, dest_name in templates:
+        template_path = TEMPLATES_DIR / template_name
+        dest_path = project_prompts / dest_name
+
+        # Only copy if template exists and destination doesn't
+        if template_path.exists() and not dest_path.exists():
+            try:
+                shutil.copy(template_path, dest_path)
+                copied_files.append(dest_name)
+            except (OSError, PermissionError) as e:
+                print(f"  Warning: Could not copy {dest_name}: {e}")
+
+    if copied_files:
+        print(f"  Created prompt files for import: {', '.join(copied_files)}")
+
+    return project_prompts
+
+
+def is_analyzer_mode(project_dir: Path) -> bool:
+    """
+    Check if a project should run in analyzer mode.
+
+    Analyzer mode is triggered when:
+    1. The .analyze_mode marker file exists, OR
+    2. No features.db exists AND no valid app_spec.txt exists
+       (indicating an imported project that needs analysis)
+
+    Args:
+        project_dir: The project directory to check
+
+    Returns:
+        True if analyzer mode should be used
+    """
+    # Explicit marker file takes precedence
+    marker_file = project_dir / ".analyze_mode"
+    if marker_file.exists():
+        return True
+
+    # Check if this looks like an imported project needing analysis
+    features_db = project_dir / "features.db"
+    has_features_db = features_db.exists()
+
+    # If we have features, we're past analyzer phase
+    if has_features_db:
+        return False
+
+    # Check if we have a valid app_spec
+    has_valid_spec = has_project_prompts(project_dir)
+
+    # No features AND no valid spec = needs analyzer
+    return not has_valid_spec
+
+
+def set_analyzer_mode(project_dir: Path, enabled: bool = True) -> None:
+    """
+    Set or clear the analyzer mode marker for a project.
+
+    Args:
+        project_dir: The project directory
+        enabled: If True, enable analyzer mode; if False, disable it
+    """
+    marker_file = project_dir / ".analyze_mode"
+
+    if enabled:
+        marker_file.touch()
+        print(f"  Analyzer mode enabled for {project_dir.name}")
+    else:
+        if marker_file.exists():
+            marker_file.unlink()
+            print(f"  Analyzer mode disabled for {project_dir.name}")

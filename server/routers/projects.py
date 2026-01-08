@@ -15,6 +15,7 @@ from fastapi import APIRouter, HTTPException
 from ..schemas import (
     ProjectCreate,
     ProjectDetail,
+    ProjectImport,
     ProjectPrompts,
     ProjectPromptsUpdate,
     ProjectStats,
@@ -25,15 +26,18 @@ from ..schemas import (
 _imports_initialized = False
 _check_spec_exists = None
 _scaffold_project_prompts = None
+_migrate_project_prompts = None
+_set_analyzer_mode = None
 _get_project_prompts_dir = None
 _count_passing_tests = None
+_ensure_database_exists = None
 
 
 def _init_imports():
     """Lazy import of project-level modules."""
     global _imports_initialized, _check_spec_exists
-    global _scaffold_project_prompts, _get_project_prompts_dir
-    global _count_passing_tests
+    global _scaffold_project_prompts, _migrate_project_prompts, _set_analyzer_mode
+    global _get_project_prompts_dir, _count_passing_tests, _ensure_database_exists
 
     if _imports_initialized:
         return
@@ -43,14 +47,18 @@ def _init_imports():
     if str(root) not in sys.path:
         sys.path.insert(0, str(root))
 
+    from api.database import ensure_database_exists
     from progress import count_passing_tests
-    from prompts import get_project_prompts_dir, scaffold_project_prompts
+    from prompts import get_project_prompts_dir, migrate_project_prompts, scaffold_project_prompts, set_analyzer_mode
     from start import check_spec_exists
 
     _check_spec_exists = check_spec_exists
     _scaffold_project_prompts = scaffold_project_prompts
+    _migrate_project_prompts = migrate_project_prompts
+    _set_analyzer_mode = set_analyzer_mode
     _get_project_prompts_dir = get_project_prompts_dir
     _count_passing_tests = count_passing_tests
+    _ensure_database_exists = ensure_database_exists
     _imports_initialized = True
 
 
@@ -186,6 +194,94 @@ async def create_project(project: ProjectCreate):
         path=project_path.as_posix(),
         has_spec=False,  # Just created, no spec yet
         stats=ProjectStats(passing=0, total=0, percentage=0.0),
+    )
+
+
+@router.post("/import", response_model=ProjectSummary)
+async def import_project(project: ProjectImport):
+    """
+    Import an existing project into the system.
+
+    This registers an existing codebase and sets it up for analysis.
+    The analyzer agent will explore the codebase and create features
+    for ongoing management.
+    """
+    _init_imports()
+    register_project, _, get_project_path, _, _ = _get_registry_functions()
+
+    name = validate_project_name(project.name)
+    project_path = Path(project.path).resolve()
+
+    # Check if project name already registered
+    existing = get_project_path(name)
+    if existing:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Project '{name}' already exists at {existing}"
+        )
+
+    # Security: Check if path is in a blocked location
+    from .filesystem import is_path_blocked
+    if is_path_blocked(project_path):
+        raise HTTPException(
+            status_code=403,
+            detail="Cannot import project from system or sensitive directory"
+        )
+
+    # Validate the path exists and is a directory
+    if not project_path.exists():
+        raise HTTPException(
+            status_code=400,
+            detail="Path does not exist"
+        )
+
+    if not project_path.is_dir():
+        raise HTTPException(
+            status_code=400,
+            detail="Path is not a directory"
+        )
+
+    # Check if the directory has some source code
+    has_source_files = False
+    source_extensions = {'.py', '.js', '.ts', '.tsx', '.jsx', '.java', '.go', '.rs', '.rb', '.php', '.vue', '.svelte', '.c', '.cpp', '.h', '.cs'}
+    for item in project_path.rglob('*'):
+        if item.is_file() and item.suffix.lower() in source_extensions:
+            has_source_files = True
+            break
+
+    if not has_source_files:
+        raise HTTPException(
+            status_code=400,
+            detail="Directory does not appear to contain source code files"
+        )
+
+    # Set up prompts for imported project (analyzer mode)
+    _migrate_project_prompts(project_path)
+
+    # Enable analyzer mode for this project
+    _set_analyzer_mode(project_path, enabled=True)
+
+    # Ensure database exists (empty, will be populated by analyzer)
+    _ensure_database_exists(project_path)
+
+    # Register in registry
+    try:
+        register_project(name, project_path)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to register project: {e}"
+        )
+
+    # Check if project already has a spec (from previous work)
+    has_spec = _check_spec_exists(project_path)
+    stats = get_project_stats(project_path)
+
+    return ProjectSummary(
+        name=name,
+        path=project_path.as_posix(),
+        has_spec=has_spec,
+        stats=stats,
     )
 
 

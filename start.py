@@ -16,13 +16,16 @@ from pathlib import Path
 from prompts import (
     get_project_prompts_dir,
     has_project_prompts,
+    migrate_project_prompts,
     scaffold_project_prompts,
+    set_analyzer_mode,
 )
 from registry import (
     get_project_path,
     list_registered_projects,
     register_project,
 )
+from api.database import ensure_database_exists
 
 
 def check_spec_exists(project_dir: Path) -> bool:
@@ -82,6 +85,7 @@ def display_menu(projects: list[tuple[str, Path]]) -> None:
     if projects:
         print("[2] Continue existing project")
 
+    print("[3] Import existing codebase")
     print("[q] Quit")
     print()
 
@@ -303,6 +307,107 @@ def ask_spec_creation_choice() -> str | None:
         print("Invalid choice. Please enter 1, 2, or b.")
 
 
+def import_existing_project_flow() -> tuple[str, Path] | None:
+    """
+    Flow for importing an existing project.
+
+    1. Get the path to existing project
+    2. Validate it has source code
+    3. Get project name (default from folder name)
+    4. Set up for analyzer mode
+    5. Return (name, path) tuple if successful
+    """
+    print("\n" + "-" * 40)
+    print("  Import Existing Project")
+    print("-" * 40)
+    print("\nThis will import an existing codebase into the system.")
+    print("Claude will analyze your code and create features for management.")
+    print("\nEnter the full path to your existing project directory")
+    print("(e.g., C:/Projects/my-existing-app or /home/user/projects/my-app)")
+    print("Leave empty to cancel.\n")
+
+    path_str = input("Project path: ").strip()
+    if not path_str:
+        return None
+
+    project_path = Path(path_str).resolve()
+
+    # Validate path exists and is a directory
+    if not project_path.exists():
+        print(f"\nError: Path does not exist: {project_path}")
+        return None
+
+    if not project_path.is_dir():
+        print(f"\nError: Path is not a directory: {project_path}")
+        return None
+
+    # Check for source code files
+    source_extensions = {'.py', '.js', '.ts', '.tsx', '.jsx', '.java', '.go', '.rs', '.rb', '.php', '.vue', '.svelte', '.c', '.cpp', '.h', '.cs'}
+    has_source_files = False
+    for item in project_path.rglob('*'):
+        if item.is_file() and item.suffix.lower() in source_extensions:
+            has_source_files = True
+            break
+
+    if not has_source_files:
+        print("\nWarning: No source code files found in this directory.")
+        confirm = input("Continue anyway? [y/N]: ").strip().lower()
+        if confirm != 'y':
+            return None
+
+    # Get project name (default from folder name)
+    folder_name = project_path.name
+    # Sanitize for project name
+    default_name = ''.join(c if c.isalnum() or c in '-_' else '-' for c in folder_name.lower())
+    default_name = default_name.strip('-') or 'imported-project'
+
+    print(f"\nProject name (default: {default_name})")
+    name = input("Project name: ").strip()
+    if not name:
+        name = default_name
+
+    # Basic validation
+    if sys.platform == "win32":
+        invalid_chars = '<>:"/\\|?*'
+    else:
+        invalid_chars = '/'
+
+    for char in invalid_chars:
+        if char in name:
+            print(f"Invalid character '{char}' in project name")
+            return None
+
+    # Check if name already registered
+    existing = get_project_path(name)
+    if existing:
+        print(f"\nError: Project '{name}' already exists at {existing}")
+        return None
+
+    # Set up project for import
+    print(f"\nSetting up project: {name}")
+    print(f"Location: {project_path}")
+
+    # Create prompts directory with analyzer mode templates
+    migrate_project_prompts(project_path)
+
+    # Enable analyzer mode
+    set_analyzer_mode(project_path, enabled=True)
+
+    # Ensure database exists (empty)
+    ensure_database_exists(project_path)
+
+    # Register the project
+    register_project(name, project_path)
+
+    print("\n" + "-" * 50)
+    print("Project imported successfully!")
+    print("When you start the agent, it will analyze your codebase")
+    print("and create features for ongoing management.")
+    print("-" * 50)
+
+    return name, project_path
+
+
 def create_new_project_flow() -> tuple[str, Path] | None:
     """
     Complete flow for creating a new project.
@@ -401,6 +506,12 @@ def main() -> None:
             selected = get_project_choice(projects)
             if selected:
                 project_name, project_dir = selected
+                run_agent(project_name, project_dir)
+
+        elif choice == '3':
+            result = import_existing_project_flow()
+            if result:
+                project_name, project_dir = result
                 run_agent(project_name, project_dir)
 
         else:

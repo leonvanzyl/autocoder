@@ -4,22 +4,23 @@
  * Multi-step modal for creating new projects:
  * 1. Enter project name
  * 2. Select project folder
- * 3. Choose spec method (Claude or manual)
+ * 3. Choose spec method (Claude, manual, or import existing)
  * 4a. If Claude: Show SpecCreationChat
  * 4b. If manual: Create project and close
+ * 4c. If import: Select existing folder and import
  */
 
 import { useState } from 'react'
-import { X, Bot, FileEdit, ArrowRight, ArrowLeft, Loader2, CheckCircle2, Folder } from 'lucide-react'
-import { useCreateProject } from '../hooks/useProjects'
+import { X, Bot, FileEdit, ArrowRight, ArrowLeft, Loader2, CheckCircle2, Folder, FolderInput } from 'lucide-react'
+import { useCreateProject, useImportProject } from '../hooks/useProjects'
 import { SpecCreationChat } from './SpecCreationChat'
 import { FolderBrowser } from './FolderBrowser'
 import { startAgent } from '../lib/api'
 
 type InitializerStatus = 'idle' | 'starting' | 'error'
 
-type Step = 'name' | 'folder' | 'method' | 'chat' | 'complete'
-type SpecMethod = 'claude' | 'manual'
+type Step = 'name' | 'folder' | 'method' | 'chat' | 'complete' | 'import-folder' | 'import-name'
+type SpecMethod = 'claude' | 'manual' | 'import'
 
 interface NewProjectModalProps {
   isOpen: boolean
@@ -45,6 +46,10 @@ export function NewProjectModal({
   void _specMethod
 
   const createProject = useCreateProject()
+  const importProject = useImportProject()
+
+  // State for import flow
+  const [importPath, setImportPath] = useState<string | null>(null)
 
   if (!isOpen) return null
 
@@ -80,6 +85,12 @@ export function NewProjectModal({
   const handleMethodSelect = async (method: SpecMethod) => {
     setSpecMethod(method)
 
+    if (method === 'import') {
+      // Switch to import flow
+      setStep('import-folder')
+      return
+    }
+
     if (!projectPath) {
       setError('Please select a project folder first')
       setStep('folder')
@@ -114,6 +125,57 @@ export function NewProjectModal({
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : 'Failed to create project')
       }
+    }
+  }
+
+  const handleImportFolderSelect = (path: string) => {
+    setImportPath(path)
+    // Extract folder name as default project name
+    const folderName = path.split('/').pop() || ''
+    // Sanitize folder name for project name
+    const sanitized = folderName.replace(/[^a-zA-Z0-9_-]/g, '-').toLowerCase()
+    setProjectName(sanitized || 'imported-project')
+    setStep('import-name')
+  }
+
+  const handleImportFolderCancel = () => {
+    setStep('method')
+    setImportPath(null)
+  }
+
+  const handleImportSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const trimmed = projectName.trim()
+
+    if (!trimmed) {
+      setError('Please enter a project name')
+      return
+    }
+
+    if (!/^[a-zA-Z0-9_-]+$/.test(trimmed)) {
+      setError('Project name can only contain letters, numbers, hyphens, and underscores')
+      return
+    }
+
+    if (!importPath) {
+      setError('No folder selected')
+      return
+    }
+
+    setError(null)
+
+    try {
+      const project = await importProject.mutateAsync({
+        name: trimmed,
+        path: importPath,
+      })
+      setStep('complete')
+      setTimeout(() => {
+        onProjectCreated(project.name)
+        handleClose()
+      }, 1500)
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to import project')
     }
   }
 
@@ -163,6 +225,7 @@ export function NewProjectModal({
     setInitializerStatus('idle')
     setInitializerError(null)
     setYoloModeSelected(false)
+    setImportPath(null)
     onClose()
   }
 
@@ -173,6 +236,12 @@ export function NewProjectModal({
     } else if (step === 'folder') {
       setStep('name')
       setProjectPath(null)
+    } else if (step === 'import-name') {
+      setStep('import-folder')
+      setError(null)
+    } else if (step === 'import-folder') {
+      setStep('method')
+      setImportPath(null)
     }
   }
 
@@ -234,6 +303,47 @@ export function NewProjectModal({
     )
   }
 
+  // Import folder selection step
+  if (step === 'import-folder') {
+    return (
+      <div className="neo-modal-backdrop" onClick={handleClose}>
+        <div
+          className="neo-modal w-full max-w-3xl max-h-[85vh] flex flex-col"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between p-4 border-b-3 border-[var(--color-neo-border)]">
+            <div className="flex items-center gap-3">
+              <FolderInput size={24} className="text-[var(--color-neo-accent)]" />
+              <div>
+                <h2 className="font-display font-bold text-xl text-[#1a1a1a]">
+                  Import Existing Project
+                </h2>
+                <p className="text-sm text-[#4a4a4a]">
+                  Select the folder containing your existing project
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={handleClose}
+              className="neo-btn neo-btn-ghost p-2"
+            >
+              <X size={20} />
+            </button>
+          </div>
+
+          {/* Folder Browser */}
+          <div className="flex-1 overflow-hidden">
+            <FolderBrowser
+              onSelect={handleImportFolderSelect}
+              onCancel={handleImportFolderCancel}
+            />
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="neo-modal-backdrop" onClick={handleClose}>
       <div
@@ -245,6 +355,7 @@ export function NewProjectModal({
           <h2 className="font-display font-bold text-xl text-[#1a1a1a]">
             {step === 'name' && 'Create New Project'}
             {step === 'method' && 'Choose Setup Method'}
+            {step === 'import-name' && 'Confirm Project Name'}
             {step === 'complete' && 'Project Created!'}
           </h2>
           <button
@@ -365,6 +476,41 @@ export function NewProjectModal({
                     </div>
                   </div>
                 </button>
+
+                {/* Divider */}
+                <div className="flex items-center gap-4 py-2">
+                  <div className="flex-1 h-[2px] bg-[var(--color-neo-border)]"></div>
+                  <span className="text-sm text-[var(--color-neo-text-secondary)]">or</span>
+                  <div className="flex-1 h-[2px] bg-[var(--color-neo-border)]"></div>
+                </div>
+
+                {/* Import Existing option */}
+                <button
+                  onClick={() => handleMethodSelect('import')}
+                  disabled={createProject.isPending}
+                  className={`
+                    w-full text-left p-4
+                    border-3 border-[var(--color-neo-border)]
+                    bg-white
+                    shadow-[4px_4px_0px_rgba(0,0,0,1)]
+                    hover:translate-x-[-2px] hover:translate-y-[-2px]
+                    hover:shadow-[6px_6px_0px_rgba(0,0,0,1)]
+                    transition-all duration-150
+                    disabled:opacity-50 disabled:cursor-not-allowed
+                  `}
+                >
+                  <div className="flex items-start gap-4">
+                    <div className="p-2 bg-[var(--color-neo-accent)] border-2 border-[var(--color-neo-border)] shadow-[2px_2px_0px_rgba(0,0,0,1)]">
+                      <FolderInput size={24} className="text-white" />
+                    </div>
+                    <div className="flex-1">
+                      <span className="font-bold text-lg text-[#1a1a1a]">Import Existing Project</span>
+                      <p className="text-sm text-[var(--color-neo-text-secondary)] mt-1">
+                        Import an existing codebase. Claude will analyze it and create features for management.
+                      </p>
+                    </div>
+                  </div>
+                </button>
               </div>
 
               {error && (
@@ -391,6 +537,68 @@ export function NewProjectModal({
                 </button>
               </div>
             </div>
+          )}
+
+          {/* Import Name Step */}
+          {step === 'import-name' && (
+            <form onSubmit={handleImportSubmit}>
+              <div className="mb-4 p-3 bg-[var(--color-neo-bg)] border-2 border-[var(--color-neo-border)]">
+                <p className="text-sm text-[var(--color-neo-text-secondary)]">
+                  Importing from: <span className="font-mono font-bold">{importPath}</span>
+                </p>
+              </div>
+
+              <div className="mb-6">
+                <label className="block font-bold mb-2 text-[#1a1a1a]">
+                  Project Name
+                </label>
+                <input
+                  type="text"
+                  value={projectName}
+                  onChange={(e) => setProjectName(e.target.value)}
+                  placeholder="my-project"
+                  className="neo-input"
+                  pattern="^[a-zA-Z0-9_-]+$"
+                  autoFocus
+                />
+                <p className="text-sm text-[var(--color-neo-text-secondary)] mt-2">
+                  Use letters, numbers, hyphens, and underscores only.
+                </p>
+              </div>
+
+              {error && (
+                <div className="mb-4 p-3 bg-[var(--color-neo-danger)] text-white text-sm border-2 border-[var(--color-neo-border)]">
+                  {error}
+                </div>
+              )}
+
+              {importProject.isPending && (
+                <div className="mb-4 flex items-center justify-center gap-2 text-[var(--color-neo-text-secondary)]">
+                  <Loader2 size={16} className="animate-spin" />
+                  <span>Importing project...</span>
+                </div>
+              )}
+
+              <div className="flex justify-between">
+                <button
+                  type="button"
+                  onClick={handleBack}
+                  className="neo-btn neo-btn-ghost"
+                  disabled={importProject.isPending}
+                >
+                  <ArrowLeft size={16} />
+                  Back
+                </button>
+                <button
+                  type="submit"
+                  className="neo-btn neo-btn-primary"
+                  disabled={!projectName.trim() || importProject.isPending}
+                >
+                  Import Project
+                  <ArrowRight size={16} />
+                </button>
+              </div>
+            </form>
           )}
 
           {/* Step 3: Complete */}
