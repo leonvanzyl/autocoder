@@ -44,7 +44,7 @@ def find_available_port(start: int = 8888, max_attempts: int = 10) -> int:
     for port in range(start, start + max_attempts):
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.bind(("127.0.0.1", port))
+                s.bind(("0.0.0.0", port))
                 return port
         except OSError:
             continue
@@ -158,14 +158,14 @@ def start_dev_server(port: int) -> tuple:
     venv_python = get_venv_python()
 
     print("\n  Starting development servers...")
-    print(f"  - FastAPI backend: http://127.0.0.1:{port}")
+    print(f"  - FastAPI backend: http://0.0.0.0:{port}")
     print("  - Vite frontend:   http://127.0.0.1:5173")
 
     # Start FastAPI
     backend = subprocess.Popen([
         str(venv_python), "-m", "uvicorn",
         "server.main:app",
-        "--host", "127.0.0.1",
+        "--host", "0.0.0.0",
         "--port", str(port),
         "--reload"
     ], cwd=str(ROOT))
@@ -185,12 +185,12 @@ def start_production_server(port: int):
     """Start FastAPI server in production mode."""
     venv_python = get_venv_python()
 
-    print(f"\n  Starting server at http://127.0.0.1:{port}")
+    print(f"\n  Starting server at http://0.0.0.0:{port}")
 
     return subprocess.Popen([
         str(venv_python), "-m", "uvicorn",
         "server.main:app",
-        "--host", "127.0.0.1",
+        "--host", "0.0.0.0",
         "--port", str(port)
     ], cwd=str(ROOT))
 
@@ -280,7 +280,7 @@ def main() -> None:
             webbrowser.open(f"http://127.0.0.1:{port}")
 
             print("\n" + "=" * 50)
-            print(f"  Server running at http://127.0.0.1:{port}")
+            print(f"  Server running at http://0.0.0.0:{port}")
             print("  Press Ctrl+C to stop")
             print("=" * 50)
 

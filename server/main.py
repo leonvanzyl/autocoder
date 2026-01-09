@@ -53,15 +53,10 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS - allow only localhost origins for security
+# CORS - allow all origins for LAN access
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",      # Vite dev server
-        "http://127.0.0.1:5173",
-        "http://localhost:8888",      # Production
-        "http://127.0.0.1:8888",
-    ],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -69,19 +64,20 @@ app.add_middleware(
 
 
 # ============================================================================
-# Security Middleware
+# Security Middleware (disabled for LAN access)
 # ============================================================================
 
-@app.middleware("http")
-async def require_localhost(request: Request, call_next):
-    """Only allow requests from localhost."""
-    client_host = request.client.host if request.client else None
-
-    # Allow localhost connections
-    if client_host not in ("127.0.0.1", "::1", "localhost", None):
-        raise HTTPException(status_code=403, detail="Localhost access only")
-
-    return await call_next(request)
+# NOTE: Localhost restriction removed to allow LAN access
+# @app.middleware("http")
+# async def require_localhost(request: Request, call_next):
+#     """Only allow requests from localhost."""
+#     client_host = request.client.host if request.client else None
+#
+#     # Allow localhost connections
+#     if client_host not in ("127.0.0.1", "::1", "localhost", None):
+#         raise HTTPException(status_code=403, detail="Localhost access only")
+#
+#     return await call_next(request)
 
 
 # ============================================================================
@@ -179,7 +175,7 @@ if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
         "server.main:app",
-        host="127.0.0.1",  # Localhost only for security
+        host="0.0.0.0",  # LAN accessible
         port=8888,
         reload=True,
     )
