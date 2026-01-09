@@ -15,6 +15,8 @@ Tools:
 - feature_mark_in_progress: Mark a feature as in-progress
 - feature_clear_in_progress: Clear in-progress status
 - feature_create_bulk: Create multiple features at once
+- feature_create: Create a single feature
+- feature_update: Update a feature's editable fields
 """
 
 import json
@@ -406,6 +408,171 @@ def feature_create_bulk(
         session.commit()
 
         return json.dumps({"created": created_count}, indent=2)
+    except Exception as e:
+        session.rollback()
+        return json.dumps({"error": str(e)})
+    finally:
+        session.close()
+
+
+@mcp.tool()
+def feature_create(
+    category: Annotated[str, Field(min_length=1, max_length=100, description="Feature category (e.g., 'Authentication', 'API', 'UI')")],
+    name: Annotated[str, Field(min_length=1, max_length=255, description="Feature name")],
+    description: Annotated[str, Field(min_length=1, description="Detailed description of the feature")],
+    steps: Annotated[list[str], Field(min_length=1, description="List of implementation/verification steps")]
+) -> str:
+    """Create a single feature in the project backlog.
+
+    Use this when the user asks to add a new feature, capability, or test case.
+    The feature will be added with the next available priority number.
+
+    Args:
+        category: Feature category for grouping (e.g., 'Authentication', 'API', 'UI')
+        name: Descriptive name for the feature
+        description: Detailed description of what this feature should do
+        steps: List of steps to implement or verify the feature
+
+    Returns:
+        JSON with the created feature details including its ID
+    """
+    session = get_session()
+    try:
+        # Get the next priority
+        max_priority_result = session.query(Feature.priority).order_by(Feature.priority.desc()).first()
+        next_priority = (max_priority_result[0] + 1) if max_priority_result else 1
+
+        db_feature = Feature(
+            priority=next_priority,
+            category=category,
+            name=name,
+            description=description,
+            steps=steps,
+            passes=False,
+        )
+        session.add(db_feature)
+        session.commit()
+        session.refresh(db_feature)
+
+        return json.dumps({
+            "success": True,
+            "message": f"Created feature: {name}",
+            "feature": db_feature.to_dict()
+        }, indent=2)
+    except Exception as e:
+        session.rollback()
+        return json.dumps({"error": str(e)})
+    finally:
+        session.close()
+
+
+@mcp.tool()
+def feature_update(
+    feature_id: Annotated[int, Field(description="The ID of the feature to update", ge=1)],
+    category: Annotated[str | None, Field(default=None, min_length=1, max_length=100, description="New category (optional)")] = None,
+    name: Annotated[str | None, Field(default=None, min_length=1, max_length=255, description="New name (optional)")] = None,
+    description: Annotated[str | None, Field(default=None, min_length=1, description="New description (optional)")] = None,
+    steps: Annotated[list[str] | None, Field(default=None, min_length=1, description="New steps list (optional)")] = None,
+) -> str:
+    """Update an existing feature's editable fields.
+
+    Use this when the user asks to modify, update, edit, or change a feature.
+    Only the provided fields will be updated; others remain unchanged.
+
+    Cannot update: id, priority (use feature_skip), passes, in_progress (agent-controlled)
+
+    Args:
+        feature_id: The ID of the feature to update
+        category: New category (optional)
+        name: New name (optional)
+        description: New description (optional)
+        steps: New steps list (optional)
+
+    Returns:
+        JSON with the updated feature details, or error if not found.
+    """
+    session = get_session()
+    try:
+        feature = session.query(Feature).filter(Feature.id == feature_id).first()
+
+        if feature is None:
+            return json.dumps({"error": f"Feature with ID {feature_id} not found"})
+
+        # Collect updates
+        updates = {}
+        if category is not None:
+            updates["category"] = category
+        if name is not None:
+            updates["name"] = name
+        if description is not None:
+            updates["description"] = description
+        if steps is not None:
+            updates["steps"] = steps
+
+        if not updates:
+            return json.dumps({"error": "No fields to update. Provide at least one of: category, name, description, steps"})
+
+        # Apply updates
+        for field, value in updates.items():
+            setattr(feature, field, value)
+
+        session.commit()
+        session.refresh(feature)
+
+        return json.dumps({
+            "success": True,
+            "message": f"Updated feature: {feature.name}",
+            "feature": feature.to_dict()
+        }, indent=2)
+    except Exception as e:
+        session.rollback()
+        return json.dumps({"error": str(e)})
+    finally:
+        session.close()
+
+
+@mcp.tool()
+def feature_delete(
+    feature_id: Annotated[int, Field(description="The ID of the feature to delete", ge=1)]
+) -> str:
+    """Delete a feature from the backlog.
+
+    Use this when the user asks to remove, delete, or drop a feature.
+    This removes the feature from tracking only - any implemented code remains.
+
+    For completed features, consider suggesting the user create a new "removal"
+    feature if they also want the code removed.
+
+    Args:
+        feature_id: The ID of the feature to delete
+
+    Returns:
+        JSON with success message and deleted feature details, or error if not found.
+    """
+    session = get_session()
+    try:
+        feature = session.query(Feature).filter(Feature.id == feature_id).first()
+
+        if feature is None:
+            return json.dumps({"error": f"Feature with ID {feature_id} not found"})
+
+        feature_info = feature.to_dict()
+        was_passing = feature.passes
+
+        session.delete(feature)
+        session.commit()
+
+        result = {
+            "success": True,
+            "message": f"Deleted feature: {feature_info['name']}",
+            "deleted_feature": feature_info,
+        }
+
+        # Add hint for completed features
+        if was_passing:
+            result["note"] = "This feature was completed. The implemented code remains in the codebase. If you want the code removed, create a new feature describing what to remove."
+
+        return json.dumps(result, indent=2)
     except Exception as e:
         session.rollback()
         return json.dumps({"error": str(e)})

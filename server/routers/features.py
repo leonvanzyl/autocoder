@@ -16,6 +16,7 @@ from ..schemas import (
     FeatureCreate,
     FeatureListResponse,
     FeatureResponse,
+    FeatureUpdate,
 )
 
 # Lazy imports to avoid circular dependencies
@@ -295,3 +296,50 @@ async def skip_feature(project_name: str, feature_id: int):
     except Exception:
         logger.exception("Failed to skip feature")
         raise HTTPException(status_code=500, detail="Failed to skip feature")
+
+
+@router.patch("/{feature_id}", response_model=FeatureResponse)
+async def update_feature(project_name: str, feature_id: int, update: FeatureUpdate):
+    """
+    Update a feature's editable fields (category, name, description, steps).
+
+    Only provided fields are updated; others remain unchanged.
+    Cannot update: id, priority (use skip), passes, in_progress (agent-controlled).
+    """
+    project_name = validate_project_name(project_name)
+    project_dir = _get_project_path(project_name)
+
+    if not project_dir:
+        raise HTTPException(status_code=404, detail=f"Project '{project_name}' not found in registry")
+
+    if not project_dir.exists():
+        raise HTTPException(status_code=404, detail="Project directory not found")
+
+    _, Feature = _get_db_classes()
+
+    try:
+        with get_db_session(project_dir) as session:
+            feature = session.query(Feature).filter(Feature.id == feature_id).first()
+
+            if not feature:
+                raise HTTPException(status_code=404, detail=f"Feature {feature_id} not found")
+
+            # Get only the fields that were provided (exclude unset)
+            update_data = update.model_dump(exclude_unset=True)
+
+            if not update_data:
+                raise HTTPException(status_code=400, detail="No fields to update")
+
+            # Apply updates
+            for field, value in update_data.items():
+                setattr(feature, field, value)
+
+            session.commit()
+            session.refresh(feature)
+
+            return feature_to_response(feature)
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Failed to update feature")
+        raise HTTPException(status_code=500, detail="Failed to update feature")
