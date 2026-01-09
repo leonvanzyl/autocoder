@@ -365,6 +365,9 @@ def feature_create_bulk(
     Features are assigned sequential priorities based on their order.
     All features start with passes=false.
 
+    Duplicate detection: Features with the same name as existing features
+    are skipped to prevent duplicates.
+
     This is typically used by the initializer agent to set up the initial
     feature list from the app specification.
 
@@ -376,15 +379,23 @@ def feature_create_bulk(
             - steps (list[str]): Implementation/test steps
 
     Returns:
-        JSON with: created (int) - number of features created
+        JSON with: created (int), skipped (int), skipped_names (list)
     """
     session = get_session()
     try:
+        # Get existing feature names for duplicate detection
+        existing_names = set(
+            name[0] for name in session.query(Feature.name).all()
+        )
+
         # Get the starting priority
         max_priority_result = session.query(Feature.priority).order_by(Feature.priority.desc()).first()
         start_priority = (max_priority_result[0] + 1) if max_priority_result else 1
 
         created_count = 0
+        skipped_count = 0
+        skipped_names = []
+
         for i, feature_data in enumerate(features):
             # Validate required fields
             if not all(key in feature_data for key in ["category", "name", "description", "steps"]):
@@ -392,8 +403,17 @@ def feature_create_bulk(
                     "error": f"Feature at index {i} missing required fields (category, name, description, steps)"
                 })
 
+            # Skip duplicates
+            if feature_data["name"] in existing_names:
+                skipped_count += 1
+                skipped_names.append(feature_data["name"])
+                continue
+
+            # Add to existing names to catch duplicates within this batch
+            existing_names.add(feature_data["name"])
+
             db_feature = Feature(
-                priority=start_priority + i,
+                priority=start_priority + created_count,
                 category=feature_data["category"],
                 name=feature_data["name"],
                 description=feature_data["description"],
@@ -405,7 +425,91 @@ def feature_create_bulk(
 
         session.commit()
 
-        return json.dumps({"created": created_count}, indent=2)
+        result = {"created": created_count, "skipped": skipped_count}
+        if skipped_names:
+            result["skipped_names"] = skipped_names[:10]  # Limit to first 10
+            if len(skipped_names) > 10:
+                result["skipped_names"].append(f"... and {len(skipped_names) - 10} more")
+
+        return json.dumps(result, indent=2)
+    except Exception as e:
+        session.rollback()
+        return json.dumps({"error": str(e)})
+    finally:
+        session.close()
+
+
+@mcp.tool()
+def feature_db_repair() -> str:
+    """Repair the feature database by removing duplicates and compacting IDs.
+
+    This tool performs the following repairs:
+    1. Removes duplicate features (keeping the one with lowest ID)
+    2. Compacts IDs to be sequential (1, 2, 3, ...) with no gaps
+    3. Resets priorities to match the new sequential IDs
+
+    Use this if the database has inconsistencies like duplicate IDs or gaps.
+
+    Returns:
+        JSON with: duplicates_removed (int), ids_compacted (bool),
+                   old_max_id (int), new_max_id (int), total_features (int)
+    """
+    session = get_session()
+    try:
+        from sqlalchemy import text
+
+        # Step 1: Find and remove duplicates (keep lowest ID for each name)
+        duplicates_query = """
+            SELECT id FROM features
+            WHERE id NOT IN (
+                SELECT MIN(id) FROM features GROUP BY name
+            )
+        """
+        result = session.execute(text(duplicates_query))
+        duplicate_ids = [row[0] for row in result.fetchall()]
+        duplicates_removed = len(duplicate_ids)
+
+        if duplicate_ids:
+            session.execute(
+                text(f"DELETE FROM features WHERE id IN ({','.join(map(str, duplicate_ids))})")
+            )
+            session.commit()
+
+        # Step 2: Get current state
+        all_features = session.query(Feature).order_by(Feature.priority.asc(), Feature.id.asc()).all()
+        old_max_id = max(f.id for f in all_features) if all_features else 0
+        total_features = len(all_features)
+
+        # Step 3: Check if compaction is needed
+        expected_ids = set(range(1, total_features + 1))
+        actual_ids = set(f.id for f in all_features)
+        needs_compaction = expected_ids != actual_ids
+
+        new_max_id = old_max_id
+        if needs_compaction and all_features:
+            # Create a mapping from old ID to new ID
+            # We need to use raw SQL to avoid SQLAlchemy's identity map issues
+
+            # First, shift all IDs to negative to avoid conflicts
+            session.execute(text("UPDATE features SET id = -id"))
+            session.commit()
+
+            # Then assign new sequential IDs
+            for new_id, feature in enumerate(all_features, start=1):
+                session.execute(
+                    text(f"UPDATE features SET id = {new_id}, priority = {new_id} WHERE id = {-feature.id}")
+                )
+            session.commit()
+
+            new_max_id = total_features
+
+        return json.dumps({
+            "duplicates_removed": duplicates_removed,
+            "ids_compacted": needs_compaction,
+            "old_max_id": old_max_id,
+            "new_max_id": new_max_id,
+            "total_features": total_features
+        }, indent=2)
     except Exception as e:
         session.rollback()
         return json.dumps({"error": str(e)})

@@ -47,7 +47,7 @@ export function KanbanColumn({
         ) : (
           features.map((feature, index) => (
             <div
-              key={feature.id}
+              key={`${feature.id}-${index}`}
               className="animate-slide-in"
               style={{ animationDelay: `${index * 50}ms` }}
             >

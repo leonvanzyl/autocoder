@@ -8,6 +8,7 @@ Core agent interaction functions for running autonomous coding sessions.
 import asyncio
 import io
 import sys
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -18,6 +19,30 @@ from claude_agent_sdk import ClaudeSDKClient
 if sys.platform == "win32":
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+
+
+def safe_print(*args, **kwargs) -> None:
+    """
+    Print with retry logic to handle EAGAIN errors.
+
+    When stdout is a pipe (subprocess), the buffer can fill up causing
+    BlockingIOError (errno 11). This function retries with backoff.
+    """
+    max_retries = 5
+    for attempt in range(max_retries):
+        try:
+            print(*args, **kwargs)
+            return
+        except BlockingIOError:
+            if attempt < max_retries - 1:
+                time.sleep(0.1 * (attempt + 1))  # Backoff: 0.1s, 0.2s, 0.3s...
+            else:
+                # Last resort: try without flush
+                kwargs.pop('flush', None)
+                try:
+                    print(*args, **kwargs)
+                except Exception:
+                    pass  # Give up silently
 
 from client import create_client
 from progress import has_features, print_progress_summary, print_session_header
@@ -50,7 +75,7 @@ async def run_agent_session(
         - "continue" if agent should continue working
         - "error" if an error occurred
     """
-    print("Sending prompt to Claude Agent SDK...\n")
+    safe_print("Sending prompt to Claude Agent SDK...\n")
 
     try:
         # Send the query
@@ -68,15 +93,15 @@ async def run_agent_session(
 
                     if block_type == "TextBlock" and hasattr(block, "text"):
                         response_text += block.text
-                        print(block.text, end="", flush=True)
+                        safe_print(block.text, end="", flush=True)
                     elif block_type == "ToolUseBlock" and hasattr(block, "name"):
-                        print(f"\n[Tool: {block.name}]", flush=True)
+                        safe_print(f"\n[Tool: {block.name}]", flush=True)
                         if hasattr(block, "input"):
                             input_str = str(block.input)
                             if len(input_str) > 200:
-                                print(f"   Input: {input_str[:200]}...", flush=True)
+                                safe_print(f"   Input: {input_str[:200]}...", flush=True)
                             else:
-                                print(f"   Input: {input_str}", flush=True)
+                                safe_print(f"   Input: {input_str}", flush=True)
 
             # Handle UserMessage (tool results)
             elif msg_type == "UserMessage" and hasattr(msg, "content"):
@@ -89,20 +114,20 @@ async def run_agent_session(
 
                         # Check if command was blocked by security hook
                         if "blocked" in str(result_content).lower():
-                            print(f"   [BLOCKED] {result_content}", flush=True)
+                            safe_print(f"   [BLOCKED] {result_content}", flush=True)
                         elif is_error:
                             # Show errors (truncated)
                             error_str = str(result_content)[:500]
-                            print(f"   [Error] {error_str}", flush=True)
+                            safe_print(f"   [Error] {error_str}", flush=True)
                         else:
                             # Tool succeeded - just show brief confirmation
-                            print("   [Done]", flush=True)
+                            safe_print("   [Done]", flush=True)
 
-        print("\n" + "-" * 70 + "\n")
+        safe_print("\n" + "-" * 70 + "\n")
         return "continue", response_text
 
     except Exception as e:
-        print(f"Error during agent session: {e}")
+        safe_print(f"Error during agent session: {e}")
         return "error", str(e)
 
 
