@@ -265,6 +265,10 @@ export function useAssistantChat({
       connect();
 
       // Wait for connection then send start message
+      // Add retry limit to prevent infinite polling if connection never opens
+      const maxRetries = 50; // 50 * 100ms = 5 seconds max wait
+      let retryCount = 0;
+
       const checkAndSend = () => {
         if (wsRef.current?.readyState === WebSocket.OPEN) {
           setIsLoading(true);
@@ -277,13 +281,24 @@ export function useAssistantChat({
           }
           wsRef.current.send(JSON.stringify(payload));
         } else if (wsRef.current?.readyState === WebSocket.CONNECTING) {
+          retryCount++;
+          if (retryCount >= maxRetries) {
+            // Connection timeout - stop polling and report error
+            setIsLoading(false);
+            onError?.("Connection timeout: WebSocket failed to open");
+            return;
+          }
           setTimeout(checkAndSend, 100);
+        } else {
+          // WebSocket is closed or in an error state
+          setIsLoading(false);
+          onError?.("Failed to establish WebSocket connection");
         }
       };
 
       setTimeout(checkAndSend, 100);
     },
-    [connect],
+    [connect, onError],
   );
 
   const sendMessage = useCallback(
