@@ -28,6 +28,23 @@ function generateId(): string {
 }
 
 /**
+ * Type-safe helper to get a string value from unknown input
+ */
+function getStringValue(value: unknown, fallback: string): string {
+  return typeof value === "string" ? value : fallback;
+}
+
+/**
+ * Type-safe helper to get a feature ID from unknown input
+ */
+function getFeatureId(value: unknown): string {
+  if (typeof value === "number" || typeof value === "string") {
+    return String(value);
+  }
+  return "unknown";
+}
+
+/**
  * Get a user-friendly description for tool calls
  */
 function getToolDescription(
@@ -45,21 +62,21 @@ function getToolDescription(
     case "feature_get_for_regression":
       return "Getting features for regression testing...";
     case "feature_create":
-      return `Creating feature: ${input.name || "new feature"}`;
+      return `Creating feature: ${getStringValue(input.name, "new feature")}`;
     case "feature_create_bulk":
       return `Creating ${Array.isArray(input.features) ? input.features.length : "multiple"} features...`;
     case "feature_skip":
-      return `Skipping feature #${input.feature_id}`;
+      return `Skipping feature #${getFeatureId(input.feature_id)}`;
     case "feature_update":
-      return `Updating feature #${input.feature_id}`;
+      return `Updating feature #${getFeatureId(input.feature_id)}`;
     case "feature_delete":
-      return `Deleting feature #${input.feature_id}`;
+      return `Deleting feature #${getFeatureId(input.feature_id)}`;
     case "Read":
-      return `Reading file: ${input.file_path || "file"}`;
+      return `Reading file: ${getStringValue(input.file_path, "file")}`;
     case "Glob":
-      return `Searching files: ${input.pattern || "pattern"}`;
+      return `Searching files: ${getStringValue(input.pattern, "pattern")}`;
     case "Grep":
-      return `Searching content: ${input.pattern || "pattern"}`;
+      return `Searching content: ${getStringValue(input.pattern, "pattern")}`;
     default:
       return `Using tool: ${tool}`;
   }
@@ -116,18 +133,29 @@ export function useAssistantChat({
     wsRef.current = ws;
 
     ws.onopen = () => {
+      // Only act if this is still the current connection
+      if (wsRef.current !== ws) return;
+
       setConnectionStatus("connected");
       reconnectAttempts.current = 0;
 
+      // Clear any previous ping interval before starting a new one
+      if (pingIntervalRef.current) {
+        clearInterval(pingIntervalRef.current);
+      }
+
       // Start ping interval to keep connection alive
       pingIntervalRef.current = window.setInterval(() => {
-        if (ws.readyState === WebSocket.OPEN) {
+        if (wsRef.current === ws && ws.readyState === WebSocket.OPEN) {
           ws.send(JSON.stringify({ type: "ping" }));
         }
       }, 30000);
     };
 
     ws.onclose = () => {
+      // Only act if this is still the current connection
+      if (wsRef.current !== ws) return;
+
       setConnectionStatus("disconnected");
       if (pingIntervalRef.current) {
         clearInterval(pingIntervalRef.current);
@@ -146,6 +174,9 @@ export function useAssistantChat({
     };
 
     ws.onerror = () => {
+      // Only act if this is still the current connection
+      if (wsRef.current !== ws) return;
+
       setConnectionStatus("error");
       onError?.("WebSocket connection error");
     };
@@ -215,17 +246,20 @@ export function useAssistantChat({
           case "response_done": {
             setIsLoading(false);
 
-            // Mark current message as done streaming
+            // Find and mark the most recent streaming assistant message as done
+            // (may not be the last message if tool_call/system messages followed)
             setMessages((prev) => {
-              const lastMessage = prev[prev.length - 1];
-              if (
-                lastMessage?.role === "assistant" &&
-                lastMessage.isStreaming
-              ) {
-                return [
-                  ...prev.slice(0, -1),
-                  { ...lastMessage, isStreaming: false },
-                ];
+              // Find the most recent streaming assistant message from the end
+              for (let i = prev.length - 1; i >= 0; i--) {
+                const msg = prev[i];
+                if (msg.role === "assistant" && msg.isStreaming) {
+                  // Found it - update this message and return
+                  return [
+                    ...prev.slice(0, i),
+                    { ...msg, isStreaming: false },
+                    ...prev.slice(i + 1),
+                  ];
+                }
               }
               return prev;
             });
@@ -334,14 +368,25 @@ export function useAssistantChat({
 
   const disconnect = useCallback(() => {
     reconnectAttempts.current = maxReconnectAttempts; // Prevent reconnection
+
+    // Clear any pending reconnect timeout
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+
+    // Clear ping interval
     if (pingIntervalRef.current) {
       clearInterval(pingIntervalRef.current);
       pingIntervalRef.current = null;
     }
+
+    // Close WebSocket connection
     if (wsRef.current) {
       wsRef.current.close();
       wsRef.current = null;
     }
+
     setConnectionStatus("disconnected");
   }, []);
 
