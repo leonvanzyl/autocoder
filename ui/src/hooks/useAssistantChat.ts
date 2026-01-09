@@ -83,18 +83,29 @@ export function useAssistantChat({
     wsRef.current = ws;
 
     ws.onopen = () => {
+      // Only act if this is still the current connection
+      if (wsRef.current !== ws) return;
+
       setConnectionStatus("connected");
       reconnectAttempts.current = 0;
 
+      // Clear any previous ping interval before starting a new one
+      if (pingIntervalRef.current) {
+        clearInterval(pingIntervalRef.current);
+      }
+
       // Start ping interval to keep connection alive
       pingIntervalRef.current = window.setInterval(() => {
-        if (ws.readyState === WebSocket.OPEN) {
+        if (wsRef.current === ws && ws.readyState === WebSocket.OPEN) {
           ws.send(JSON.stringify({ type: "ping" }));
         }
       }, 30000);
     };
 
     ws.onclose = () => {
+      // Only act if this is still the current connection
+      if (wsRef.current !== ws) return;
+
       setConnectionStatus("disconnected");
       if (pingIntervalRef.current) {
         clearInterval(pingIntervalRef.current);
@@ -113,6 +124,9 @@ export function useAssistantChat({
     };
 
     ws.onerror = () => {
+      // Only act if this is still the current connection
+      if (wsRef.current !== ws) return;
+
       setConnectionStatus("error");
       onError?.("WebSocket connection error");
     };
@@ -213,17 +227,20 @@ export function useAssistantChat({
             setIsLoading(false);
             currentAssistantMessageRef.current = null;
 
-            // Mark current message as done streaming
+            // Find and mark the most recent streaming assistant message as done
+            // (may not be the last message if tool_call/system messages followed)
             setMessages((prev) => {
-              const lastMessage = prev[prev.length - 1];
-              if (
-                lastMessage?.role === "assistant" &&
-                lastMessage.isStreaming
-              ) {
-                return [
-                  ...prev.slice(0, -1),
-                  { ...lastMessage, isStreaming: false },
-                ];
+              // Find the most recent streaming assistant message from the end
+              for (let i = prev.length - 1; i >= 0; i--) {
+                const msg = prev[i];
+                if (msg.role === "assistant" && msg.isStreaming) {
+                  // Found it - update this message and return
+                  return [
+                    ...prev.slice(0, i),
+                    { ...msg, isStreaming: false },
+                    ...prev.slice(i + 1),
+                  ];
+                }
               }
               return prev;
             });
@@ -333,14 +350,25 @@ export function useAssistantChat({
 
   const disconnect = useCallback(() => {
     reconnectAttempts.current = maxReconnectAttempts; // Prevent reconnection
+
+    // Clear any pending reconnect timeout
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+
+    // Clear ping interval
     if (pingIntervalRef.current) {
       clearInterval(pingIntervalRef.current);
       pingIntervalRef.current = null;
     }
+
+    // Close WebSocket connection
     if (wsRef.current) {
       wsRef.current.close();
       wsRef.current = null;
     }
+
     setConnectionStatus("disconnected");
   }, []);
 
