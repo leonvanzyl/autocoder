@@ -354,3 +354,47 @@ export interface SettingsUpdate {
   yolo_mode?: boolean
   model?: string
 }
+
+// ============================================================================
+// Tech Stack Types
+// ============================================================================
+
+export type FrameworkChoice =
+  | 'react_node'
+  | 'laravel_react'
+  | 'laravel_vue'
+  | 'laravel_livewire'
+  | 'laravel_api'
+
+export type DatabaseChoice = 'sqlite' | 'mysql' | 'postgresql' | 'mariadb'
+
+export type TestingFramework = 'jest' | 'vitest' | 'pest' | 'phpunit'
+
+export interface TechStackConfig {
+  framework: FrameworkChoice
+  database: DatabaseChoice
+  testing: TestingFramework
+}
+
+export interface FrameworkOption {
+  id: FrameworkChoice
+  name: string
+  description: string
+  icon: 'react' | 'laravel'
+  isDefault?: boolean
+}
+
+export interface DatabaseOption {
+  id: DatabaseChoice
+  name: string
+  description: string
+  isDefault?: boolean
+}
+
+export interface TestingOption {
+  id: TestingFramework
+  name: string
+  description: string
+  forFramework: 'nodejs' | 'laravel'
+  isDefault?: boolean
+}

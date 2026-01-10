@@ -96,6 +96,26 @@ PLAYWRIGHT_TOOLS = [
     "mcp__playwright__browser_install",
 ]
 
+# Laravel Boost MCP tools for Laravel development
+# Note: Laravel Boost uses hyphens in tool names, not underscores
+LARAVEL_BOOST_TOOLS = [
+    "mcp__laravel_boost__database-query",
+    "mcp__laravel_boost__database-schema",
+    "mcp__laravel_boost__database-connections",
+    "mcp__laravel_boost__list-routes",
+    "mcp__laravel_boost__list-artisan-commands",
+    "mcp__laravel_boost__read-log-entries",
+    "mcp__laravel_boost__last-error",
+    "mcp__laravel_boost__browser-logs",
+    "mcp__laravel_boost__get-config",
+    "mcp__laravel_boost__list-available-config-keys",
+    "mcp__laravel_boost__list-available-env-vars",
+    "mcp__laravel_boost__search-docs",
+    "mcp__laravel_boost__tinker",
+    "mcp__laravel_boost__get-absolute-url",
+    "mcp__laravel_boost__application-info",
+]
+
 # Built-in tools
 BUILTIN_TOOLS = [
     "Read",
@@ -109,7 +129,12 @@ BUILTIN_TOOLS = [
 ]
 
 
-def create_client(project_dir: Path, model: str, yolo_mode: bool = False):
+def create_client(
+    project_dir: Path,
+    model: str,
+    yolo_mode: bool = False,
+    is_laravel: bool = False,
+):
     """
     Create a Claude Agent SDK client with multi-layered security.
 
@@ -117,6 +142,7 @@ def create_client(project_dir: Path, model: str, yolo_mode: bool = False):
         project_dir: Directory for the project
         model: Claude model to use
         yolo_mode: If True, skip Playwright MCP server for rapid prototyping
+        is_laravel: If True, include Laravel Boost MCP server for Laravel development
 
     Returns:
         Configured ClaudeSDKClient (from claude_agent_sdk)
@@ -135,6 +161,8 @@ def create_client(project_dir: Path, model: str, yolo_mode: bool = False):
     allowed_tools = [*BUILTIN_TOOLS, *FEATURE_MCP_TOOLS]
     if not yolo_mode:
         allowed_tools.extend(PLAYWRIGHT_TOOLS)
+    if is_laravel:
+        allowed_tools.extend(LARAVEL_BOOST_TOOLS)
 
     # Build permissions list
     permissions_list = [
@@ -156,6 +184,9 @@ def create_client(project_dir: Path, model: str, yolo_mode: bool = False):
     if not yolo_mode:
         # Allow Playwright MCP tools for browser automation (standard mode only)
         permissions_list.extend(PLAYWRIGHT_TOOLS)
+    if is_laravel:
+        # Allow Laravel Boost MCP tools for Laravel development
+        permissions_list.extend(LARAVEL_BOOST_TOOLS)
 
     # Create comprehensive security settings
     # Note: Using relative paths ("./**") restricts access to project directory
@@ -180,10 +211,19 @@ def create_client(project_dir: Path, model: str, yolo_mode: bool = False):
     print("   - Sandbox enabled (OS-level bash isolation)")
     print(f"   - Filesystem restricted to: {project_dir.resolve()}")
     print("   - Bash commands restricted to allowlist (see security.py)")
+
+    # Build MCP server description for logging
+    mcp_list = ["features (database)"]
+    if not yolo_mode:
+        mcp_list.append("playwright (browser)")
+    if is_laravel:
+        mcp_list.append("laravel_boost (Laravel tools)")
     if yolo_mode:
-        print("   - MCP servers: features (database) - YOLO MODE (no Playwright)")
+        print(f"   - MCP servers: {', '.join(mcp_list)} - YOLO MODE")
     else:
-        print("   - MCP servers: playwright (browser), features (database)")
+        print(f"   - MCP servers: {', '.join(mcp_list)}")
+    if is_laravel:
+        print("   - Framework: Laravel")
     print("   - Project settings enabled (skills, commands, CLAUDE.md)")
     print()
 
@@ -219,6 +259,17 @@ def create_client(project_dir: Path, model: str, yolo_mode: bool = False):
         mcp_servers["playwright"] = {
             "command": "npx",
             "args": playwright_args,
+        }
+
+    if is_laravel:
+        # Include Laravel Boost MCP server for Laravel development
+        mcp_servers["laravel_boost"] = {
+            "command": "npx",
+            "args": ["@anthropic/laravel-boost"],
+            "env": {
+                **os.environ,
+                "PROJECT_DIR": str(project_dir.resolve()),
+            },
         }
 
     return ClaudeSDKClient(

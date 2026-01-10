@@ -8,6 +8,7 @@ Request/Response models for the API endpoints.
 import base64
 import sys
 from datetime import datetime
+from enum import Enum
 from pathlib import Path
 from typing import Literal
 
@@ -21,6 +22,65 @@ if str(_root) not in sys.path:
 from registry import DEFAULT_MODEL, VALID_MODELS
 
 # ============================================================================
+# Tech Stack Enums and Schemas
+# ============================================================================
+
+
+class FrameworkChoice(str, Enum):
+    """Available framework options for project creation."""
+    REACT_NODE = "react_node"           # React + Node.js (default)
+    LARAVEL_REACT = "laravel_react"     # Laravel + React via Inertia.js
+    LARAVEL_VUE = "laravel_vue"         # Laravel + Vue via Inertia.js
+    LARAVEL_LIVEWIRE = "laravel_livewire"  # Laravel + Livewire
+    LARAVEL_API = "laravel_api"         # Laravel API Only (no frontend)
+
+
+class DatabaseChoice(str, Enum):
+    """Available database options."""
+    SQLITE = "sqlite"
+    MYSQL = "mysql"
+    POSTGRESQL = "postgresql"
+    MARIADB = "mariadb"
+
+
+class TestingFramework(str, Enum):
+    """Available testing framework options."""
+    # Node.js testing frameworks
+    JEST = "jest"
+    VITEST = "vitest"
+    # Laravel testing frameworks
+    PEST = "pest"
+    PHPUNIT = "phpunit"
+
+
+class TechStackConfig(BaseModel):
+    """Technology stack configuration for a project."""
+    framework: FrameworkChoice = FrameworkChoice.REACT_NODE
+    database: DatabaseChoice = DatabaseChoice.SQLITE
+    testing: TestingFramework | None = None  # If None, uses framework default
+
+    def is_laravel(self) -> bool:
+        """Check if this is a Laravel-based stack."""
+        return self.framework.value.startswith("laravel")
+
+    def get_default_testing(self) -> TestingFramework:
+        """Get default testing framework based on main framework."""
+        if self.is_laravel():
+            return TestingFramework.PEST
+        return TestingFramework.VITEST
+
+    def get_laravel_starter_kit(self) -> str | None:
+        """Get the Laravel starter kit flag for laravel new command."""
+        mapping = {
+            FrameworkChoice.LARAVEL_REACT: "react",
+            FrameworkChoice.LARAVEL_VUE: "vue",
+            FrameworkChoice.LARAVEL_LIVEWIRE: "livewire",
+            FrameworkChoice.LARAVEL_API: None,  # No starter kit
+        }
+        return mapping.get(self.framework)
+
+
+# ============================================================================
 # Project Schemas
 # ============================================================================
 
@@ -29,6 +89,7 @@ class ProjectCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=50, pattern=r'^[a-zA-Z0-9_-]+$')
     path: str = Field(..., min_length=1, description="Absolute path to project directory")
     spec_method: Literal["claude", "manual"] = "claude"
+    tech_stack: TechStackConfig | None = None  # None = use defaults (React + Node.js)
 
 
 class ProjectStats(BaseModel):

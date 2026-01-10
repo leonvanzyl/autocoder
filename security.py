@@ -32,6 +32,12 @@ ALLOWED_COMMANDS = {
     "npx",
     "pnpm",  # Project uses pnpm
     "node",
+    # PHP/Laravel development
+    "php",
+    "composer",
+    "laravel",
+    "artisan",
+    "pest",
     # Version control
     "git",
     # Docker (for PostgreSQL)
@@ -189,6 +195,9 @@ def validate_pkill_command(command_string: str) -> tuple[bool, str]:
         "npx",
         "vite",
         "next",
+        # PHP/Laravel dev servers
+        "php",
+        "artisan",
     }
 
     try:

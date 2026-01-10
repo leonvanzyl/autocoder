@@ -21,6 +21,7 @@ import type {
   Settings,
   SettingsUpdate,
   ModelsResponse,
+  TechStackConfig,
 } from './types'
 
 const API_BASE = '/api'
@@ -53,11 +54,17 @@ export async function listProjects(): Promise<ProjectSummary[]> {
 export async function createProject(
   name: string,
   path: string,
-  specMethod: 'claude' | 'manual' = 'manual'
+  specMethod: 'claude' | 'manual' = 'manual',
+  techStack?: TechStackConfig
 ): Promise<ProjectSummary> {
   return fetchJSON('/projects', {
     method: 'POST',
-    body: JSON.stringify({ name, path, spec_method: specMethod }),
+    body: JSON.stringify({
+      name,
+      path,
+      spec_method: specMethod,
+      tech_stack: techStack,
+    }),
   })
 }
 

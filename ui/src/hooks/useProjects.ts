@@ -4,7 +4,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import * as api from '../lib/api'
-import type { FeatureCreate, ModelsResponse, Settings, SettingsUpdate } from '../lib/types'
+import type { FeatureCreate, ModelsResponse, Settings, SettingsUpdate, TechStackConfig } from '../lib/types'
 
 // ============================================================================
 // Projects
@@ -29,8 +29,12 @@ export function useCreateProject() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: ({ name, path, specMethod }: { name: string; path: string; specMethod?: 'claude' | 'manual' }) =>
-      api.createProject(name, path, specMethod),
+    mutationFn: ({ name, path, specMethod, techStack }: {
+      name: string
+      path: string
+      specMethod?: 'claude' | 'manual'
+      techStack?: TechStackConfig
+    }) => api.createProject(name, path, specMethod, techStack),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['projects'] })
     },
