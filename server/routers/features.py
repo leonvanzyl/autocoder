@@ -257,6 +257,92 @@ async def delete_feature(project_name: str, feature_id: int):
         raise HTTPException(status_code=500, detail="Failed to delete feature")
 
 
+@router.post("/repair")
+async def repair_database(project_name: str):
+    """
+    Repair the feature database by removing duplicates and compacting IDs.
+
+    Performs the following repairs:
+    1. Removes duplicate features (keeping the one with lowest ID)
+    2. Compacts IDs to be sequential (1, 2, 3, ...) with no gaps
+    3. Resets priorities to match the new sequential IDs
+    """
+    from sqlalchemy import text
+
+    project_name = validate_project_name(project_name)
+    project_dir = _get_project_path(project_name)
+
+    if not project_dir:
+        raise HTTPException(status_code=404, detail=f"Project '{project_name}' not found in registry")
+
+    if not project_dir.exists():
+        raise HTTPException(status_code=404, detail="Project directory not found")
+
+    db_file = project_dir / "features.db"
+    if not db_file.exists():
+        return {"duplicates_removed": 0, "ids_compacted": False, "total_features": 0}
+
+    _, Feature = _get_db_classes()
+
+    try:
+        with get_db_session(project_dir) as session:
+            # Step 1: Find and remove duplicates (keep lowest ID for each name)
+            duplicates_query = """
+                SELECT id FROM features
+                WHERE id NOT IN (
+                    SELECT MIN(id) FROM features GROUP BY name
+                )
+            """
+            result = session.execute(text(duplicates_query))
+            duplicate_ids = [row[0] for row in result.fetchall()]
+            duplicates_removed = len(duplicate_ids)
+
+            if duplicate_ids:
+                session.execute(
+                    text(f"DELETE FROM features WHERE id IN ({','.join(map(str, duplicate_ids))})")
+                )
+                session.commit()
+
+            # Step 2: Get current state
+            all_features = session.query(Feature).order_by(Feature.priority.asc(), Feature.id.asc()).all()
+            old_max_id = max(f.id for f in all_features) if all_features else 0
+            total_features = len(all_features)
+
+            # Step 3: Check if compaction is needed
+            expected_ids = set(range(1, total_features + 1))
+            actual_ids = set(f.id for f in all_features)
+            needs_compaction = expected_ids != actual_ids
+
+            new_max_id = old_max_id
+            if needs_compaction and all_features:
+                # First, shift all IDs to negative to avoid conflicts
+                session.execute(text("UPDATE features SET id = -id"))
+                session.commit()
+
+                # Then assign new sequential IDs
+                for new_id, feature in enumerate(all_features, start=1):
+                    session.execute(
+                        text(f"UPDATE features SET id = {new_id}, priority = {new_id} WHERE id = {-feature.id}")
+                    )
+                session.commit()
+
+                new_max_id = total_features
+
+            return {
+                "success": True,
+                "duplicates_removed": duplicates_removed,
+                "ids_compacted": needs_compaction,
+                "old_max_id": old_max_id,
+                "new_max_id": new_max_id,
+                "total_features": total_features
+            }
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Failed to repair database")
+        raise HTTPException(status_code=500, detail="Failed to repair database")
+
+
 @router.patch("/{feature_id}/skip")
 async def skip_feature(project_name: str, feature_id: int):
     """

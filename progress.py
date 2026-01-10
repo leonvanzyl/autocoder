@@ -17,6 +17,21 @@ WEBHOOK_URL = os.environ.get("PROGRESS_N8N_WEBHOOK_URL")
 PROGRESS_CACHE_FILE = ".progress_cache"
 
 
+def all_features_complete(project_dir: Path) -> bool:
+    """
+    Check if all features in the project are complete (passing).
+
+    Returns True if:
+    - There are features AND all of them are passing
+
+    Returns False if:
+    - No features exist, OR
+    - There are pending/failing features
+    """
+    passing, in_progress, total = count_passing_tests(project_dir)
+    return total > 0 and passing == total
+
+
 def has_features(project_dir: Path) -> bool:
     """
     Check if the project has features in the database.

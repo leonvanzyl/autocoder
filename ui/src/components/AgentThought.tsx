@@ -60,18 +60,22 @@ export function AgentThought({ logs, agentStatus }: AgentThoughtProps) {
     : 0
 
   // Determine if component should be visible
+  // Use displayedThought for visibility check to prevent flickering when
+  // new logs come in without a valid thought
   const shouldShow = useMemo(() => {
-    if (!thought) return false
+    const hasContent = thought || displayedThought
+    if (!hasContent) return false
     if (agentStatus === 'running') return true
     if (agentStatus === 'paused') {
       return Date.now() - lastLogTimestamp < IDLE_TIMEOUT
     }
     return false
-  }, [thought, agentStatus, lastLogTimestamp])
+  }, [thought, displayedThought, agentStatus, lastLogTimestamp])
 
   // Animate text changes using CSS transitions
+  // Only update displayedThought when we have a new valid thought
   useEffect(() => {
-    if (thought !== displayedThought && thought) {
+    if (thought && thought !== displayedThought) {
       // Fade out
       setTextVisible(false)
       // After fade out, update text and fade in
@@ -89,11 +93,16 @@ export function AgentThought({ logs, agentStatus }: AgentThoughtProps) {
       setIsVisible(true)
     } else {
       // Delay hiding to allow exit animation
-      const timeout = setTimeout(() => setIsVisible(false), 300)
+      const timeout = setTimeout(() => {
+        setIsVisible(false)
+        // Clear displayed thought only after fully hidden
+        setDisplayedThought(null)
+      }, 300)
       return () => clearTimeout(timeout)
     }
   }, [shouldShow])
 
+  // Don't render if not visible or no content to display
   if (!isVisible || !displayedThought) return null
 
   const isRunning = agentStatus === 'running'
