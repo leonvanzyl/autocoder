@@ -38,6 +38,7 @@ ALLOWED_COMMANDS = {
     "laravel",
     "artisan",
     "pest",
+    "pint",  # Laravel code style fixer
     # Version control
     "git",
     # Docker (for PostgreSQL)
