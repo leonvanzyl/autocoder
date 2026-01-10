@@ -23,34 +23,62 @@ This number was determined during spec creation and must be followed precisely. 
 
 Before creating features, you must initialize the Laravel project using the Laravel installer.
 
-Based on the `<laravel_specific>` section in your app_spec.txt, run the appropriate command:
+Read the `<laravel_specific>` section in your app_spec.txt to determine the correct flags.
 
 ### Laravel Installer Commands
 
+**Starter kit** (from `<starter_kit>` in app_spec.txt):
+- `react` → use `--react`
+- `vue` → use `--vue`
+- `livewire` → use `--livewire`
+- `none` → no starter kit flag (API-only)
+
+**Testing framework** (from `<testing_framework>` in app_spec.txt):
+- `pest` → use `--pest`
+- `phpunit` → use `--phpunit`
+
+**Database** (from `<technology_stack><backend><database>` in app_spec.txt):
+- `SQLite` → use `--database=sqlite`
+- `MySQL` → use `--database=mysql`
+- `PostgreSQL` → use `--database=pgsql`
+- `MariaDB` → use `--database=mariadb`
+
+**Example commands:**
+
 ```bash
-# For React starter kit:
-laravel new . --react --pest --boost --database=sqlite --npm
+# React + Pest + SQLite
+laravel new . --react --pest --database=sqlite --npm
 
-# For Vue starter kit:
-laravel new . --vue --pest --boost --database=sqlite --npm
+# Vue + PHPUnit + MySQL
+laravel new . --vue --phpunit --database=mysql --npm
 
-# For Livewire starter kit:
-laravel new . --livewire --pest --boost --database=sqlite --npm
+# Livewire + Pest + PostgreSQL
+laravel new . --livewire --pest --database=pgsql --npm
 
-# For API-only (no starter kit):
-laravel new . --pest --boost --database=sqlite --npm
+# API-only + Pest + MariaDB
+laravel new . --pest --database=mariadb --npm
 ```
 
 **Flag Reference:**
-- `--react` / `--vue` / `--livewire` - Starter kit with frontend scaffolding
-- No starter flag = API-only Laravel (no frontend)
-- `--pest` - Use Pest testing framework (recommended)
-- `--phpunit` - Use PHPUnit instead of Pest
-- `--boost` - Install Laravel Boost MCP server
-- `--database=sqlite` - Database driver (sqlite, mysql, pgsql, mariadb)
+- `--react` / `--vue` / `--livewire` - Starter kit (read from `<starter_kit>` in spec)
+- No starter flag = API-only Laravel
+- `--pest` / `--phpunit` - Testing framework (read from `<testing_framework>` in spec)
+- `--database=X` - Database driver (read from `<database>` in spec)
 - `--npm` - Use npm for frontend dependencies
 
-### After Installation
+### After Project Creation - Install Laravel Boost
+
+Laravel Boost provides MCP tools for AI agent integration. Install it after creating the project:
+
+```bash
+# Install Laravel Boost via Composer
+composer require laravel/boost --dev
+
+# Run Boost installation non-interactively (skips prompts)
+php artisan boost:install --no-interaction
+```
+
+### Then Complete Setup
 
 ```bash
 # Run database migrations
