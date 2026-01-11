@@ -114,6 +114,7 @@ export function ExpandProjectChat({
         const base64Data = dataUrl.split(',')[1]
 
         const attachment: ImageAttachment = {
+          type: 'image',
           id: `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
           filename: file.name,
           mimeType: file.type as 'image/jpeg' | 'image/png',

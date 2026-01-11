@@ -84,7 +84,7 @@ def create_database(project_dir: Path) -> tuple:
         Tuple of (engine, SessionLocal)
     """
     db_url = get_database_url(project_dir)
-    engine = create_engine(db_url, connect_args={"check_same_thread": False})
+    engine = create_engine(db_url, connect_args={"check_same_thread": False, "timeout": 30})
     Base.metadata.create_all(bind=engine)
 
     # Migrate existing databases to add in_progress column

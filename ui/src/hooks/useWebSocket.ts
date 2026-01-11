@@ -17,7 +17,7 @@ interface WebSocketState {
   isConnected: boolean
 }
 
-const MAX_LOGS = 100 // Keep last 100 log lines
+const MAX_LOGS = 1000 // Keep last 1000 log lines
 
 export function useProjectWebSocket(projectName: string | null) {
   const [state, setState] = useState<WebSocketState>({

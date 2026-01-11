@@ -10,15 +10,85 @@
  */
 
 import { useState } from 'react'
-import { X, Bot, FileEdit, ArrowRight, ArrowLeft, Loader2, CheckCircle2, Folder } from 'lucide-react'
+import { X, Bot, FileEdit, ArrowRight, ArrowLeft, Loader2, CheckCircle2, Folder, Check } from 'lucide-react'
 import { useCreateProject } from '../hooks/useProjects'
 import { SpecCreationChat } from './SpecCreationChat'
 import { FolderBrowser } from './FolderBrowser'
 import { startAgent } from '../lib/api'
+import type {
+  TechStackConfig,
+  FrameworkChoice,
+  TestingFramework,
+  FrameworkOption,
+  DatabaseOption,
+  TestingOption,
+} from '../lib/types'
 
 type InitializerStatus = 'idle' | 'starting' | 'error'
 
-type Step = 'name' | 'folder' | 'method' | 'chat' | 'complete'
+type Step = 'name' | 'folder' | 'techStack' | 'techOptions' | 'method' | 'chat' | 'complete'
+
+// Framework options for tech stack selection
+const FRAMEWORK_OPTIONS: FrameworkOption[] = [
+  {
+    id: 'react_node',
+    name: 'React + Node.js',
+    description: 'Full-stack JavaScript with Express backend',
+    icon: 'react',
+    isDefault: true,
+  },
+  {
+    id: 'laravel_react',
+    name: 'Laravel + React',
+    description: 'PHP backend with React (Inertia.js)',
+    icon: 'laravel',
+  },
+  {
+    id: 'laravel_vue',
+    name: 'Laravel + Vue',
+    description: 'PHP backend with Vue (Inertia.js)',
+    icon: 'laravel',
+  },
+  {
+    id: 'laravel_livewire',
+    name: 'Laravel + Livewire',
+    description: 'PHP full-stack with reactive components',
+    icon: 'laravel',
+  },
+  {
+    id: 'laravel_api',
+    name: 'Laravel API Only',
+    description: 'PHP API backend without frontend',
+    icon: 'laravel',
+  },
+]
+
+// Database options
+const DATABASE_OPTIONS: DatabaseOption[] = [
+  { id: 'sqlite', name: 'SQLite', description: 'File-based, zero config', isDefault: true },
+  { id: 'mysql', name: 'MySQL', description: 'Popular relational database' },
+  { id: 'postgresql', name: 'PostgreSQL', description: 'Advanced open-source database' },
+  { id: 'mariadb', name: 'MariaDB', description: 'MySQL fork with enhancements' },
+]
+
+// Testing framework options
+const TESTING_OPTIONS: TestingOption[] = [
+  { id: 'vitest', name: 'Vitest', description: 'Fast Vite-native testing', forFramework: 'nodejs', isDefault: true },
+  { id: 'jest', name: 'Jest', description: 'Feature-rich testing framework', forFramework: 'nodejs' },
+  { id: 'pest', name: 'Pest', description: 'Elegant PHP testing', forFramework: 'laravel', isDefault: true },
+  { id: 'phpunit', name: 'PHPUnit', description: 'Standard PHP testing', forFramework: 'laravel' },
+]
+
+// Helper to check if framework is Laravel-based
+function isLaravelFramework(framework: FrameworkChoice): boolean {
+  return framework.startsWith('laravel')
+}
+
+// Get default testing framework based on stack
+function getDefaultTesting(framework: FrameworkChoice): TestingFramework {
+  return isLaravelFramework(framework) ? 'pest' : 'vitest'
+}
+
 type SpecMethod = 'claude' | 'manual'
 
 interface NewProjectModalProps {
@@ -40,9 +110,19 @@ export function NewProjectModal({
   const [initializerStatus, setInitializerStatus] = useState<InitializerStatus>('idle')
   const [initializerError, setInitializerError] = useState<string | null>(null)
   const [yoloModeSelected, setYoloModeSelected] = useState(false)
+  const [techStack, setTechStack] = useState<TechStackConfig>({
+    framework: 'react_node',
+    database: 'sqlite',
+    testing: 'vitest',
+  })
 
   // Suppress unused variable warning - specMethod may be used in future
   void _specMethod
+
+  // Get testing options for current framework
+  const availableTestingOptions = TESTING_OPTIONS.filter(
+    opt => opt.forFramework === (isLaravelFramework(techStack.framework) ? 'laravel' : 'nodejs')
+  )
 
   const createProject = useCreateProject()
 
@@ -70,6 +150,20 @@ export function NewProjectModal({
     // Append project name to the selected path
     const fullPath = path.endsWith('/') ? `${path}${projectName.trim()}` : `${path}/${projectName.trim()}`
     setProjectPath(fullPath)
+    setStep('techStack')
+  }
+
+  const handleFrameworkSelect = (framework: FrameworkChoice) => {
+    // Update framework and set default testing for that framework
+    setTechStack(prev => ({
+      ...prev,
+      framework,
+      testing: getDefaultTesting(framework),
+    }))
+    setStep('techOptions')
+  }
+
+  const handleTechOptionsConfirm = () => {
     setStep('method')
   }
 
@@ -93,6 +187,7 @@ export function NewProjectModal({
           name: projectName.trim(),
           path: projectPath,
           specMethod: 'manual',
+          techStack,
         })
         setStep('complete')
         setTimeout(() => {
@@ -109,6 +204,7 @@ export function NewProjectModal({
           name: projectName.trim(),
           path: projectPath,
           specMethod: 'claude',
+          techStack,
         })
         setStep('chat')
       } catch (err: unknown) {
@@ -163,13 +259,22 @@ export function NewProjectModal({
     setInitializerStatus('idle')
     setInitializerError(null)
     setYoloModeSelected(false)
+    setTechStack({
+      framework: 'react_node',
+      database: 'sqlite',
+      testing: 'vitest',
+    })
     onClose()
   }
 
   const handleBack = () => {
     if (step === 'method') {
-      setStep('folder')
+      setStep('techOptions')
       setSpecMethod(null)
+    } else if (step === 'techOptions') {
+      setStep('techStack')
+    } else if (step === 'techStack') {
+      setStep('folder')
     } else if (step === 'folder') {
       setStep('name')
       setProjectPath(null)
@@ -244,6 +349,8 @@ export function NewProjectModal({
         <div className="flex items-center justify-between p-4 border-b-3 border-[var(--color-neo-border)]">
           <h2 className="font-display font-bold text-xl text-[#1a1a1a]">
             {step === 'name' && 'Create New Project'}
+            {step === 'techStack' && 'Choose Tech Stack'}
+            {step === 'techOptions' && 'Configure Options'}
             {step === 'method' && 'Choose Setup Method'}
             {step === 'complete' && 'Project Created!'}
           </h2>
@@ -297,7 +404,177 @@ export function NewProjectModal({
             </form>
           )}
 
-          {/* Step 2: Spec Method */}
+          {/* Step 2: Tech Stack Selection */}
+          {step === 'techStack' && (
+            <div>
+              <p className="text-[var(--color-neo-text-secondary)] mb-6">
+                Select the framework for your project
+              </p>
+
+              <div className="grid grid-cols-1 gap-3">
+                {FRAMEWORK_OPTIONS.map((option) => {
+                  const isSelected = techStack.framework === option.id
+                  const isLaravel = option.icon === 'laravel'
+
+                  return (
+                    <button
+                      key={option.id}
+                      onClick={() => handleFrameworkSelect(option.id)}
+                      className={`
+                        w-full text-left p-4
+                        border-3 border-[var(--color-neo-border)]
+                        shadow-[4px_4px_0px_rgba(0,0,0,1)]
+                        hover:translate-x-[-2px] hover:translate-y-[-2px]
+                        hover:shadow-[6px_6px_0px_rgba(0,0,0,1)]
+                        transition-all duration-150
+                        ${isSelected ? 'bg-[var(--color-neo-progress)]' : 'bg-white'}
+                      `}
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className={`
+                          w-10 h-10 flex items-center justify-center
+                          border-2 border-[var(--color-neo-border)]
+                          shadow-[2px_2px_0px_rgba(0,0,0,1)]
+                          font-bold text-lg
+                          ${isLaravel ? 'bg-[#FF2D20] text-white' : 'bg-[#61DAFB] text-[#1a1a1a]'}
+                        `}>
+                          {isLaravel ? 'L' : 'R'}
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className={`font-bold ${isSelected ? 'text-white' : 'text-[#1a1a1a]'}`}>
+                              {option.name}
+                            </span>
+                            {option.isDefault && (
+                              <span className="neo-badge bg-[var(--color-neo-done)] text-xs">
+                                Default
+                              </span>
+                            )}
+                            {isSelected && (
+                              <Check size={18} className="text-white ml-auto" />
+                            )}
+                          </div>
+                          <p className={`text-sm mt-0.5 ${isSelected ? 'text-white/80' : 'text-[var(--color-neo-text-secondary)]'}`}>
+                            {option.description}
+                          </p>
+                        </div>
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+
+              <div className="flex justify-start mt-6">
+                <button
+                  onClick={handleBack}
+                  className="neo-btn neo-btn-ghost"
+                >
+                  <ArrowLeft size={16} />
+                  Back
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Step 3: Tech Options (Database & Testing) */}
+          {step === 'techOptions' && (
+            <div>
+              <p className="text-[var(--color-neo-text-secondary)] mb-6">
+                Configure database and testing options
+              </p>
+
+              {/* Database Selection */}
+              <div className="mb-6">
+                <label className="block font-bold mb-2 text-[#1a1a1a]">
+                  Database
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {DATABASE_OPTIONS.map((option) => {
+                    const isSelected = techStack.database === option.id
+                    return (
+                      <button
+                        key={option.id}
+                        onClick={() => setTechStack(prev => ({ ...prev, database: option.id }))}
+                        className={`
+                          p-3 text-left
+                          border-2 border-[var(--color-neo-border)]
+                          shadow-[2px_2px_0px_rgba(0,0,0,1)]
+                          transition-all duration-150
+                          ${isSelected
+                            ? 'bg-[var(--color-neo-progress)] text-white'
+                            : 'bg-white hover:bg-gray-50'
+                          }
+                        `}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className={`font-bold text-sm ${isSelected ? 'text-white' : 'text-[#1a1a1a]'}`}>{option.name}</span>
+                          {isSelected && <Check size={14} />}
+                        </div>
+                        <p className={`text-xs mt-0.5 ${isSelected ? 'text-white/80' : 'text-[var(--color-neo-text-secondary)]'}`}>
+                          {option.description}
+                        </p>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Testing Framework Selection */}
+              <div className="mb-6">
+                <label className="block font-bold mb-2 text-[#1a1a1a]">
+                  Testing Framework
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {availableTestingOptions.map((option) => {
+                    const isSelected = techStack.testing === option.id
+                    return (
+                      <button
+                        key={option.id}
+                        onClick={() => setTechStack(prev => ({ ...prev, testing: option.id }))}
+                        className={`
+                          p-3 text-left
+                          border-2 border-[var(--color-neo-border)]
+                          shadow-[2px_2px_0px_rgba(0,0,0,1)]
+                          transition-all duration-150
+                          ${isSelected
+                            ? 'bg-[var(--color-neo-progress)] text-white'
+                            : 'bg-white hover:bg-gray-50'
+                          }
+                        `}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className={`font-bold text-sm ${isSelected ? 'text-white' : 'text-[#1a1a1a]'}`}>{option.name}</span>
+                          {isSelected && <Check size={14} />}
+                        </div>
+                        <p className={`text-xs mt-0.5 ${isSelected ? 'text-white/80' : 'text-[var(--color-neo-text-secondary)]'}`}>
+                          {option.description}
+                        </p>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              <div className="flex justify-between mt-6">
+                <button
+                  onClick={handleBack}
+                  className="neo-btn neo-btn-ghost"
+                >
+                  <ArrowLeft size={16} />
+                  Back
+                </button>
+                <button
+                  onClick={handleTechOptionsConfirm}
+                  className="neo-btn neo-btn-primary"
+                >
+                  Next
+                  <ArrowRight size={16} />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Step 4: Spec Method */}
           {step === 'method' && (
             <div>
               <p className="text-[var(--color-neo-text-secondary)] mb-6">

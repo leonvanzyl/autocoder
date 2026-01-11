@@ -6,16 +6,18 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Send, X, CheckCircle2, AlertCircle, Wifi, WifiOff, RotateCcw, Loader2, ArrowRight, Zap, Paperclip, ExternalLink } from 'lucide-react'
+import { Send, X, CheckCircle2, AlertCircle, Wifi, WifiOff, RotateCcw, Loader2, ArrowRight, Zap, Paperclip, ExternalLink, FileText } from 'lucide-react'
 import { useSpecChat } from '../hooks/useSpecChat'
 import { ChatMessage } from './ChatMessage'
 import { QuestionOptions } from './QuestionOptions'
 import { TypingIndicator } from './TypingIndicator'
-import type { ImageAttachment } from '../lib/types'
+import type { FileAttachment, ImageAttachment, TextAttachment } from '../lib/types'
 
-// Image upload validation constants
+// File upload validation constants
 const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5 MB
-const ALLOWED_TYPES = ['image/jpeg', 'image/png']
+const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png']
+const ALLOWED_TEXT_TYPES = ['text/plain', 'text/markdown']
+const ALLOWED_TYPES = [...ALLOWED_IMAGE_TYPES, ...ALLOWED_TEXT_TYPES]
 
 type InitializerStatus = 'idle' | 'starting' | 'error'
 
@@ -41,7 +43,7 @@ export function SpecCreationChat({
   const [input, setInput] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [yoloEnabled, setYoloEnabled] = useState(false)
-  const [pendingAttachments, setPendingAttachments] = useState<ImageAttachment[]>([])
+  const [pendingAttachments, setPendingAttachments] = useState<FileAttachment[]>([])
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -115,14 +117,14 @@ export function SpecCreationChat({
     sendAnswer(answers)
   }
 
-  // File handling for image attachments
+  // File handling for image and text file attachments
   const handleFileSelect = useCallback((files: FileList | null) => {
     if (!files) return
 
     Array.from(files).forEach((file) => {
       // Validate file type
       if (!ALLOWED_TYPES.includes(file.type)) {
-        setError(`Invalid file type: ${file.name}. Only JPEG and PNG are supported.`)
+        setError(`Invalid file type: ${file.name}. Supported: JPEG, PNG, .md, .txt`)
         return
       }
 
@@ -136,19 +138,36 @@ export function SpecCreationChat({
       const reader = new FileReader()
       reader.onload = (e) => {
         const dataUrl = e.target?.result as string
-        // dataUrl is "data:image/png;base64,XXXXXX"
+        // dataUrl is "data:image/png;base64,XXXXXX" or "data:text/plain;base64,XXXXXX"
         const base64Data = dataUrl.split(',')[1]
+        const id = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
 
-        const attachment: ImageAttachment = {
-          id: `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
-          filename: file.name,
-          mimeType: file.type as 'image/jpeg' | 'image/png',
-          base64Data,
-          previewUrl: dataUrl,
-          size: file.size,
+        if (ALLOWED_IMAGE_TYPES.includes(file.type)) {
+          // Image attachment
+          const attachment: ImageAttachment = {
+            type: 'image',
+            id,
+            filename: file.name,
+            mimeType: file.type as 'image/jpeg' | 'image/png',
+            base64Data,
+            previewUrl: dataUrl,
+            size: file.size,
+          }
+          setPendingAttachments((prev) => [...prev, attachment])
+        } else {
+          // Text file attachment - decode for display
+          const textContent = atob(base64Data)
+          const attachment: TextAttachment = {
+            type: 'text',
+            id,
+            filename: file.name,
+            mimeType: file.type as 'text/plain' | 'text/markdown',
+            base64Data,
+            textContent,
+            size: file.size,
+          }
+          setPendingAttachments((prev) => [...prev, attachment])
         }
-
-        setPendingAttachments((prev) => [...prev, attachment])
       }
       reader.readAsDataURL(file)
     })
@@ -316,11 +335,34 @@ export function SpecCreationChat({
                   key={attachment.id}
                   className="relative group border-2 border-[var(--color-neo-border)] p-1 bg-white shadow-[2px_2px_0px_rgba(0,0,0,1)]"
                 >
-                  <img
-                    src={attachment.previewUrl}
-                    alt={attachment.filename}
-                    className="w-16 h-16 object-cover"
-                  />
+                  {attachment.type === 'image' ? (
+                    // Image preview
+                    <>
+                      <img
+                        src={attachment.previewUrl}
+                        alt={attachment.filename}
+                        className="w-16 h-16 object-cover"
+                      />
+                      <span className="text-xs truncate block max-w-16 mt-1 text-center">
+                        {attachment.filename.length > 10
+                          ? `${attachment.filename.substring(0, 7)}...`
+                          : attachment.filename}
+                      </span>
+                    </>
+                  ) : (
+                    // Text file preview
+                    <div className="flex items-center gap-2 px-2 py-1 min-w-20">
+                      <FileText size={20} className="text-[var(--color-neo-accent)] flex-shrink-0" />
+                      <div className="flex flex-col min-w-0">
+                        <span className="text-xs font-medium truncate max-w-24" title={attachment.filename}>
+                          {attachment.filename}
+                        </span>
+                        <span className="text-xs text-[var(--color-neo-text-secondary)]">
+                          {(attachment.size / 1024).toFixed(1)} KB
+                        </span>
+                      </div>
+                    </div>
+                  )}
                   <button
                     onClick={() => handleRemoveAttachment(attachment.id)}
                     className="absolute -top-2 -right-2 bg-[var(--color-neo-danger)] text-white rounded-full p-0.5 border-2 border-[var(--color-neo-border)] hover:scale-110 transition-transform"
@@ -328,11 +370,6 @@ export function SpecCreationChat({
                   >
                     <X size={12} />
                   </button>
-                  <span className="text-xs truncate block max-w-16 mt-1 text-center">
-                    {attachment.filename.length > 10
-                      ? `${attachment.filename.substring(0, 7)}...`
-                      : attachment.filename}
-                  </span>
                 </div>
               ))}
             </div>
@@ -343,7 +380,7 @@ export function SpecCreationChat({
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/jpeg,image/png"
+              accept="image/jpeg,image/png,text/plain,text/markdown,.md,.txt"
               multiple
               onChange={(e) => handleFileSelect(e.target.files)}
               className="hidden"
@@ -354,7 +391,7 @@ export function SpecCreationChat({
               onClick={() => fileInputRef.current?.click()}
               disabled={connectionStatus !== 'connected'}
               className="neo-btn neo-btn-ghost p-3"
-              title="Attach image (JPEG, PNG - max 5MB)"
+              title="Attach file (JPEG, PNG, .md, .txt - max 5MB)"
             >
               <Paperclip size={18} />
             </button>
@@ -373,7 +410,7 @@ export function SpecCreationChat({
                 currentQuestions
                   ? 'Or type a custom response...'
                   : pendingAttachments.length > 0
-                    ? 'Add a message with your image(s)...'
+                    ? 'Add a message with your file(s)...'
                     : 'Type your response... (or /exit to go to project)'
               }
               className="neo-input flex-1 resize-none min-h-[46px] max-h-[200px] overflow-y-auto"
@@ -395,7 +432,7 @@ export function SpecCreationChat({
 
           {/* Help text */}
           <p className="text-xs text-[var(--color-neo-text-secondary)] mt-2">
-            Press Enter to send, Shift+Enter for new line. Drag & drop or click <Paperclip size={12} className="inline" /> to attach images (JPEG/PNG, max 5MB).
+            Press Enter to send, Shift+Enter for new line. Drag & drop or click <Paperclip size={12} className="inline" /> to attach files (JPEG, PNG, .md, .txt - max 5MB).
           </p>
         </div>
       )}

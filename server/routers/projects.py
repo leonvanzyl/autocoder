@@ -169,8 +169,13 @@ async def create_project(project: ProjectCreate):
                 detail=f"Failed to create directory: {e}"
             )
 
-    # Scaffold prompts
-    _scaffold_project_prompts(project_path)
+    # Determine framework type for template selection
+    framework_type = "nodejs"  # default
+    if project.tech_stack and project.tech_stack.is_laravel():
+        framework_type = "laravel"
+
+    # Scaffold prompts with framework-specific templates
+    _scaffold_project_prompts(project_path, framework=framework_type)
 
     # Register in registry
     try:

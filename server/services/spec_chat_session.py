@@ -18,7 +18,7 @@ from typing import AsyncGenerator, Optional
 from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
 from dotenv import load_dotenv
 
-from ..schemas import ImageAttachment
+from ..schemas import ImageAttachment, TextFileAttachment, FileAttachment
 
 # Load environment variables from .env file if present
 load_dotenv()
@@ -205,14 +205,14 @@ class SpecChatSession:
     async def send_message(
         self,
         user_message: str,
-        attachments: list[ImageAttachment] | None = None
+        attachments: list[FileAttachment] | None = None
     ) -> AsyncGenerator[dict, None]:
         """
         Send user message and stream Claude's response.
 
         Args:
             user_message: The user's response
-            attachments: Optional list of image attachments
+            attachments: Optional list of file attachments (images or text files)
 
         Yields:
             Message chunks of various types:
@@ -251,13 +251,13 @@ class SpecChatSession:
     async def _query_claude(
         self,
         message: str,
-        attachments: list[ImageAttachment] | None = None
+        attachments: list[FileAttachment] | None = None
     ) -> AsyncGenerator[dict, None]:
         """
         Internal method to query Claude and stream responses.
 
         Handles tool calls (Write) and text responses.
-        Supports multimodal content with image attachments.
+        Supports multimodal content with image and text file attachments.
 
         IMPORTANT: Spec creation requires BOTH files to be written:
         1. app_spec.txt - the main specification
@@ -277,21 +277,33 @@ class SpecChatSession:
             if message:
                 content_blocks.append({"type": "text", "text": message})
 
-            # Add image blocks
+            # Add attachment blocks based on type
             for att in attachments:
-                content_blocks.append({
-                    "type": "image",
-                    "source": {
-                        "type": "base64",
-                        "media_type": att.mimeType,
-                        "data": att.base64Data,
-                    }
-                })
+                if att.mimeType in ('image/jpeg', 'image/png'):
+                    # Image: send as image content block
+                    content_blocks.append({
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": att.mimeType,
+                            "data": att.base64Data,
+                        }
+                    })
+                elif att.mimeType in ('text/plain', 'text/markdown'):
+                    # Text file: decode and send as text content block
+                    import base64 as b64
+                    decoded_text = b64.b64decode(att.base64Data).decode('utf-8')
+                    # Format with filename header for context
+                    file_label = "Markdown" if att.mimeType == 'text/markdown' else "Text"
+                    content_blocks.append({
+                        "type": "text",
+                        "text": f"--- {file_label} File: {att.filename} ---\n{decoded_text}\n--- End of {att.filename} ---"
+                    })
 
             # Send multimodal content to Claude using async generator format
             # The SDK's query() accepts AsyncIterable[dict] for custom message formats
             await self.client.query(_make_multimodal_message(content_blocks))
-            logger.info(f"Sent multimodal message with {len(attachments)} image(s)")
+            logger.info(f"Sent multimodal message with {len(attachments)} attachment(s)")
         else:
             # Text-only message: use string format
             await self.client.query(message)

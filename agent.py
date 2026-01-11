@@ -26,6 +26,7 @@ from client import create_client
 from progress import has_features, print_progress_summary, print_session_header
 from prompts import (
     copy_spec_to_project,
+    detect_framework_from_spec,
     get_coding_prompt,
     get_coding_prompt_yolo,
     get_initializer_prompt,
@@ -137,6 +138,14 @@ async def run_autonomous_agent(
         print(f"Max iterations: {max_iterations}")
     else:
         print("Max iterations: Unlimited (will run until completion)")
+
+    # Detect framework from spec
+    framework = detect_framework_from_spec(project_dir)
+    is_laravel = framework == "laravel"
+    if is_laravel:
+        print("Framework: Laravel (with Laravel Boost MCP)")
+    else:
+        print("Framework: Node.js")
     print()
 
     # Create project directory
@@ -178,7 +187,7 @@ async def run_autonomous_agent(
         print_session_header(iteration, is_first_run)
 
         # Create client (fresh context)
-        client = create_client(project_dir, model, yolo_mode=yolo_mode)
+        client = create_client(project_dir, model, yolo_mode=yolo_mode, is_laravel=is_laravel)
 
         # Choose prompt based on session type
         # Pass project_dir to enable project-specific prompts

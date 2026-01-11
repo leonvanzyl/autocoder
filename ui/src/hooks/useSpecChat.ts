@@ -3,7 +3,7 @@
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react'
-import type { ChatMessage, ImageAttachment, SpecChatServerMessage, SpecQuestion } from '../lib/types'
+import type { ChatMessage, FileAttachment, SpecChatServerMessage, SpecQuestion } from '../lib/types'
 import { getSpecStatus } from '../lib/api'
 
 type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error'
@@ -22,7 +22,7 @@ interface UseSpecChatReturn {
   currentQuestions: SpecQuestion[] | null
   currentToolId: string | null
   start: () => void
-  sendMessage: (content: string, attachments?: ImageAttachment[]) => void
+  sendMessage: (content: string, attachments?: FileAttachment[]) => void
   sendAnswer: (answers: Record<string, string | string[]>) => void
   disconnect: () => void
 }
@@ -364,7 +364,7 @@ export function useSpecChat({
     setTimeout(checkAndSend, 100)
   }, [connect])
 
-  const sendMessage = useCallback((content: string, attachments?: ImageAttachment[]) => {
+  const sendMessage = useCallback((content: string, attachments?: FileAttachment[]) => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
       onError?.('Not connected')
       return

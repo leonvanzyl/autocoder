@@ -14,11 +14,40 @@ from pathlib import Path
 
 # Base templates location (generic templates)
 TEMPLATES_DIR = Path(__file__).parent / ".claude" / "templates"
+LARAVEL_TEMPLATES_DIR = TEMPLATES_DIR / "laravel"
 
 
 def get_project_prompts_dir(project_dir: Path) -> Path:
     """Get the prompts directory for a specific project."""
     return project_dir / "prompts"
+
+
+def detect_framework_from_spec(project_dir: Path) -> str | None:
+    """
+    Detect the framework type from app_spec.txt.
+
+    Looks for Laravel-specific sections to determine if this is a Laravel project.
+
+    Args:
+        project_dir: The project directory to check
+
+    Returns:
+        'laravel' if Laravel-based, 'nodejs' if Node.js-based, None if unknown
+    """
+    try:
+        spec_content = get_app_spec(project_dir)
+        # Check for Laravel indicators
+        if '<laravel_specific>' in spec_content:
+            return 'laravel'
+        if 'Laravel' in spec_content and 'PHP' in spec_content:
+            return 'laravel'
+        # Check for Node.js indicators (default)
+        if 'Node.js' in spec_content or 'Express' in spec_content:
+            return 'nodejs'
+        # Default to nodejs for backward compatibility
+        return 'nodejs'
+    except FileNotFoundError:
+        return None
 
 
 def load_prompt(name: str, project_dir: Path | None = None) -> str:
@@ -116,20 +145,31 @@ def get_app_spec(project_dir: Path) -> str:
     raise FileNotFoundError(f"No app_spec.txt found for project: {project_dir}")
 
 
-def scaffold_project_prompts(project_dir: Path) -> Path:
+def scaffold_project_prompts(project_dir: Path, framework: str = "nodejs") -> Path:
     """
     Create the project prompts directory and copy base templates.
 
     This sets up a new project with template files that can be customized.
+    Uses framework-specific templates if available.
 
     Args:
         project_dir: The absolute path to the project directory
+        framework: 'nodejs' (default) or 'laravel' - determines which templates to use
 
     Returns:
         The path to the project prompts directory
     """
     project_prompts = get_project_prompts_dir(project_dir)
     project_prompts.mkdir(parents=True, exist_ok=True)
+
+    # Choose template source based on framework
+    if framework == "laravel" and LARAVEL_TEMPLATES_DIR.exists():
+        template_source = LARAVEL_TEMPLATES_DIR
+        print(f"  Using Laravel templates from {template_source}")
+    else:
+        template_source = TEMPLATES_DIR
+        if framework == "laravel":
+            print("  Warning: Laravel templates not found, using default templates")
 
     # Define template mappings: (source_template, destination_name)
     templates = [
@@ -141,8 +181,12 @@ def scaffold_project_prompts(project_dir: Path) -> Path:
 
     copied_files = []
     for template_name, dest_name in templates:
-        template_path = TEMPLATES_DIR / template_name
+        template_path = template_source / template_name
         dest_path = project_prompts / dest_name
+
+        # Fall back to base templates if framework-specific doesn't exist
+        if not template_path.exists() and template_source != TEMPLATES_DIR:
+            template_path = TEMPLATES_DIR / template_name
 
         # Only copy if template exists and destination doesn't
         if template_path.exists() and not dest_path.exists():

@@ -212,6 +212,7 @@ export type SpecChatServerMessage =
 
 // Image attachment for chat messages
 export interface ImageAttachment {
+  type: 'image'
   id: string
   filename: string
   mimeType: 'image/jpeg' | 'image/png'
@@ -220,12 +221,26 @@ export interface ImageAttachment {
   size: number          // File size in bytes
 }
 
+// Text file attachment (.md, .txt) for chat messages
+export interface TextAttachment {
+  type: 'text'
+  id: string
+  filename: string
+  mimeType: 'text/plain' | 'text/markdown'
+  base64Data: string    // Raw base64 (without data: prefix)
+  textContent: string   // Decoded text content for display
+  size: number          // File size in bytes
+}
+
+// Union type for all file attachments
+export type FileAttachment = ImageAttachment | TextAttachment
+
 // UI chat message for display
 export interface ChatMessage {
   id: string
   role: 'user' | 'assistant' | 'system'
   content: string
-  attachments?: ImageAttachment[]
+  attachments?: FileAttachment[]
   timestamp: Date
   questions?: SpecQuestion[]
   isStreaming?: boolean
@@ -353,4 +368,48 @@ export interface Settings {
 export interface SettingsUpdate {
   yolo_mode?: boolean
   model?: string
+}
+
+// ============================================================================
+// Tech Stack Types
+// ============================================================================
+
+export type FrameworkChoice =
+  | 'react_node'
+  | 'laravel_react'
+  | 'laravel_vue'
+  | 'laravel_livewire'
+  | 'laravel_api'
+
+export type DatabaseChoice = 'sqlite' | 'mysql' | 'postgresql' | 'mariadb'
+
+export type TestingFramework = 'jest' | 'vitest' | 'pest' | 'phpunit'
+
+export interface TechStackConfig {
+  framework: FrameworkChoice
+  database: DatabaseChoice
+  testing: TestingFramework
+}
+
+export interface FrameworkOption {
+  id: FrameworkChoice
+  name: string
+  description: string
+  icon: 'react' | 'laravel'
+  isDefault?: boolean
+}
+
+export interface DatabaseOption {
+  id: DatabaseChoice
+  name: string
+  description: string
+  isDefault?: boolean
+}
+
+export interface TestingOption {
+  id: TestingFramework
+  name: string
+  description: string
+  forFramework: 'nodejs' | 'laravel'
+  isDefault?: boolean
 }

@@ -5,7 +5,8 @@
  * Supports user, assistant, and system messages with neobrutalism styling.
  */
 
-import { Bot, User, Info } from 'lucide-react'
+import { useState } from 'react'
+import { Bot, User, Info, FileText, ChevronDown, ChevronUp } from 'lucide-react'
 import type { ChatMessage as ChatMessageType } from '../lib/types'
 
 interface ChatMessageProps {
@@ -14,6 +15,19 @@ interface ChatMessageProps {
 
 export function ChatMessage({ message }: ChatMessageProps) {
   const { role, content, attachments, timestamp, isStreaming } = message
+  const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set())
+
+  const toggleFileExpanded = (id: string) => {
+    setExpandedFiles(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+      }
+      return next
+    })
+  }
 
   // Format timestamp
   const timeString = timestamp.toLocaleTimeString([], {
@@ -138,24 +152,54 @@ export function ChatMessage({ message }: ChatMessageProps) {
               </div>
             )}
 
-            {/* Display image attachments */}
+            {/* Display file attachments */}
             {attachments && attachments.length > 0 && (
-              <div className={`flex flex-wrap gap-2 ${content ? 'mt-3' : ''}`}>
+              <div className={`flex flex-col gap-2 ${content ? 'mt-3' : ''}`}>
                 {attachments.map((attachment) => (
-                  <div
-                    key={attachment.id}
-                    className="border-2 border-[var(--color-neo-border)] p-1 bg-white shadow-[2px_2px_0px_rgba(0,0,0,1)]"
-                  >
-                    <img
-                      src={attachment.previewUrl}
-                      alt={attachment.filename}
-                      className="max-w-48 max-h-48 object-contain cursor-pointer hover:opacity-90 transition-opacity"
-                      onClick={() => window.open(attachment.previewUrl, '_blank')}
-                      title={`${attachment.filename} (click to enlarge)`}
-                    />
-                    <span className="text-xs text-[var(--color-neo-text-secondary)] block mt-1 text-center">
-                      {attachment.filename}
-                    </span>
+                  <div key={attachment.id}>
+                    {attachment.type === 'image' ? (
+                      // Image attachment
+                      <div className="border-2 border-[var(--color-neo-border)] p-1 bg-white shadow-[2px_2px_0px_rgba(0,0,0,1)] inline-block">
+                        <img
+                          src={attachment.previewUrl}
+                          alt={attachment.filename}
+                          className="max-w-48 max-h-48 object-contain cursor-pointer hover:opacity-90 transition-opacity"
+                          onClick={() => window.open(attachment.previewUrl, '_blank')}
+                          title={`${attachment.filename} (click to enlarge)`}
+                        />
+                        <span className="text-xs text-[var(--color-neo-text-secondary)] block mt-1 text-center">
+                          {attachment.filename}
+                        </span>
+                      </div>
+                    ) : (
+                      // Text file attachment - expandable display
+                      <div className="border-2 border-[var(--color-neo-border)] bg-gray-50 shadow-[2px_2px_0px_rgba(0,0,0,1)]">
+                        <button
+                          onClick={() => toggleFileExpanded(attachment.id)}
+                          className="flex items-center gap-2 w-full px-3 py-2 hover:bg-gray-100 transition-colors"
+                        >
+                          <FileText size={16} className="text-[var(--color-neo-accent)] flex-shrink-0" />
+                          <span className="text-sm font-medium flex-1 text-left truncate">
+                            {attachment.filename}
+                          </span>
+                          <span className="text-xs text-[var(--color-neo-text-secondary)]">
+                            {(attachment.size / 1024).toFixed(1)} KB
+                          </span>
+                          {expandedFiles.has(attachment.id) ? (
+                            <ChevronUp size={16} />
+                          ) : (
+                            <ChevronDown size={16} />
+                          )}
+                        </button>
+                        {expandedFiles.has(attachment.id) && (
+                          <div className="border-t-2 border-[var(--color-neo-border)] p-3 max-h-64 overflow-auto">
+                            <pre className="text-xs font-mono whitespace-pre-wrap break-words text-[#1a1a1a]">
+                              {attachment.textContent}
+                            </pre>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

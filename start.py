@@ -189,7 +189,114 @@ def get_new_project_info() -> tuple[str, Path] | None:
     return name, project_path
 
 
-def ensure_project_scaffolded(project_name: str, project_dir: Path) -> Path:
+def ask_framework_choice() -> dict | None:
+    """
+    Ask user to select a framework.
+
+    Returns:
+        Dict with framework info, or None if cancelled.
+    """
+    print("\n" + "-" * 40)
+    print("  Select Technology Stack")
+    print("-" * 40)
+    print("\n[1] React + Node.js (default)")
+    print("    Full-stack JavaScript with React frontend and Express backend")
+    print("\n[2] Laravel + React")
+    print("    Laravel backend with React (Inertia.js) frontend")
+    print("\n[3] Laravel + Vue")
+    print("    Laravel backend with Vue (Inertia.js) frontend")
+    print("\n[4] Laravel + Livewire")
+    print("    Full-stack PHP with Livewire for reactive components")
+    print("\n[5] Laravel API Only")
+    print("    Laravel backend for API-first development (no frontend)")
+    print("\n[b] Back")
+    print()
+
+    while True:
+        choice = input("Select [1-5/b]: ").strip().lower()
+        if choice == 'b':
+            return None
+        if choice in ['1', '']:
+            return {'framework': 'react_node', 'is_laravel': False}
+        if choice == '2':
+            return {'framework': 'laravel_react', 'is_laravel': True, 'starter_kit': 'react'}
+        if choice == '3':
+            return {'framework': 'laravel_vue', 'is_laravel': True, 'starter_kit': 'vue'}
+        if choice == '4':
+            return {'framework': 'laravel_livewire', 'is_laravel': True, 'starter_kit': 'livewire'}
+        if choice == '5':
+            return {'framework': 'laravel_api', 'is_laravel': True, 'starter_kit': None}
+        print("Invalid choice. Please enter 1-5 or b.")
+
+
+def ask_database_choice() -> str:
+    """Ask user to select a database."""
+    print("\n" + "-" * 40)
+    print("  Select Database")
+    print("-" * 40)
+    print("\n[1] SQLite (default)")
+    print("    Simple file-based database, no setup required")
+    print("\n[2] MySQL")
+    print("    Popular relational database")
+    print("\n[3] PostgreSQL")
+    print("    Advanced relational database")
+    print("\n[4] MariaDB")
+    print("    MySQL-compatible open source database")
+    print()
+
+    while True:
+        choice = input("Select [1-4]: ").strip()
+        if choice in ['1', '']:
+            return 'sqlite'
+        if choice == '2':
+            return 'mysql'
+        if choice == '3':
+            return 'postgresql'
+        if choice == '4':
+            return 'mariadb'
+        print("Invalid choice. Please enter 1-4.")
+
+
+def ask_testing_choice(is_laravel: bool) -> str:
+    """
+    Ask user to select a testing framework.
+
+    Args:
+        is_laravel: Whether this is a Laravel project (affects available options)
+    """
+    print("\n" + "-" * 40)
+    print("  Select Testing Framework")
+    print("-" * 40)
+
+    if is_laravel:
+        print("\n[1] Pest (default)")
+        print("    Modern PHP testing framework with elegant syntax")
+        print("\n[2] PHPUnit")
+        print("    Traditional PHP testing framework (Laravel default)")
+        print()
+        while True:
+            choice = input("Select [1-2]: ").strip()
+            if choice in ['1', '']:
+                return 'pest'
+            if choice == '2':
+                return 'phpunit'
+            print("Invalid choice. Please enter 1 or 2.")
+    else:
+        print("\n[1] Vitest (default)")
+        print("    Fast, Vite-native test framework")
+        print("\n[2] Jest")
+        print("    Popular JavaScript testing framework")
+        print()
+        while True:
+            choice = input("Select [1-2]: ").strip()
+            if choice in ['1', '']:
+                return 'vitest'
+            if choice == '2':
+                return 'jest'
+            print("Invalid choice. Please enter 1 or 2.")
+
+
+def ensure_project_scaffolded(project_name: str, project_dir: Path, framework: str = "nodejs") -> Path:
     """
     Ensure project directory exists with prompt templates and is registered.
 
@@ -198,6 +305,7 @@ def ensure_project_scaffolded(project_name: str, project_dir: Path) -> Path:
     Args:
         project_name: Name of the project
         project_dir: Absolute path to the project directory
+        framework: 'nodejs' or 'laravel' - determines which templates to use
 
     Returns:
         The project directory path
@@ -205,10 +313,11 @@ def ensure_project_scaffolded(project_name: str, project_dir: Path) -> Path:
     # Create project directory if it doesn't exist
     project_dir.mkdir(parents=True, exist_ok=True)
 
-    # Scaffold prompts (copies templates if they don't exist)
+    # Scaffold prompts with framework-specific templates
     print(f"\nSetting up project: {project_name}")
     print(f"Location: {project_dir}")
-    scaffold_project_prompts(project_dir)
+    print(f"Framework: {'Laravel' if framework == 'laravel' else 'Node.js'}")
+    scaffold_project_prompts(project_dir, framework=framework)
 
     # Register in registry
     register_project(project_name, project_dir)
@@ -348,11 +457,12 @@ def create_new_project_flow() -> tuple[str, Path] | None:
     Complete flow for creating a new project.
 
     1. Get project name and path
-    2. Create project directory and scaffold prompts
-    3. Ask: Claude or Manual?
-    4. If Claude: Run /create-spec with project path
-    5. If Manual: Show paths, wait for Enter
-    6. Return (name, path) tuple if successful
+    2. Select technology stack (framework, database, testing)
+    3. Create project directory and scaffold prompts
+    4. Ask: Claude or Manual?
+    5. If Claude: Run /create-spec with project path
+    6. If Manual: Show paths, wait for Enter
+    7. Return (name, path) tuple if successful
     """
     project_info = get_new_project_info()
     if not project_info:
@@ -360,8 +470,41 @@ def create_new_project_flow() -> tuple[str, Path] | None:
 
     project_name, project_path = project_info
 
-    # Create project directory and scaffold prompts FIRST
-    project_dir = ensure_project_scaffolded(project_name, project_path)
+    # Step 2: Select technology stack
+    framework_info = ask_framework_choice()
+    if framework_info is None:
+        return None
+
+    is_laravel = framework_info.get('is_laravel', False)
+
+    # Step 3: Select database
+    database = ask_database_choice()
+
+    # Step 4: Select testing framework
+    testing = ask_testing_choice(is_laravel)
+
+    # Build tech stack info for display
+    tech_stack = {
+        'framework': framework_info['framework'],
+        'database': database,
+        'testing': testing,
+    }
+    if is_laravel:
+        tech_stack['starter_kit'] = framework_info.get('starter_kit')
+
+    print("\n" + "-" * 40)
+    print("  Tech Stack Summary")
+    print("-" * 40)
+    print(f"  Framework: {framework_info['framework']}")
+    print(f"  Database:  {database}")
+    print(f"  Testing:   {testing}")
+    print("-" * 40)
+
+    # Determine framework type for template selection
+    framework_type = "laravel" if is_laravel else "nodejs"
+
+    # Create project directory and scaffold prompts with framework-specific templates
+    project_dir = ensure_project_scaffolded(project_name, project_path, framework=framework_type)
 
     # Ask user how they want to handle spec creation
     choice = ask_spec_creation_choice()
