@@ -56,6 +56,7 @@ This launches the React-based web UI at `http://localhost:5173` with:
 - Kanban board view of features
 - Real-time agent output streaming
 - Start/pause/stop controls
+- **Project Assistant** - AI chat for managing features and exploring the codebase
 
 ### Option 2: CLI Mode
 
@@ -103,6 +104,22 @@ Features are stored in SQLite via SQLAlchemy and managed through an MCP server t
 - `feature_mark_passing` - Mark feature complete
 - `feature_skip` - Move feature to end of queue
 - `feature_create_bulk` - Initialize all features (used by initializer)
+- `feature_create` - Create a single feature
+- `feature_update` - Update a feature's fields
+- `feature_delete` - Delete a feature from the backlog
+
+### Project Assistant
+
+The Web UI includes a **Project Assistant** - an AI-powered chat interface for each project. Click the chat button in the bottom-right corner to open it.
+
+**Capabilities:**
+- **Explore the codebase** - Ask questions about files, architecture, and implementation details
+- **Manage features** - Create, edit, delete, and deprioritize features via natural language
+- **Get feature details** - Ask about specific features, their status, and test steps
+
+**Conversation Persistence:**
+- Conversations are automatically saved to `assistant.db` in the registered project directory
+- When you navigate away and return, your conversation resumes where you left off
 
 ### Session Management
 
@@ -143,6 +160,7 @@ autonomous-coding/
 ├── security.py               # Bash command allowlist and validation
 ├── progress.py               # Progress tracking utilities
 ├── prompts.py                # Prompt loading utilities
+├── registry.py               # Project registry (maps names to paths)
 ├── api/
 │   └── database.py           # SQLAlchemy models (Feature table)
 ├── mcp_server/
@@ -165,20 +183,25 @@ autonomous-coding/
 │   │   └── create-spec.md    # /create-spec slash command
 │   ├── skills/               # Claude Code skills
 │   └── templates/            # Prompt templates
-├── generations/              # Generated projects go here
+├── generations/              # Default location for new projects (can be anywhere)
 ├── requirements.txt          # Python dependencies
 └── .env                      # Optional configuration (N8N webhook)
 ```
 
 ---
 
-## Generated Project Structure
+## Project Registry and Structure
 
-After the agent runs, your project directory will contain:
+Projects can be stored in any directory on your filesystem. The **project registry** (`registry.py`) maps project names to their paths, stored in `~/.autocoder/registry.db` (SQLite).
 
-```
-generations/my_project/
+When you create or register a project, the registry tracks its location. This allows projects to live anywhere - in `generations/`, your home directory, or any other path.
+
+Each registered project directory will contain:
+
+```text
+<registered_project_path>/
 ├── features.db               # SQLite database (feature test cases)
+├── assistant.db              # SQLite database (assistant chat history)
 ├── prompts/
 │   ├── app_spec.txt          # Your app specification
 │   ├── initializer_prompt.md # First session prompt
@@ -192,10 +215,10 @@ generations/my_project/
 
 ## Running the Generated Application
 
-After the agent completes (or pauses), you can run the generated application:
+After the agent completes (or pauses), you can run the generated application. Navigate to your project's registered path (the directory you selected or created when setting up the project):
 
 ```bash
-cd generations/my_project
+cd /path/to/your/registered/project
 
 # Run the setup script created by the agent
 ./init.sh
