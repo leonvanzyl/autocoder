@@ -198,7 +198,7 @@ When you create or register a project, the registry tracks its location. This al
 
 Each registered project directory will contain:
 
-```
+```text
 <registered_project_path>/
 ├── features.db               # SQLite database (feature test cases)
 ├── assistant.db              # SQLite database (assistant chat history)
@@ -215,10 +215,10 @@ Each registered project directory will contain:
 
 ## Running the Generated Application
 
-After the agent completes (or pauses), you can run the generated application:
+After the agent completes (or pauses), you can run the generated application. Navigate to your project's registered path (the directory you selected or created when setting up the project):
 
 ```bash
-cd /path/to/your/project
+cd /path/to/your/registered/project
 
 # Run the setup script created by the agent
 ./init.sh
