@@ -118,9 +118,8 @@ The Web UI includes a **Project Assistant** - an AI-powered chat interface for e
 - **Get feature details** - Ask about specific features, their status, and test steps
 
 **Conversation Persistence:**
-- Conversations are automatically saved to `assistant.db` in each project directory
+- Conversations are automatically saved to `assistant.db` in the registered project directory
 - When you navigate away and return, your conversation resumes where you left off
-- Click "New Chat" to start a fresh conversation
 
 ### Session Management
 
@@ -161,6 +160,7 @@ autonomous-coding/
 ├── security.py               # Bash command allowlist and validation
 ├── progress.py               # Progress tracking utilities
 ├── prompts.py                # Prompt loading utilities
+├── registry.py               # Project registry (maps names to paths)
 ├── api/
 │   └── database.py           # SQLAlchemy models (Feature table)
 ├── mcp_server/
@@ -183,19 +183,23 @@ autonomous-coding/
 │   │   └── create-spec.md    # /create-spec slash command
 │   ├── skills/               # Claude Code skills
 │   └── templates/            # Prompt templates
-├── generations/              # Generated projects go here
+├── generations/              # Default location for new projects (can be anywhere)
 ├── requirements.txt          # Python dependencies
 └── .env                      # Optional configuration (N8N webhook)
 ```
 
 ---
 
-## Generated Project Structure
+## Project Registry and Structure
 
-After the agent runs, your project directory will contain:
+Projects can be stored in any directory on your filesystem. The **project registry** (`registry.py`) maps project names to their paths, stored in `~/.autocoder/registry.db` (SQLite).
+
+When you create or register a project, the registry tracks its location. This allows projects to live anywhere - in `generations/`, your home directory, or any other path.
+
+Each registered project directory will contain:
 
 ```
-generations/my_project/
+<registered_project_path>/
 ├── features.db               # SQLite database (feature test cases)
 ├── assistant.db              # SQLite database (assistant chat history)
 ├── prompts/
@@ -214,7 +218,7 @@ generations/my_project/
 After the agent completes (or pauses), you can run the generated application:
 
 ```bash
-cd generations/my_project
+cd /path/to/your/project
 
 # Run the setup script created by the agent
 ./init.sh
