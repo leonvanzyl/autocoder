@@ -484,3 +484,257 @@ def set_task_dependencies(db: Session, task_id: int, depends_on: list[int]) -> T
 
     db.commit()
     return task
+
+
+def validate_no_cycles(db: Session, task_id: int, depends_on: list[int]) -> tuple[bool, str | None]:
+    """Check if adding dependencies would create a cycle.
+
+    Uses DFS to detect if the proposed dependencies would create
+    a circular dependency chain.
+
+    Args:
+        db: Database session
+        task_id: Task that would have dependencies added
+        depends_on: Proposed dependency IDs
+
+    Returns:
+        Tuple of (is_valid, error_message)
+    """
+    # Build adjacency list of current dependencies
+    all_tasks = db.query(Task).all()
+    graph = {t.id: set(t.depends_on or []) for t in all_tasks}
+
+    # Add proposed edges
+    if task_id not in graph:
+        graph[task_id] = set()
+    proposed_graph = {k: set(v) for k, v in graph.items()}
+    proposed_graph[task_id] = set(depends_on)
+
+    # DFS cycle detection
+    visited = set()
+    rec_stack = set()
+
+    def has_cycle(node: int, path: list[int]) -> list[int] | None:
+        """Returns the cycle path if found, None otherwise."""
+        if node in rec_stack:
+            cycle_start = path.index(node)
+            return path[cycle_start:] + [node]
+        if node in visited:
+            return None
+
+        visited.add(node)
+        rec_stack.add(node)
+        path.append(node)
+
+        for neighbor in proposed_graph.get(node, []):
+            cycle = has_cycle(neighbor, path)
+            if cycle:
+                return cycle
+
+        path.pop()
+        rec_stack.remove(node)
+        return None
+
+    # Check from task_id and all its dependencies
+    for start in [task_id] + depends_on:
+        if start not in visited:
+            cycle = has_cycle(start, [])
+            if cycle:
+                task_names = []
+                for tid in cycle:
+                    t = db.query(Task).filter(Task.id == tid).first()
+                    task_names.append(t.name if t else f"Task {tid}")
+                cycle_str = " → ".join(task_names)
+                return False, f"Circular dependency detected: {cycle_str}"
+
+    return True, None
+
+
+def get_dependency_chain(db: Session, task_id: int, direction: str = "upstream") -> list[Task]:
+    """Get the dependency chain for a task.
+
+    Args:
+        db: Database session
+        task_id: Task to get chain for
+        direction: "upstream" (tasks this depends on) or "downstream" (tasks blocked by this)
+
+    Returns:
+        List of tasks in the chain (topologically sorted)
+    """
+    visited = set()
+    result = []
+
+    def traverse(tid: int):
+        if tid in visited:
+            return
+        visited.add(tid)
+
+        task = db.query(Task).filter(Task.id == tid).first()
+        if not task:
+            return
+
+        if direction == "upstream":
+            # Get tasks this task depends on
+            for dep_id in task.depends_on or []:
+                traverse(dep_id)
+        else:
+            # Get tasks blocked by this task
+            for blocked_id in task.blocks or []:
+                traverse(blocked_id)
+
+        result.append(task)
+
+    traverse(task_id)
+
+    # Remove the starting task from results
+    result = [t for t in result if t.id != task_id]
+
+    return result
+
+
+def get_ready_tasks(db: Session, feature_id: int | None = None, limit: int = 10) -> list[Task]:
+    """Get tasks that are ready to work on (not blocked, not complete).
+
+    Args:
+        db: Database session
+        feature_id: Optional filter by feature
+        limit: Maximum number of tasks to return
+
+    Returns:
+        List of ready tasks, ordered by priority
+    """
+    query = db.query(Task).filter(
+        Task.passes == False,
+        Task.in_progress == False,
+        Task.is_blocked == False,
+    )
+
+    if feature_id is not None:
+        query = query.filter(Task.feature_id == feature_id)
+
+    return query.order_by(Task.priority).limit(limit).all()
+
+
+def get_blocked_tasks(db: Session, feature_id: int | None = None) -> list[Task]:
+    """Get all blocked tasks.
+
+    Args:
+        db: Database session
+        feature_id: Optional filter by feature
+
+    Returns:
+        List of blocked tasks
+    """
+    query = db.query(Task).filter(
+        Task.passes == False,
+        Task.is_blocked == True,
+    )
+
+    if feature_id is not None:
+        query = query.filter(Task.feature_id == feature_id)
+
+    return query.order_by(Task.priority).all()
+
+
+def get_dependency_graph(db: Session, feature_id: int | None = None) -> dict:
+    """Get the dependency graph for visualization.
+
+    Args:
+        db: Database session
+        feature_id: Optional filter by feature
+
+    Returns:
+        Dictionary with 'nodes' and 'edges' for graph visualization
+    """
+    query = db.query(Task)
+    if feature_id is not None:
+        query = query.filter(Task.feature_id == feature_id)
+
+    tasks = query.all()
+
+    nodes = []
+    edges = []
+
+    for task in tasks:
+        # Determine node status
+        if task.passes:
+            status = "done"
+        elif task.in_progress:
+            status = "in_progress"
+        elif task.is_blocked:
+            status = "blocked"
+        else:
+            status = "pending"
+
+        nodes.append({
+            "id": task.id,
+            "name": task.name,
+            "category": task.category,
+            "status": status,
+            "priority": task.priority,
+            "blocked_reason": task.blocked_reason,
+        })
+
+        for dep_id in task.depends_on or []:
+            edges.append({
+                "from": dep_id,
+                "to": task.id,
+            })
+
+    return {"nodes": nodes, "edges": edges}
+
+
+def get_critical_path(db: Session, feature_id: int | None = None) -> list[Task]:
+    """Calculate the critical path (longest chain of dependencies).
+
+    The critical path represents the minimum time to complete all tasks.
+
+    Args:
+        db: Database session
+        feature_id: Optional filter by feature
+
+    Returns:
+        List of tasks in the critical path
+    """
+    query = db.query(Task).filter(Task.passes == False)
+    if feature_id is not None:
+        query = query.filter(Task.feature_id == feature_id)
+
+    tasks = query.all()
+    task_map = {t.id: t for t in tasks}
+
+    # Calculate longest path to each task
+    longest_path = {}  # task_id -> (length, path)
+
+    def calc_path(task_id: int) -> tuple[int, list[int]]:
+        if task_id in longest_path:
+            return longest_path[task_id]
+
+        task = task_map.get(task_id)
+        if not task:
+            return (0, [])
+
+        max_len = 0
+        max_path = []
+
+        for dep_id in task.depends_on or []:
+            dep_len, dep_path = calc_path(dep_id)
+            if dep_len >= max_len:
+                max_len = dep_len
+                max_path = dep_path
+
+        result = (max_len + 1, max_path + [task_id])
+        longest_path[task_id] = result
+        return result
+
+    # Find the task with the longest path
+    max_length = 0
+    critical_path = []
+
+    for task in tasks:
+        length, path = calc_path(task.id)
+        if length > max_length:
+            max_length = length
+            critical_path = path
+
+    return [task_map[tid] for tid in critical_path if tid in task_map]

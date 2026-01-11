@@ -56,7 +56,7 @@ export interface ProjectPrompts {
   coding_prompt: string
 }
 
-// Feature types
+// Feature types (legacy - now also used as Task in v2)
 export interface Feature {
   id: number
   priority: number
@@ -66,6 +66,43 @@ export interface Feature {
   steps: string[]
   passes: boolean
   in_progress: boolean
+  // V2 dependency fields
+  depends_on?: number[]
+  blocks?: number[]
+  is_blocked?: boolean
+  blocked_reason?: string | null
+  // V2 review fields
+  reviewed?: boolean
+  review_notes?: string | null
+  review_score?: number | null
+  // V2 additional fields
+  feature_id?: number | null
+  estimated_complexity?: number
+  created_at?: string | null
+  completed_at?: string | null
+}
+
+// Task type alias for clarity in v2 code
+export type Task = Feature
+
+// Dependency graph types
+export interface DependencyNode {
+  id: number
+  name: string
+  category: string
+  status: 'pending' | 'in_progress' | 'blocked' | 'done'
+  priority: number
+  blocked_reason?: string | null
+}
+
+export interface DependencyEdge {
+  from: number
+  to: number
+}
+
+export interface DependencyGraph {
+  nodes: DependencyNode[]
+  edges: DependencyEdge[]
 }
 
 export interface FeatureListResponse {

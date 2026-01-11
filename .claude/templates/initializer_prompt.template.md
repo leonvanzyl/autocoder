@@ -457,6 +457,57 @@ The feature_list.json must include tests that **actively verify real data** and 
 
 ---
 
+## TASK DEPENDENCIES
+
+When creating tasks, identify dependencies between them. The system supports dependency tracking to ensure tasks are worked on in the correct order.
+
+### Dependency Rules
+
+Tasks should declare dependencies when:
+
+1. **Database before API**: Schema/model tasks must complete before API endpoint tasks
+2. **API before Frontend**: Backend endpoints must complete before frontend components that use them
+3. **Shared utilities first**: Utility functions, types, or helpers must complete before features using them
+4. **Authentication before protected features**: Auth system must complete before features requiring auth
+5. **Parent entities before children**: Create parent records before child records (e.g., Category before Product)
+
+### Setting Dependencies
+
+After creating tasks with `feature_create_bulk`, use `task_set_dependencies` to establish relationships:
+
+```
+Use task_set_dependencies with:
+  task_id: 15
+  depends_on: [3, 7]  # Task 15 depends on tasks 3 and 7
+```
+
+### Dependency Best Practices
+
+- **Keep chains short**: Avoid chains longer than 5-6 tasks
+- **Avoid circular dependencies**: Task A cannot depend on Task B if B depends on A
+- **Group related tasks**: Tasks in the same feature often depend on each other
+- **Critical path awareness**: Identify the longest dependency chain early
+
+### Example Dependency Structure
+
+For a typical feature like "User Authentication":
+
+```
+Task 1: Create User model/schema (no dependencies)
+Task 2: Create auth API endpoints (depends on: 1)
+Task 3: Create login page UI (depends on: 2)
+Task 4: Create registration page UI (depends on: 2)
+Task 5: Implement session management (depends on: 2)
+Task 6: Add protected route wrapper (depends on: 3, 5)
+```
+
+The system will automatically:
+- Mark tasks as "blocked" if their dependencies aren't complete
+- Unblock tasks when their dependencies finish
+- Prevent agents from working on blocked tasks
+
+---
+
 **CRITICAL INSTRUCTION:**
 IT IS CATASTROPHIC TO REMOVE OR EDIT FEATURES IN FUTURE SESSIONS.
 Features can ONLY be marked as passing (via the `feature_mark_passing` tool with the feature_id).

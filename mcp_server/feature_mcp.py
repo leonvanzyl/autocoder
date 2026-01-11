@@ -51,9 +51,15 @@ from api.database import (
     Phase,
     Task,
     create_database,
+    get_blocked_tasks,
+    get_critical_path,
+    get_dependency_chain,
+    get_dependency_graph,
+    get_ready_tasks,
     propagate_completion,
     set_task_dependencies,
     update_blocked_status,
+    validate_no_cycles,
 )
 from api.migration import get_schema_version, migrate_json_to_sqlite
 
@@ -751,6 +757,133 @@ def phase_check_completion(
             "remaining_tasks": remaining[:10],  # Limit to 10 for readability
             "remaining_count": len(remaining),
         }, indent=2)
+    finally:
+        session.close()
+
+
+@mcp.tool()
+def task_validate_dependencies(
+    task_id: Annotated[int, Field(description="The task ID to validate", ge=1)],
+    depends_on: Annotated[list[int], Field(description="Proposed dependency IDs to validate")],
+) -> str:
+    """Validate that proposed dependencies won't create a cycle.
+
+    Use this before setting dependencies to ensure they're valid.
+
+    Args:
+        task_id: The task that would have dependencies
+        depends_on: Proposed list of task IDs to depend on
+
+    Returns:
+        JSON with: valid (bool), error (str if invalid)
+    """
+    if not is_v2_schema():
+        return json.dumps({"error": "task_validate_dependencies requires v2 schema"})
+
+    session = get_session()
+    try:
+        is_valid, error = validate_no_cycles(session, task_id, depends_on)
+        return json.dumps({"valid": is_valid, "error": error}, indent=2)
+    finally:
+        session.close()
+
+
+@mcp.tool()
+def task_get_critical_path(
+    feature_id: Annotated[
+        int | None,
+        Field(default=None, description="Optional feature ID to scope the analysis"),
+    ] = None
+) -> str:
+    """Get the critical path - the longest chain of dependent tasks.
+
+    The critical path determines the minimum time to complete all tasks
+    since these tasks must be done sequentially.
+
+    Args:
+        feature_id: Optional feature ID to scope the analysis
+
+    Returns:
+        JSON with: tasks (ordered list), length (int)
+    """
+    if not is_v2_schema():
+        return json.dumps({"error": "task_get_critical_path requires v2 schema"})
+
+    session = get_session()
+    try:
+        critical_tasks = get_critical_path(session, feature_id)
+        return json.dumps({
+            "tasks": [t.to_dict() for t in critical_tasks],
+            "length": len(critical_tasks),
+        }, indent=2)
+    finally:
+        session.close()
+
+
+@mcp.tool()
+def task_get_dependency_chain(
+    task_id: Annotated[int, Field(description="The task ID to get chain for", ge=1)],
+    direction: Annotated[
+        str,
+        Field(
+            default="upstream",
+            description="Direction: 'upstream' (dependencies) or 'downstream' (blocked tasks)"
+        ),
+    ] = "upstream",
+) -> str:
+    """Get the dependency chain for a specific task.
+
+    - upstream: Gets all tasks this task depends on (directly and transitively)
+    - downstream: Gets all tasks blocked by this task (directly and transitively)
+
+    Args:
+        task_id: The task to get the chain for
+        direction: 'upstream' or 'downstream'
+
+    Returns:
+        JSON with: tasks (list), count (int)
+    """
+    if not is_v2_schema():
+        return json.dumps({"error": "task_get_dependency_chain requires v2 schema"})
+
+    if direction not in ("upstream", "downstream"):
+        return json.dumps({"error": "direction must be 'upstream' or 'downstream'"})
+
+    session = get_session()
+    try:
+        chain = get_dependency_chain(session, task_id, direction)
+        return json.dumps({
+            "tasks": [t.to_dict() for t in chain],
+            "count": len(chain),
+            "direction": direction,
+        }, indent=2)
+    finally:
+        session.close()
+
+
+@mcp.tool()
+def task_clear_dependencies(
+    task_id: Annotated[int, Field(description="The task ID to clear dependencies for", ge=1)]
+) -> str:
+    """Clear all dependencies from a task.
+
+    This will unblock the task if it was blocked.
+
+    Args:
+        task_id: The task to clear dependencies from
+
+    Returns:
+        JSON with the updated task details.
+    """
+    if not is_v2_schema():
+        return json.dumps({"error": "task_clear_dependencies requires v2 schema"})
+
+    session = get_session()
+    try:
+        task = set_task_dependencies(session, task_id, [])
+        return json.dumps(task.to_dict(), indent=2)
+    except ValueError as e:
+        return json.dumps({"error": str(e)})
     finally:
         session.close()
 
