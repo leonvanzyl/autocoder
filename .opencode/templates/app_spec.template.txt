@@ -5,7 +5,7 @@
   This is a placeholder template. Replace with your actual project specification.
 
   You can either:
-  1. Use the /create-spec command to generate this interactively with Claude
+  1. Use the /create-spec command to generate this interactively with Opencode
   2. Manually edit this file following the structure below
 
   See existing projects in generations/ for examples of complete specifications.

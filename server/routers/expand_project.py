@@ -2,7 +2,7 @@
 Expand Project Router
 =====================
 
-WebSocket and REST endpoints for interactive project expansion with Claude.
+WebSocket and REST endpoints for interactive project expansion with Opencode.
 Allows adding multiple features to existing projects via natural language.
 """
 
@@ -112,7 +112,7 @@ async def expand_project_websocket(websocket: WebSocket, project_name: str):
     - {"type": "ping"} - Keep-alive ping
 
     Server -> Client:
-    - {"type": "text", "content": "..."} - Text chunk from Claude
+    - {"type": "text", "content": "..."} - Text chunk from Opencode
     - {"type": "features_created", "count": N, "features": [...]} - Features added
     - {"type": "expansion_complete", "total_added": N} - Session complete
     - {"type": "response_done"} - Response complete
@@ -211,7 +211,7 @@ async def expand_project_websocket(websocket: WebSocket, project_name: str):
                         })
                         continue
 
-                    # Stream Claude's response
+                    # Stream Opencode's response
                     async for chunk in session.send_message(user_content, attachments if attachments else None):
                         await websocket.send_json(chunk)
 

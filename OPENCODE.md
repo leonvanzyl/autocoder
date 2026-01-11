@@ -92,8 +92,8 @@ npm run lint     # Run ESLint
 
 - `start.py` - CLI launcher with project creation/selection menu
 - `autonomous_agent_demo.py` - Entry point for running the agent
-- `agent.py` - Agent session loop using Claude Agent SDK
-- `client.py` - ClaudeSDKClient configuration with security hooks and MCP servers
+- `agent.py` - Agent session loop
+- `client.py` - Opencode client configuration with security hooks and MCP servers
 - `security.py` - Bash command allowlist validation (ALLOWED_COMMANDS whitelist)
 - `prompts.py` - Prompt template loading with project-specific fallback
 - `progress.py` - Progress tracking, database queries, webhook notifications
@@ -161,7 +161,7 @@ Defense-in-depth approach configured in `client.py`:
 2. Filesystem restricted to project directory only
 3. Bash commands validated against `ALLOWED_COMMANDS` in `security.py`
 
-## Claude Code Integration
+## Opencode Integration
 
 - `.opencode/commands/create-spec.md` - `/create-spec` slash command for interactive spec creation
 - `.opencode/skills/frontend-design/SKILL.md` - Skill for distinctive UI design

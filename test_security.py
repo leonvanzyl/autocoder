@@ -41,8 +41,8 @@ def check_hook(command: str, should_block: bool) -> bool:
     return True
 
 
-def test_extract_commands():
-    """Test the command extraction logic."""
+def run_extract_commands():
+    """Run the command extraction tests and return (passed, failed)."""
     print("\nTesting command extraction:\n")
     passed = 0
     failed = 0
@@ -69,8 +69,14 @@ def test_extract_commands():
     return passed, failed
 
 
-def test_validate_chmod():
-    """Test chmod command validation."""
+def test_extract_commands():
+    """Pytest wrapper for command extraction."""
+    passed, failed = run_extract_commands()
+    assert failed == 0
+
+
+def run_validate_chmod():
+    """Run chmod validation tests and return (passed, failed)."""
     print("\nTesting chmod validation:\n")
     passed = 0
     failed = 0
@@ -112,8 +118,14 @@ def test_validate_chmod():
     return passed, failed
 
 
-def test_validate_init_script():
-    """Test init.sh script execution validation."""
+def test_validate_chmod():
+    """Pytest wrapper for chmod validation."""
+    passed, failed = run_validate_chmod()
+    assert failed == 0
+
+
+def run_validate_init_script():
+    """Run init.sh validation tests and return (passed, failed)."""
     print("\nTesting init.sh validation:\n")
     passed = 0
     failed = 0
@@ -151,6 +163,12 @@ def test_validate_init_script():
     return passed, failed
 
 
+def test_validate_init_script():
+    """Pytest wrapper for init.sh validation."""
+    passed, failed = run_validate_init_script()
+    assert failed == 0
+
+
 def main():
     print("=" * 70)
     print("  SECURITY HOOK TESTS")
@@ -160,17 +178,17 @@ def main():
     failed = 0
 
     # Test command extraction
-    ext_passed, ext_failed = test_extract_commands()
+    ext_passed, ext_failed = run_extract_commands()
     passed += ext_passed
     failed += ext_failed
 
     # Test chmod validation
-    chmod_passed, chmod_failed = test_validate_chmod()
+    chmod_passed, chmod_failed = run_validate_chmod()
     passed += chmod_passed
     failed += chmod_failed
 
     # Test init.sh validation
-    init_passed, init_failed = test_validate_init_script()
+    init_passed, init_failed = run_validate_init_script()
     passed += init_passed
     failed += init_failed
 

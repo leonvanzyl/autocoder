@@ -29,7 +29,7 @@ export function useCreateProject() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: ({ name, path, specMethod }: { name: string; path: string; specMethod?: 'claude' | 'manual' }) =>
+    mutationFn: ({ name, path, specMethod }: { name: string; path: string; specMethod?: 'opencode' | 'manual' }) =>
       api.createProject(name, path, specMethod),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['projects'] })
@@ -208,15 +208,14 @@ export function useValidatePath() {
 // Default models response for placeholder (until API responds)
 const DEFAULT_MODELS: ModelsResponse = {
   models: [
-    { id: 'claude-opus-4-5-20251101', name: 'Claude Opus 4.5' },
-    { id: 'claude-sonnet-4-5-20250929', name: 'Claude Sonnet 4.5' },
+    { id: 'default', name: 'Default Provider Model' },
   ],
-  default: 'claude-opus-4-5-20251101',
+  default: 'default',
 }
 
 const DEFAULT_SETTINGS: Settings = {
   yolo_mode: false,
-  model: 'claude-opus-4-5-20251101',
+  model: 'default',
 }
 
 export function useAvailableModels() {

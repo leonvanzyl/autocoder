@@ -1,7 +1,7 @@
 /**
  * Expand Project Chat Component
  *
- * Full chat interface for interactive project expansion with Claude.
+ * Full chat interface for interactive project expansion using Opencode.
  * Allows users to describe new features in natural language.
  */
 
@@ -239,7 +239,7 @@ export function ExpandProjectChat({
                 Starting Project Expansion
               </h3>
               <p className="text-sm text-[var(--color-neo-text-secondary)]">
-                Connecting to Claude to help you add new features to your project...
+                Connecting to the agent (Opencode) to help you add new features to your project...
               </p>
               {connectionStatus === 'error' && (
                 <button

@@ -37,4 +37,4 @@ IMPORTANT:
 - Do NOT skip any files - include everything
 - Make the commit message descriptive enough that someone reviewing the git log can understand what was accomplished
 - Follow the project's existing commit message conventions (check git log first)
-- Include the Claude Code co-author attribution in the commit message
+- Include the Opencode co-author attribution in the commit message

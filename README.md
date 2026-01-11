@@ -2,7 +2,7 @@
 
 [![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-FFDD00?style=flat&logo=buy-me-a-coffee&logoColor=black)](https://www.buymeacoffee.com/leonvanzyl)
 
-A long-running autonomous coding agent powered by the Claude Agent SDK. This tool can build complete applications over multiple sessions using a two-agent pattern (initializer + coding agent). Includes a React-based UI for monitoring progress in real-time.
+A long-running autonomous coding agent powered by the Opencode SDK. This tool can build complete applications over multiple sessions using a two-agent pattern (initializer + coding agent). Includes a React-based UI for monitoring progress in real-time.
 
 ## Video Tutorial
 
@@ -14,26 +14,20 @@ A long-running autonomous coding agent powered by the Claude Agent SDK. This too
 
 ## Prerequisites
 
-### Claude Code CLI (Required)
+### Opencode SDK (Required)
 
-This project requires the Claude Code CLI to be installed. Install it using one of these methods:
+This project requires the Opencode Python SDK to be available in the environment. Install it via:
 
-**macOS / Linux:**
+**macOS / Linux / Windows:**
 ```bash
-curl -fsSL https://claude.ai/install.sh | bash
-```
-
-**Windows (PowerShell):**
-```powershell
-irm https://claude.ai/install.ps1 | iex
+pip install --pre opencode-ai
 ```
 
 ### Authentication
 
 You need one of the following:
 
-- **Claude Pro/Max Subscription** - Use `claude login` to authenticate (recommended)
-- **Anthropic API Key** - Pay-per-use from https://console.anthropic.com/
+- **Opencode API Key** - Set `OPENCODE_API_KEY` in your environment per the docs at https://opencode.ai/docs
 
 ---
 
@@ -70,8 +64,8 @@ start.bat
 ```
 
 The start script will:
-1. Check if Claude CLI is installed
-2. Check if you're authenticated (prompt to run `claude login` if not)
+1. Check if the Opencode SDK is installed
+2. Check if you're authenticated (ensure `OPENCODE_API_KEY` is set in the environment)
 3. Create a Python virtual environment
 4. Install dependencies
 5. Launch the main menu
@@ -82,7 +76,7 @@ You'll see options to:
 - **Create new project** - Start a fresh project with AI-assisted spec generation
 - **Continue existing project** - Resume work on a previous project
 
-For new projects, you can use the built-in `/create-spec` command to interactively create your app specification with Claude's help.
+For new projects, you can use the built-in `/create-spec` command to interactively create your app specification with Opencode's help.
 
 ---
 
@@ -139,7 +133,7 @@ autonomous-coding/
 ├── start_ui.py               # Web UI backend (FastAPI server launcher)
 ├── autonomous_agent_demo.py  # Agent entry point
 ├── agent.py                  # Agent session logic
-├── client.py                 # Claude SDK client configuration
+├── client.py                 # Opencode client configuration
 ├── security.py               # Bash command allowlist and validation
 ├── progress.py               # Progress tracking utilities
 ├── prompts.py                # Prompt loading utilities
@@ -160,10 +154,10 @@ autonomous-coding/
 │   │   └── lib/              # API client and types
 │   ├── package.json
 │   └── vite.config.ts
-├── .claude/
+├── .opencode/
 │   ├── commands/
 │   │   └── create-spec.md    # /create-spec slash command
-│   ├── skills/               # Claude Code skills
+│   ├── skills/               # Opencode skills
 │   └── templates/            # Prompt templates
 ├── generations/              # Generated projects go here
 ├── requirements.txt          # Python dependencies
@@ -184,7 +178,7 @@ generations/my_project/
 │   ├── initializer_prompt.md # First session prompt
 │   └── coding_prompt.md      # Continuation session prompt
 ├── init.sh                   # Environment setup script
-├── claude-progress.txt       # Session progress notes
+├── opencode-progress.txt       # Session progress notes
 └── [application files]       # Generated application code
 ```
 
@@ -306,11 +300,11 @@ Edit `security.py` to add or remove commands from `ALLOWED_COMMANDS`.
 
 ## Troubleshooting
 
-**"Claude CLI not found"**
-Install the Claude Code CLI using the instructions in the Prerequisites section.
+**"Opencode SDK/CLI not found"**
+Install the Opencode SDK and ensure `OPENCODE_API_KEY` is configured (see Prerequisites).
 
-**"Not authenticated with Claude"**
-Run `claude login` to authenticate. The start script will prompt you to do this automatically.
+**"Not authenticated with Opencode"**
+Ensure `OPENCODE_API_KEY` is set in your environment. The start script will prompt if it detects missing credentials.
 
 **"Appears to hang on first run"**
 This is normal. The initializer agent is generating detailed test cases, which takes significant time. Watch for `[Tool: ...]` output to confirm the agent is working.

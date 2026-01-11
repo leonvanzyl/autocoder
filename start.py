@@ -4,7 +4,7 @@ Simple CLI launcher for the Autonomous Coding Agent.
 Provides an interactive menu to create new projects or continue existing ones.
 
 Supports two paths for new projects:
-1. Claude path: Use /create-spec to generate spec interactively
+1. Opencode path: Use /create-spec to generate spec interactively
 2. Manual path: Edit template files directly, then continue
 """
 
@@ -25,10 +25,10 @@ def get_cli_command() -> str:
     """
     Get the CLI command to use for the agent.
 
-    Reads from CLI_COMMAND environment variable, defaults to 'claude'.
+    Reads from CLI_COMMAND environment variable, defaults to 'opencode'.
     This allows users to use alternative CLIs like 'glm'.
     """
-    return os.getenv("CLI_COMMAND", "claude")
+    return os.getenv("CLI_COMMAND", "opencode")
 
 
 from prompts import (
@@ -218,7 +218,7 @@ def ensure_project_scaffolded(project_name: str, project_dir: Path) -> Path:
 
 def run_spec_creation(project_dir: Path) -> bool:
     """
-    Run Claude Code with /create-spec command to create project specification.
+    Run Opencode CLI with /create-spec command to create project specification.
 
     The project path is passed as an argument so create-spec knows where to write files.
     Captures stderr to detect authentication errors and provide helpful guidance.
@@ -228,10 +228,10 @@ def run_spec_creation(project_dir: Path) -> bool:
     print("=" * 50)
     print(f"\nProject directory: {project_dir}")
     print(f"Prompts will be saved to: {get_project_prompts_dir(project_dir)}")
-    print("\nLaunching Claude Code for interactive spec creation...")
+    print("\nLaunching Opencode CLI for interactive spec creation...")
     print("Answer the questions to define your project.")
-    print("When done, Claude will generate the spec files.")
-    print("Exit Claude Code (Ctrl+C or /exit) when finished.\n")
+    print("When done, Opencode will generate the spec files.")
+    print("Exit Opencode (Ctrl+C or /exit) when finished.\n")
 
     try:
         # Launch CLI with /create-spec command
@@ -254,7 +254,7 @@ def run_spec_creation(project_dir: Path) -> bool:
 
         # If there was stderr output but not an auth error, show it
         if stderr_output.strip() and result.returncode != 0:
-            print(f"\nClaude CLI error: {stderr_output.strip()}")
+            print(f"\nOpencode CLI error: {stderr_output.strip()}")
 
         # Check if spec was created in project prompts directory
         if check_spec_exists(project_dir):
@@ -267,15 +267,16 @@ def run_spec_creation(project_dir: Path) -> bool:
             print(f"Please ensure app_spec.txt exists in: {get_project_prompts_dir(project_dir)}")
             # If failed with non-zero exit and no spec, might be auth issue
             if result.returncode != 0:
-                print(f"\nIf you're having authentication issues, try running: {cli_command} login")
+                print(f"\nIf you're having authentication issues, ensure {cli_command} is installed or set OPENCODE_API_KEY in your environment")
             return False
 
     except FileNotFoundError:
         cli_command = get_cli_command()
         print(f"\nError: '{cli_command}' command not found.")
-        if cli_command == "claude":
-            print("Make sure Claude Code CLI is installed:")
-            print("  npm install -g @anthropic-ai/claude-code")
+        if cli_command == "opencode":
+            print("Make sure the Opencode SDK is installed and configure OPENCODE_API_KEY:")
+            print("  pip install --pre opencode-ai")
+            print("  export OPENCODE_API_KEY=your_key_here")
         else:
             print(f"Make sure the '{cli_command}' CLI is installed and in your PATH.")
         return False
@@ -324,12 +325,12 @@ def run_manual_spec_flow(project_dir: Path) -> bool:
 
 
 def ask_spec_creation_choice() -> str | None:
-    """Ask user whether to create spec with Claude or manually."""
+    """Ask user whether to create spec with Opencode or manually."""
     print("\n" + "-" * 40)
     print("  Specification Setup")
     print("-" * 40)
     print("\nHow would you like to define your project?")
-    print("\n[1] Create spec with Claude (recommended)")
+    print("\n[1] Create spec with Opencode (recommended)")
     print("    Interactive conversation to define your project")
     print("\n[2] Edit templates manually")
     print("    Edit the template files directly in your editor")
@@ -349,8 +350,8 @@ def create_new_project_flow() -> tuple[str, Path] | None:
 
     1. Get project name and path
     2. Create project directory and scaffold prompts
-    3. Ask: Claude or Manual?
-    4. If Claude: Run /create-spec with project path
+    3. Ask: Opencode or Manual?
+    4. If Opencode: Run /create-spec with project path
     5. If Manual: Show paths, wait for Enter
     6. Return (name, path) tuple if successful
     """
@@ -369,7 +370,7 @@ def create_new_project_flow() -> tuple[str, Path] | None:
     if choice == 'b':
         return None
     elif choice == '1':
-        # Create spec with Claude
+        # Create spec with Opencode
         success = run_spec_creation(project_dir)
         if not success:
             print("\nYou can try again later or edit the templates manually.")

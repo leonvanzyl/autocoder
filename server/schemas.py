@@ -28,7 +28,7 @@ class ProjectCreate(BaseModel):
     """Request schema for creating a new project."""
     name: str = Field(..., min_length=1, max_length=50, pattern=r'^[a-zA-Z0-9_-]+$')
     path: str = Field(..., min_length=1, description="Absolute path to project directory")
-    spec_method: Literal["claude", "manual"] = "claude"
+    spec_method: Literal["opencode", "manual"] = "opencode"
 
 
 class ProjectStats(BaseModel):
@@ -157,8 +157,8 @@ class AgentActionResponse(BaseModel):
 
 class SetupStatus(BaseModel):
     """System setup status."""
-    claude_cli: bool
-    credentials: bool
+    opencode_sdk: bool
+    opencode_api_key: bool
     node: bool
     npm: bool
 

@@ -18,13 +18,8 @@ load_dotenv()
 
 
 def get_cli_command() -> str:
-    """
-    Get the CLI command to use for the agent.
-
-    Reads from CLI_COMMAND environment variable, defaults to 'claude'.
-    This allows users to use alternative CLIs like 'glm'.
-    """
-    return os.getenv("CLI_COMMAND", "claude")
+    """Deprecated helper retained for compatibility."""
+    return os.getenv("CLI_COMMAND", "opencode")  # defaults to opencode if not specified
 
 from fastapi import FastAPI, HTTPException, Request, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
@@ -140,23 +135,22 @@ async def health_check():
 @app.get("/api/setup/status", response_model=SetupStatus)
 async def setup_status():
     """Check system setup status."""
-    # Check for CLI (configurable via CLI_COMMAND environment variable)
-    cli_command = get_cli_command()
-    claude_cli = shutil.which(cli_command) is not None
+    # Check whether the opencode SDK is importable
+    try:
+        opencode_sdk = True
+    except Exception:
+        opencode_sdk = False
 
-    # Check for CLI configuration directory
-    # Note: CLI no longer stores credentials in ~/.claude/.credentials.json
-    # The existence of ~/.claude indicates the CLI has been configured
-    claude_dir = Path.home() / ".claude"
-    credentials = claude_dir.exists() and claude_dir.is_dir()
+    # Check for OPENCODE_API_KEY in environment
+    opencode_api_key = bool(os.getenv("OPENCODE_API_KEY"))
 
     # Check for Node.js and npm
     node = shutil.which("node") is not None
     npm = shutil.which("npm") is not None
 
     return SetupStatus(
-        claude_cli=claude_cli,
-        credentials=credentials,
+        opencode_sdk=opencode_sdk,
+        opencode_api_key=opencode_api_key,
         node=node,
         npm=npm,
     )

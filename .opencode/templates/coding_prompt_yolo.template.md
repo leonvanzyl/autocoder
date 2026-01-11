@@ -29,7 +29,7 @@ ls -la
 cat app_spec.txt
 
 # 4. Read progress notes from previous sessions (last 500 lines to avoid context overflow)
-tail -500 claude-progress.txt
+tail -500 opencode-progress.txt
 
 # 5. Check recent git history
 git log --oneline -20
@@ -105,7 +105,7 @@ If you must skip (truly external blocker only):
 Use the feature_skip tool with feature_id={id}
 ```
 
-Document the SPECIFIC external blocker in `claude-progress.txt`. "Functionality not built" is NEVER a valid reason.
+Document the SPECIFIC external blocker in `opencode-progress.txt`. "Functionality not built" is NEVER a valid reason.
 
 ### STEP 4: IMPLEMENT THE FEATURE
 
@@ -172,7 +172,7 @@ git commit -m "Implement [feature name] - YOLO mode
 
 ### STEP 8: UPDATE PROGRESS NOTES
 
-Update `claude-progress.txt` with:
+Update `opencode-progress.txt` with:
 
 - What you accomplished this session
 - Which feature(s) you completed
@@ -185,7 +185,7 @@ Update `claude-progress.txt` with:
 Before context fills up:
 
 1. Commit all working code
-2. Update claude-progress.txt
+2. Update opencode-progress.txt
 3. Mark features as passing if lint/type-check verified
 4. Ensure no uncommitted changes
 5. Leave app in working state

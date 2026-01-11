@@ -1,7 +1,7 @@
 /**
  * Typing Indicator Component
  *
- * Shows animated dots to indicate Claude is typing/thinking.
+ * Shows animated dots to indicate the agent is typing/thinking.
  * Styled in neobrutalism aesthetic.
  */
 
@@ -23,7 +23,7 @@ export function TypingIndicator() {
         />
       </div>
       <span className="text-sm font-mono animate-shimmer">
-        Claude is thinking...
+Agent is thinking...
       </span>
     </div>
   )

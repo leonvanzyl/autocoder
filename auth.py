@@ -2,20 +2,20 @@
 Authentication Error Detection
 ==============================
 
-Shared utilities for detecting Claude CLI authentication errors.
+Shared utilities for detecting Opencode authentication errors.
 Used by both CLI (start.py) and server (process_manager.py) to provide
 consistent error detection and messaging.
 """
 
 import re
 
-# Patterns that indicate authentication errors from Claude CLI
+# Patterns that indicate authentication errors from Opencode or CLI wrappers
 AUTH_ERROR_PATTERNS = [
     r"not\s+logged\s+in",
     r"not\s+authenticated",
     r"authentication\s+(failed|required|error)",
     r"login\s+required",
-    r"please\s+(run\s+)?['\"]?claude\s+login",
+    r"please\s+(run\s+)?['\"]?opencode\s+login",
     r"unauthorized",
     r"invalid\s+(token|credential|api.?key)",
     r"expired\s+(token|session|credential)",
@@ -26,7 +26,7 @@ AUTH_ERROR_PATTERNS = [
 
 def is_auth_error(text: str) -> bool:
     """
-    Check if text contains Claude CLI authentication error messages.
+    Check if text contains Opencode authentication error messages.
 
     Uses case-insensitive pattern matching against known error messages.
 
@@ -51,13 +51,12 @@ AUTH_ERROR_HELP_CLI = """
   Authentication Error Detected
 ==================================================
 
-Claude CLI requires authentication to work.
+Opencode requires an API key (set `OPENCODE_API_KEY` in your environment).
 
-To fix this, run:
-  claude login
+To fix this, set the environment variable:
+  export OPENCODE_API_KEY=your_api_key_here
 
-This will open a browser window to sign in.
-After logging in, try running this command again.
+Then re-run the command.
 ==================================================
 """
 
@@ -67,13 +66,12 @@ AUTH_ERROR_HELP_SERVER = """
   AUTHENTICATION ERROR DETECTED
 ================================================================================
 
-Claude CLI requires authentication to work.
+Opencode requires an API key (set `OPENCODE_API_KEY` in your environment).
 
-To fix this, run:
-  claude login
+To fix this, set the environment variable:
+  export OPENCODE_API_KEY=your_api_key_here
 
-This will open a browser window to sign in.
-After logging in, try starting the agent again.
+Then start the agent again if it was stopped.
 ================================================================================
 """
 

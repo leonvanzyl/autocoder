@@ -6,14 +6,14 @@ Functions for loading prompt templates with project-specific support.
 
 Fallback chain:
 1. Project-specific: {project_dir}/prompts/{name}.md
-2. Base template: .claude/templates/{name}.template.md
+2. Base template: .opencode/templates/{name}.template.md
 """
 
 import shutil
 from pathlib import Path
 
 # Base templates location (generic templates)
-TEMPLATES_DIR = Path(__file__).parent / ".claude" / "templates"
+TEMPLATES_DIR = Path(__file__).parent / ".opencode" / "templates"
 
 
 def get_project_prompts_dir(project_dir: Path) -> Path:
@@ -27,7 +27,7 @@ def load_prompt(name: str, project_dir: Path | None = None) -> str:
 
     Fallback order:
     1. Project-specific: {project_dir}/prompts/{name}.md
-    2. Base template: .claude/templates/{name}.template.md
+    2. Base template: .opencode/templates/{name}.template.md
 
     Args:
         name: The prompt name (without extension), e.g., "initializer_prompt"

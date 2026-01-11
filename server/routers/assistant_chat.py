@@ -230,7 +230,7 @@ async def assistant_chat_websocket(websocket: WebSocket, project_name: str):
 
     Server -> Client:
     - {"type": "conversation_created", "conversation_id": int} - New conversation created
-    - {"type": "text", "content": "..."} - Text chunk from Claude
+    - {"type": "text", "content": "..."} - Text chunk from Opencode
     - {"type": "tool_call", "tool": "...", "input": {...}} - Tool being called
     - {"type": "response_done"} - Response complete
     - {"type": "error", "content": "..."} - Error message
@@ -306,7 +306,7 @@ async def assistant_chat_websocket(websocket: WebSocket, project_name: str):
                         })
                         continue
 
-                    # Stream Claude's response
+                    # Stream Opencode's response
                     async for chunk in session.send_message(user_content):
                         await websocket.send_json(chunk)
 

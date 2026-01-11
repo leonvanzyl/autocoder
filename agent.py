@@ -14,10 +14,10 @@ from pathlib import Path
 from typing import Optional
 from zoneinfo import ZoneInfo
 
-from claude_agent_sdk import ClaudeSDKClient
+from opencode_adapter import OpencodeClient
 
 # Fix Windows console encoding for Unicode characters (emoji, etc.)
-# Without this, print() crashes when Claude outputs emoji like ✅
+# Without this, print() crashes when Opencode outputs emoji like ✅
 if sys.platform == "win32":
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
@@ -36,15 +36,15 @@ AUTO_CONTINUE_DELAY_SECONDS = 3
 
 
 async def run_agent_session(
-    client: ClaudeSDKClient,
+    client: OpencodeClient,
     message: str,
     project_dir: Path,
 ) -> tuple[str, str]:
     """
-    Run a single agent session using Claude Agent SDK.
+    Run a single agent session using the Opencode SDK.
 
     Args:
-        client: Claude SDK client
+        client: Opencode SDK client
         message: The prompt to send
         project_dir: Project directory path
 
@@ -53,7 +53,7 @@ async def run_agent_session(
         - "continue" if agent should continue working
         - "error" if an error occurred
     """
-    print("Sending prompt to Claude Agent SDK...\n")
+    print("Sending prompt to Opencode SDK...\n")
 
     try:
         # Send the query
@@ -120,7 +120,7 @@ async def run_autonomous_agent(
 
     Args:
         project_dir: Directory for the project
-        model: Claude model to use
+        model: Opencode model to use
         max_iterations: Maximum number of iterations (None for unlimited)
         yolo_mode: If True, skip browser testing and use YOLO prompt
     """
@@ -202,7 +202,7 @@ async def run_autonomous_agent(
             target_time_str = None
 
             if "limit reached" in response.lower():
-                print("Claude Agent SDK indicated limit reached.")
+                print("Opencode indicated limit reached.")
 
                 # Try to parse reset time from response
                 match = re.search(
@@ -243,7 +243,7 @@ async def run_autonomous_agent(
 
             if target_time_str:
                 print(
-                    f"\nClaude Code Limit Reached. Agent will auto-continue in {delay_seconds:.0f}s ({target_time_str})...",
+                    f"\nOpencode Limit Reached. Agent will auto-continue in {delay_seconds:.0f}s ({target_time_str})...",
                     flush=True,
                 )
             else:

@@ -2,7 +2,7 @@
 Spec Creation Router
 ====================
 
-WebSocket and REST endpoints for interactive spec creation with Claude.
+WebSocket and REST endpoints for interactive spec creation with Opencode.
 """
 
 import json
@@ -111,8 +111,8 @@ async def get_spec_file_status(project_name: str):
     """
     Get spec creation status by reading .spec_status.json from the project.
 
-    This is used for polling to detect when Claude has finished writing spec files.
-    Claude writes this status file as the final step after completing all spec work.
+    This is used for polling to detect when Opencode has finished writing spec files.
+    Opencode writes this status file as the final step after completing all spec work.
     """
     if not validate_project_name(project_name):
         raise HTTPException(status_code=400, detail="Invalid project name")
@@ -176,7 +176,7 @@ async def spec_chat_websocket(websocket: WebSocket, project_name: str):
     - {"type": "ping"} - Keep-alive ping
 
     Server -> Client:
-    - {"type": "text", "content": "..."} - Text chunk from Claude
+    - {"type": "text", "content": "..."} - Text chunk from Opencode
     - {"type": "question", "questions": [...], "tool_id": "..."} - Structured question
     - {"type": "spec_complete", "path": "..."} - Spec file created
     - {"type": "file_written", "path": "..."} - Other file written
@@ -280,7 +280,7 @@ async def spec_chat_websocket(websocket: WebSocket, project_name: str):
                     spec_complete_received = False
                     spec_path = None
 
-                    # Stream Claude's response (with attachments if present)
+                    # Stream Opencode's response (with attachments if present)
                     async for chunk in session.send_message(user_content, attachments if attachments else None):
                         # Track spec_complete but don't send complete yet
                         if chunk.get("type") == "spec_complete":
@@ -327,7 +327,7 @@ async def spec_chat_websocket(websocket: WebSocket, project_name: str):
                     spec_complete_received = False
                     spec_path = None
 
-                    # Stream Claude's response
+                    # Stream Opencode's response
                     async for chunk in session.send_message(user_response):
                         # Track spec_complete but don't send complete yet
                         if chunk.get("type") == "spec_complete":

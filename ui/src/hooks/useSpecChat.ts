@@ -72,7 +72,7 @@ export function useSpecChat({
   }, [])
 
   // Poll status file as fallback completion detection
-  // Claude writes .spec_status.json when done with all spec work
+  // Opencode writes .spec_status.json when done with all spec work
   useEffect(() => {
     // Don't poll if already complete
     if (isComplete) return

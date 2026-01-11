@@ -1,7 +1,7 @@
 /**
  * Spec Creation Chat Component
  *
- * Full chat interface for interactive spec creation with Claude.
+ * Full chat interface for interactive spec creation using Opencode.
  * Handles the 7-phase conversation flow for creating app specifications.
  */
 
@@ -88,7 +88,7 @@ export function SpecCreationChat({
     // Allow sending if there's text OR attachments
     if ((!trimmed && pendingAttachments.length === 0) || isLoading) return
 
-    // Detect /exit command - exit to project without sending to Claude
+    // Detect /exit command - exit to project without sending to Opencode
     if (/^\s*\/exit\s*$/i.test(trimmed)) {
       setInput('')
       onExitToProject()
@@ -266,7 +266,7 @@ export function SpecCreationChat({
                 Starting Spec Creation
               </h3>
               <p className="text-sm text-[var(--color-neo-text-secondary)]">
-                Connecting to Claude to help you create your app specification...
+                Connecting to the agent (Opencode) to help you create your app specification...
               </p>
               {connectionStatus === 'error' && (
                 <button

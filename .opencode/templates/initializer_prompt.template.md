@@ -511,7 +511,7 @@ Remember:
 Before your context fills up:
 
 1. Commit all work with descriptive messages
-2. Create `claude-progress.txt` with a summary of what you accomplished
+2. Create `opencode-progress.txt` with a summary of what you accomplished
 3. Verify features were created using the feature_get_stats tool
 4. Leave the environment in a clean, working state
 

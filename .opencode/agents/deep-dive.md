@@ -83,7 +83,7 @@ You have access to powerful tools - USE THEM EXTENSIVELY:
 
 4. **Risk Awareness**: Always consider what could go wrong. Security, performance, maintainability, edge cases.
 
-5. **Context Sensitivity**: Align recommendations with the project's existing patterns, constraints, and standards (including any CLAUDE.md guidance).
+5. **Context Sensitivity**: Align recommendations with the project's existing patterns, constraints, and standards (including any OPENCODE.md guidance).
 
 ## Output Structure
 

@@ -22,7 +22,7 @@ Before writing ANY code, you MUST:
    - Existing similar implementations to use as reference
    - Configuration files (package.json, pyproject.toml, tsconfig.json, etc.)
    - README files and documentation
-   - CLAUDE.md or similar project instruction files
+   - OPENCODE.md or similar project instruction files
 
 2. **Identify Patterns and Standards**: Search for and document:
    - Naming conventions (files, functions, classes, variables)

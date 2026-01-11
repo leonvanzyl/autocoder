@@ -11,7 +11,7 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
   const { data: health, error: healthError } = useHealthCheck()
 
   const isApiHealthy = health?.status === 'healthy' && !healthError
-  const isReady = isApiHealthy && setupStatus?.claude_cli && setupStatus?.credentials
+  const isReady = isApiHealthy && setupStatus?.opencode_sdk && setupStatus?.opencode_api_key
 
   // Memoize the completion check to avoid infinite loops
   const checkAndComplete = useCallback(() => {
@@ -43,37 +43,37 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
             status={healthError ? 'error' : isApiHealthy ? 'success' : 'loading'}
           />
 
-          {/* Claude CLI */}
+          {/* Opencode SDK */}
           <SetupItem
-            label="Claude CLI"
-            description="Claude Code CLI is installed"
+            label="Opencode SDK"
+            description="Opencode Python SDK is installed"
             status={
               setupLoading
                 ? 'loading'
                 : setupError
                 ? 'error'
-                : setupStatus?.claude_cli
+                : setupStatus?.opencode_sdk
                 ? 'success'
                 : 'error'
             }
-            helpLink="https://docs.anthropic.com/claude/claude-code"
-            helpText="Install Claude Code"
+            helpLink="https://pypi.org/project/opencode-ai"
+            helpText="Install Opencode SDK"
           />
 
-          {/* Credentials */}
+          {/* Opencode API Key */}
           <SetupItem
-            label="Anthropic Credentials"
-            description="API credentials are configured"
+            label="Opencode API Key"
+            description="Opencode API key is configured"
             status={
               setupLoading
                 ? 'loading'
                 : setupError
                 ? 'error'
-                : setupStatus?.credentials
+                : setupStatus?.opencode_api_key
                 ? 'success'
                 : 'error'
             }
-            helpLink="https://console.anthropic.com/account/keys"
+            helpLink="https://opencode.ai/docs"
             helpText="Get API Key"
           />
 

@@ -247,7 +247,7 @@ class AgentProcessManager:
 
         Args:
             yolo_mode: If True, run in YOLO mode (no browser testing)
-            model: Model to use (e.g., claude-opus-4-5-20251101)
+            model: Model to use (e.g., 'default' or provider-specific model id)
 
         Returns:
             Tuple of (success, message)
@@ -280,7 +280,7 @@ class AgentProcessManager:
 
         try:
             # Start subprocess with piped stdout/stderr
-            # Use project_dir as cwd so Claude SDK sandbox allows access to project files
+            # Use project_dir as cwd so Opencode client sandbox allows access to project files
             self.process = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,

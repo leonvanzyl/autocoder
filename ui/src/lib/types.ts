@@ -101,8 +101,8 @@ export interface AgentActionResponse {
 
 // Setup types
 export interface SetupStatus {
-  claude_cli: boolean
-  credentials: boolean
+  opencode_sdk: boolean
+  opencode_api_key: boolean
   node: boolean
   npm: boolean
 }

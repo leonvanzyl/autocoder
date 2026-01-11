@@ -9,24 +9,22 @@ echo "  AutoCoder UI"
 echo "===================================="
 echo ""
 
-# Check if Claude CLI is installed
-if ! command -v claude &> /dev/null; then
-    echo "[!] Claude CLI not found"
+# Check if Opencode Python SDK is available
+if ! python -c "import opencode_ai" &> /dev/null; then
+    echo "[!] Opencode Python SDK not found"
     echo ""
-    echo "    The agent requires Claude CLI to work."
-    echo "    Install it from: https://claude.ai/download"
-    echo ""
-    echo "    After installing, run: claude login"
+    echo "    The agent requires the Opencode SDK to be installed."
+    echo "    Install it with: pip install --pre opencode-ai"
     echo ""
 else
-    echo "[OK] Claude CLI found"
-    # Note: Claude CLI no longer stores credentials in ~/.claude/.credentials.json
-    # We can't reliably check auth status without making an API call
-    if [ -d "$HOME/.claude" ]; then
-        echo "     (If you're not logged in, run: claude login)"
-    else
-        echo "[!] Claude CLI not configured - run 'claude login' first"
-    fi
+    echo "[OK] Opencode SDK available"
+fi
+
+# Note: Opencode uses API keys for authentication
+if [ -n "${OPENCODE_API_KEY:-}" ]; then
+    echo "[OK] OPENCODE_API_KEY found in environment"
+else
+    echo "[!] Opencode API key not configured - set OPENCODE_API_KEY"
 fi
 echo ""
 

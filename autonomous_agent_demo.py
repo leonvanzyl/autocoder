@@ -3,7 +3,7 @@
 Autonomous Coding Agent Demo
 ============================
 
-A minimal harness demonstrating long-running autonomous coding with Claude.
+A minimal harness demonstrating long-running autonomous coding with Opencode.
 This script implements the two-agent pattern (initializer + coding agent) and
 incorporates all the strategies from the long-running agents guide.
 
@@ -48,8 +48,8 @@ Examples:
   # Use registered project name (looked up from registry)
   python autonomous_agent_demo.py --project-dir my-app
 
-  # Use a specific model
-  python autonomous_agent_demo.py --project-dir my-app --model claude-sonnet-4-5-20250929
+  # Use a specific model (provider-dependent)
+  python autonomous_agent_demo.py --project-dir my-app --model default
 
   # Limit iterations for testing
   python autonomous_agent_demo.py --project-dir my-app --max-iterations 5
@@ -58,7 +58,7 @@ Examples:
   python autonomous_agent_demo.py --project-dir my-app --yolo
 
 Authentication:
-  Uses Claude CLI authentication (run 'claude login' if not logged in)
+  Uses Opencode API key authentication. Set `OPENCODE_API_KEY` in your environment or follow the instructions at https://opencode.ai/docs
   Authentication is handled by start.bat/start.sh before this runs
         """,
     )
@@ -81,7 +81,7 @@ Authentication:
         "--model",
         type=str,
         default=DEFAULT_MODEL,
-        help=f"Claude model to use (default: {DEFAULT_MODEL})",
+        help=f"Model to use (provider-agnostic; default: {DEFAULT_MODEL})",
     )
 
     parser.add_argument(
@@ -99,7 +99,7 @@ def main() -> None:
     args = parse_args()
 
     # Note: Authentication is handled by start.bat/start.sh before this script runs.
-    # The Claude SDK auto-detects credentials from ~/.claude/.credentials.json
+    # Opencode uses OPENCODE_API_KEY in the environment (see docs at https://opencode.ai/docs).
 
     # Resolve project directory:
     # 1. If absolute path, use as-is

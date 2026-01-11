@@ -4,8 +4,8 @@
  * Multi-step modal for creating new projects:
  * 1. Enter project name
  * 2. Select project folder
- * 3. Choose spec method (Claude or manual)
- * 4a. If Claude: Show SpecCreationChat
+ * 3. Choose spec method (Opencode or manual)
+ * 4a. If Opencode: Show SpecCreationChat
  * 4b. If manual: Create project and close
  */
 
@@ -19,7 +19,7 @@ import { startAgent } from '../lib/api'
 type InitializerStatus = 'idle' | 'starting' | 'error'
 
 type Step = 'name' | 'folder' | 'method' | 'chat' | 'complete'
-type SpecMethod = 'claude' | 'manual'
+type SpecMethod = 'opencode' | 'manual'
 
 interface NewProjectModalProps {
   isOpen: boolean
@@ -108,7 +108,7 @@ export function NewProjectModal({
         await createProject.mutateAsync({
           name: projectName.trim(),
           path: projectPath,
-          specMethod: 'claude',
+          specMethod: 'opencode',
         })
         setStep('chat')
       } catch (err: unknown) {
@@ -305,9 +305,9 @@ export function NewProjectModal({
               </p>
 
               <div className="space-y-4">
-                {/* Claude option */}
+                {/* Opencode option */}
                 <button
-                  onClick={() => handleMethodSelect('claude')}
+                  onClick={() => handleMethodSelect('opencode')}
                   disabled={createProject.isPending}
                   className={`
                     w-full text-left p-4
@@ -326,7 +326,7 @@ export function NewProjectModal({
                     </div>
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
-                        <span className="font-bold text-lg text-[#1a1a1a]">Create with Claude</span>
+                        <span className="font-bold text-lg text-[#1a1a1a]">Create with Opencode</span>
                         <span className="neo-badge bg-[var(--color-neo-done)] text-xs">
                           Recommended
                         </span>

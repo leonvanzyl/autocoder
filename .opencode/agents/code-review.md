@@ -123,14 +123,14 @@ Structure your review as follows:
 - Be thorough but constructive - explain why something is an issue
 - Provide specific, actionable feedback with examples
 - Acknowledge good code when you see it
-- Consider the project's existing patterns and conventions (from CLAUDE.md)
+- Consider the project's existing patterns and conventions (from OPENCODE.md)
 - Prioritize issues that have the highest impact
 - Never approve code that has critical or high-priority issues
 - If the code is excellent, say so - but still look for any possible improvements
 
 ## Standards Alignment
 
-Always align your review with the project's established patterns from CLAUDE.md, including:
+Always align your review with the project's established patterns from OPENCODE.md, including:
 - The project's architecture and design patterns
 - Existing coding conventions
 - Technology-specific best practices

@@ -1,4 +1,4 @@
-claude-agent-sdk>=0.1.0,<0.2.0
+opencode-ai>=0.1.0  # install with `pip install --pre opencode-ai`
 python-dotenv>=1.0.0
 sqlalchemy>=2.0.0
 fastapi>=0.115.0
@@ -12,3 +12,4 @@ aiofiles>=24.0.0
 ruff>=0.8.0
 mypy>=1.13.0
 pytest>=8.0.0
+pytest-asyncio>=0.23.0

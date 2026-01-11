@@ -53,7 +53,7 @@ export async function listProjects(): Promise<ProjectSummary[]> {
 export async function createProject(
   name: string,
   path: string,
-  specMethod: 'claude' | 'manual' = 'manual'
+  specMethod: 'opencode' | 'manual' = 'manual'
 ): Promise<ProjectSummary> {
   return fetchJSON('/projects', {
     method: 'POST',
