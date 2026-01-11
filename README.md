@@ -56,6 +56,7 @@ This launches the React-based web UI at `http://localhost:5173` with:
 - Kanban board view of features
 - Real-time agent output streaming
 - Start/pause/stop controls
+- **Project Assistant** - AI chat for managing features and exploring the codebase
 
 ### Option 2: CLI Mode
 
@@ -103,6 +104,23 @@ Features are stored in SQLite via SQLAlchemy and managed through an MCP server t
 - `feature_mark_passing` - Mark feature complete
 - `feature_skip` - Move feature to end of queue
 - `feature_create_bulk` - Initialize all features (used by initializer)
+- `feature_create` - Create a single feature
+- `feature_update` - Update a feature's fields
+- `feature_delete` - Delete a feature from the backlog
+
+### Project Assistant
+
+The Web UI includes a **Project Assistant** - an AI-powered chat interface for each project. Click the chat button in the bottom-right corner to open it.
+
+**Capabilities:**
+- **Explore the codebase** - Ask questions about files, architecture, and implementation details
+- **Manage features** - Create, edit, delete, and deprioritize features via natural language
+- **Get feature details** - Ask about specific features, their status, and test steps
+
+**Conversation Persistence:**
+- Conversations are automatically saved to `assistant.db` in each project directory
+- When you navigate away and return, your conversation resumes where you left off
+- Click "New Chat" to start a fresh conversation
 
 ### Session Management
 
@@ -179,6 +197,7 @@ After the agent runs, your project directory will contain:
 ```
 generations/my_project/
 ├── features.db               # SQLite database (feature test cases)
+├── assistant.db              # SQLite database (assistant chat history)
 ├── prompts/
 │   ├── app_spec.txt          # Your app specification
 │   ├── initializer_prompt.md # First session prompt
