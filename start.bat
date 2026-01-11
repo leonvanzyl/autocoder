@@ -23,45 +23,19 @@ if %errorlevel% neq 0 (
 
 echo [OK] Claude CLI found
 
-REM Check if user has credentials (check for ~/.claude/.credentials.json)
-set "CLAUDE_CREDS=%USERPROFILE%\.claude\.credentials.json"
-if exist "%CLAUDE_CREDS%" (
-    echo [OK] Claude credentials found
-    goto :setup_venv
-)
-
-REM No credentials - prompt user to login
-echo [!] Not authenticated with Claude
-echo.
-echo You need to run 'claude login' to authenticate.
-echo This will open a browser window to sign in.
-echo.
-set /p "LOGIN_CHOICE=Would you like to run 'claude login' now? (y/n): "
-
-if /i "%LOGIN_CHOICE%"=="y" (
-    echo.
-    echo Running 'claude login'...
-    echo Complete the login in your browser, then return here.
-    echo.
-    call claude login
-
-    REM Check if login succeeded
-    if exist "%CLAUDE_CREDS%" (
-        echo.
-        echo [OK] Login successful!
-        goto :setup_venv
-    ) else (
-        echo.
-        echo [ERROR] Login failed or was cancelled.
-        echo Please try again.
-        pause
-        exit /b 1
-    )
+REM Note: Claude CLI no longer stores credentials in ~/.claude/.credentials.json
+REM We can't reliably check auth status without making an API call, so we just
+REM verify the CLI is installed and remind the user to login if needed
+set "CLAUDE_DIR=%USERPROFILE%\.claude"
+if exist "%CLAUDE_DIR%\" (
+    echo [OK] Claude CLI directory found
+    echo      ^(If you're not logged in, run: claude login^)
 ) else (
+    echo [!] Claude CLI not configured
     echo.
-    echo Please run 'claude login' manually, then try again.
+    echo Please run 'claude login' to authenticate before continuing.
+    echo.
     pause
-    exit /b 1
 )
 
 :setup_venv

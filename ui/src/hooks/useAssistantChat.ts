@@ -116,6 +116,7 @@ export function useAssistantChat({
       if (wsRef.current) {
         wsRef.current.close();
       }
+      currentAssistantMessageRef.current = null;
     };
   }, []);
 
@@ -250,6 +251,7 @@ export function useAssistantChat({
 
           case "response_done": {
             setIsLoading(false);
+            currentAssistantMessageRef.current = null;
 
             // Find and mark the most recent streaming assistant message as done
             // (may not be the last message if tool_call/system messages followed)

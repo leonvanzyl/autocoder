@@ -18,8 +18,8 @@ if %ERRORLEVEL% neq 0 (
     exit /b 1
 )
 
-REM Check if venv exists, create if not
-if not exist "venv" (
+REM Check if venv exists with correct activation script
+if not exist "venv\Scripts\activate.bat" (
     echo Creating virtual environment...
     python -m venv venv
 )

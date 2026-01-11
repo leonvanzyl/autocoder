@@ -10,6 +10,8 @@ import type {
   Feature,
   FeatureCreate,
   FeatureUpdate,
+  FeatureBulkCreate,
+  FeatureBulkCreateResponse,
   AgentStatusResponse,
   AgentActionResponse,
   SetupStatus,
@@ -149,6 +151,19 @@ export async function updateFeature(
     {
       method: "PATCH",
       body: JSON.stringify(update),
+    },
+  );
+}
+
+export async function createFeaturesBulk(
+  projectName: string,
+  bulk: FeatureBulkCreate,
+): Promise<FeatureBulkCreateResponse> {
+  return fetchJSON(
+    `/projects/${encodeURIComponent(projectName)}/features/bulk`,
+    {
+      method: "POST",
+      body: JSON.stringify(bulk),
     },
   );
 }

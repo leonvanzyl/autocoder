@@ -8,6 +8,7 @@ Uses project registry for path lookups instead of fixed generations/ directory.
 
 import re
 import shutil
+import sys
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
@@ -131,7 +132,7 @@ async def list_projects():
 async def create_project(project: ProjectCreate):
     """Create a new project at the specified path."""
     _init_imports()
-    register_project, _, get_project_path, _, _ = _get_registry_functions()
+    register_project, _, get_project_path, list_registered_projects, _ = _get_registry_functions()
 
     name = validate_project_name(project.name)
     project_path = Path(project.path).resolve()
@@ -143,6 +144,22 @@ async def create_project(project: ProjectCreate):
             status_code=409,
             detail=f"Project '{name}' already exists at {existing}"
         )
+
+    # Check if path already registered under a different name
+    all_projects = list_registered_projects()
+    for existing_name, info in all_projects.items():
+        existing_path = Path(info["path"]).resolve()
+        # Case-insensitive comparison on Windows
+        if sys.platform == "win32":
+            paths_match = str(existing_path).lower() == str(project_path).lower()
+        else:
+            paths_match = existing_path == project_path
+
+        if paths_match:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Path '{project_path}' is already registered as project '{existing_name}'"
+            )
 
     # Security: Check if path is in a blocked location
     from .filesystem import is_path_blocked

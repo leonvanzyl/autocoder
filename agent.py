@@ -7,17 +7,20 @@ Core agent interaction functions for running autonomous coding sessions.
 
 import asyncio
 import io
+import re
 import sys
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 from claude_agent_sdk import ClaudeSDKClient
 
 # Fix Windows console encoding for Unicode characters (emoji, etc.)
 # Without this, print() crashes when Claude outputs emoji like ✅
 if sys.platform == "win32":
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
 
 from client import create_client
 from progress import has_features, print_progress_summary, print_session_header
@@ -195,9 +198,62 @@ async def run_autonomous_agent(
 
         # Handle status
         if status == "continue":
-            print(f"\nAgent will auto-continue in {AUTO_CONTINUE_DELAY_SECONDS}s...")
+            delay_seconds = AUTO_CONTINUE_DELAY_SECONDS
+            target_time_str = None
+
+            if "limit reached" in response.lower():
+                print("Claude Agent SDK indicated limit reached.")
+
+                # Try to parse reset time from response
+                match = re.search(
+                    r"(?i)\bresets(?:\s+at)?\s+(\d+)(?::(\d+))?\s*(am|pm)\s*\(([^)]+)\)",
+                    response,
+                )
+                if match:
+                    hour = int(match.group(1))
+                    minute = int(match.group(2)) if match.group(2) else 0
+                    period = match.group(3).lower()
+                    tz_name = match.group(4).strip()
+
+                    # Convert to 24-hour format
+                    if period == "pm" and hour != 12:
+                        hour += 12
+                    elif period == "am" and hour == 12:
+                        hour = 0
+
+                    try:
+                        tz = ZoneInfo(tz_name)
+                        now = datetime.now(tz)
+                        target = now.replace(
+                            hour=hour, minute=minute, second=0, microsecond=0
+                        )
+
+                        # If target time has already passed today, wait until tomorrow
+                        if target <= now:
+                            target += timedelta(days=1)
+
+                        delta = target - now
+                        delay_seconds = min(
+                            delta.total_seconds(), 24 * 60 * 60
+                        )  # Clamp to 24 hours max
+                        target_time_str = target.strftime("%B %d, %Y at %I:%M %p %Z")
+
+                    except Exception as e:
+                        print(f"Error parsing reset time: {e}, using default delay")
+
+            if target_time_str:
+                print(
+                    f"\nClaude Code Limit Reached. Agent will auto-continue in {delay_seconds:.0f}s ({target_time_str})...",
+                    flush=True,
+                )
+            else:
+                print(
+                    f"\nAgent will auto-continue in {delay_seconds:.0f}s...", flush=True
+                )
+
+            sys.stdout.flush()  # this should allow the pause to be displayed before sleeping
             print_progress_summary(project_dir)
-            await asyncio.sleep(AUTO_CONTINUE_DELAY_SECONDS)
+            await asyncio.sleep(delay_seconds)
 
         elif status == "error":
             print("\nSession encountered an error")

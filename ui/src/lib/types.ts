@@ -310,6 +310,40 @@ export type AssistantChatServerMessage =
   | AssistantChatPongMessage;
 
 // ============================================================================
+// Expand Chat Types
+// ============================================================================
+
+export interface ExpandChatFeaturesCreatedMessage {
+  type: 'features_created'
+  count: number
+  features: { id: number; name: string; category: string }[]
+}
+
+export interface ExpandChatCompleteMessage {
+  type: 'expansion_complete'
+  total_added: number
+}
+
+export type ExpandChatServerMessage =
+  | SpecChatTextMessage        // Reuse text message type
+  | ExpandChatFeaturesCreatedMessage
+  | ExpandChatCompleteMessage
+  | SpecChatErrorMessage       // Reuse error message type
+  | SpecChatPongMessage        // Reuse pong message type
+  | SpecChatResponseDoneMessage // Reuse response_done type
+
+// Bulk feature creation
+export interface FeatureBulkCreate {
+  features: FeatureCreate[]
+  starting_priority?: number
+}
+
+export interface FeatureBulkCreateResponse {
+  created: number
+  features: Feature[]
+}
+
+// ============================================================================
 // Settings Types
 // ============================================================================
 

@@ -20,52 +20,55 @@ fi
 
 echo "[OK] Claude CLI found"
 
-# Check if user has credentials
-CLAUDE_CREDS="$HOME/.claude/.credentials.json"
-if [ -f "$CLAUDE_CREDS" ]; then
-    echo "[OK] Claude credentials found"
+# Note: Claude CLI no longer stores credentials in ~/.claude/.credentials.json
+# We can't reliably check auth status without making an API call, so we just
+# verify the CLI is installed and remind the user to login if needed
+if [ -d "$HOME/.claude" ]; then
+    echo "[OK] Claude CLI directory found"
+    echo "     (If you're not logged in, run: claude login)"
 else
-    echo "[!] Not authenticated with Claude"
+    echo "[!] Claude CLI not configured"
     echo ""
-    echo "You need to run 'claude login' to authenticate."
-    echo "This will open a browser window to sign in."
+    echo "Please run 'claude login' to authenticate before continuing."
     echo ""
-    read -p "Would you like to run 'claude login' now? (y/n): " LOGIN_CHOICE
-
-    if [[ "$LOGIN_CHOICE" =~ ^[Yy]$ ]]; then
-        echo ""
-        echo "Running 'claude login'..."
-        echo "Complete the login in your browser, then return here."
-        echo ""
-        claude login
-
-        # Check if login succeeded
-        if [ -f "$CLAUDE_CREDS" ]; then
-            echo ""
-            echo "[OK] Login successful!"
-        else
-            echo ""
-            echo "[ERROR] Login failed or was cancelled."
-            echo "Please try again."
-            exit 1
-        fi
-    else
-        echo ""
-        echo "Please run 'claude login' manually, then try again."
-        exit 1
-    fi
+    read -p "Press Enter to continue anyway, or Ctrl+C to exit..."
 fi
 
 echo ""
 
-# Check if venv exists, create if not
-if [ ! -d "venv" ]; then
-    echo "Creating virtual environment..."
+# Check if venv exists with correct structure for this platform
+# Windows venvs have Scripts/, Linux/macOS have bin/
+if [ ! -f "venv/bin/activate" ]; then
+    if [ -d "venv" ]; then
+        echo "[INFO] Detected incompatible virtual environment (possibly created on Windows)"
+        echo "[INFO] Recreating virtual environment for this platform..."
+        rm -rf venv
+        if [ -d "venv" ]; then
+            echo "[ERROR] Failed to remove existing virtual environment"
+            echo "Please manually delete the 'venv' directory and try again:"
+            echo "  rm -rf venv"
+            exit 1
+        fi
+    else
+        echo "Creating virtual environment..."
+    fi
     python3 -m venv venv
+    if [ $? -ne 0 ]; then
+        echo "[ERROR] Failed to create virtual environment"
+        echo "Please ensure the venv module is installed:"
+        echo "  Ubuntu/Debian: sudo apt install python3-venv"
+        echo "  Or try: python3 -m ensurepip"
+        exit 1
+    fi
 fi
 
 # Activate the virtual environment
 source venv/bin/activate
+if [ $? -ne 0 ]; then
+    echo "[ERROR] Failed to activate virtual environment"
+    echo "The venv may be corrupted. Try: rm -rf venv && ./start.sh"
+    exit 1
+fi
 
 # Install dependencies
 echo "Installing dependencies..."

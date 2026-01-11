@@ -18,7 +18,7 @@ _root = Path(__file__).parent.parent
 if str(_root) not in sys.path:
     sys.path.insert(0, str(_root))
 
-from registry import AVAILABLE_MODELS, DEFAULT_MODEL, VALID_MODELS
+from registry import DEFAULT_MODEL, VALID_MODELS
 
 # ============================================================================
 # Project Schemas
@@ -111,6 +111,18 @@ class FeatureListResponse(BaseModel):
     pending: list[FeatureResponse]
     in_progress: list[FeatureResponse]
     done: list[FeatureResponse]
+
+
+class FeatureBulkCreate(BaseModel):
+    """Request schema for bulk creating features."""
+    features: list[FeatureCreate]
+    starting_priority: int | None = None  # If None, appends after max priority
+
+
+class FeatureBulkCreateResponse(BaseModel):
+    """Response for bulk feature creation."""
+    created: int
+    features: list[FeatureResponse]
 
 
 # ============================================================================

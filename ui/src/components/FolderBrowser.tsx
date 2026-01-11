@@ -304,6 +304,11 @@ export function FolderBrowser({ onSelect, onCancel, initialPath }: FolderBrowser
         <div className="mb-3 p-2 bg-[var(--color-neo-bg)] rounded border-2 border-[var(--color-neo-border)]">
           <div className="text-xs text-[#4a4a4a] mb-1">Selected path:</div>
           <div className="font-mono text-sm truncate text-[#1a1a1a]">{selectedPath || 'No folder selected'}</div>
+          {selectedPath && (
+            <div className="text-xs text-[var(--color-neo-text-secondary)] mt-2 italic">
+              This folder will contain all project files
+            </div>
+          )}
         </div>
 
         {/* Actions */}

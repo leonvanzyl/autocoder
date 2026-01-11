@@ -24,7 +24,7 @@ function isAgentThought(line: string): boolean {
   if (/^Output:/.test(trimmed)) return false
 
   // Skip JSON and very short lines
-  if (/^[\[\{]/.test(trimmed)) return false
+  if (/^[[{]/.test(trimmed)) return false
   if (trimmed.length < 15) return false
 
   // Skip lines that are just paths or technical output

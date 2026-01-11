@@ -4,9 +4,13 @@ import type { Feature, FeatureListResponse } from '../lib/types'
 interface KanbanBoardProps {
   features: FeatureListResponse | undefined
   onFeatureClick: (feature: Feature) => void
+  onAddFeature?: () => void
+  onExpandProject?: () => void
 }
 
-export function KanbanBoard({ features, onFeatureClick }: KanbanBoardProps) {
+export function KanbanBoard({ features, onFeatureClick, onAddFeature, onExpandProject }: KanbanBoardProps) {
+  const hasFeatures = features && (features.pending.length + features.in_progress.length + features.done.length) > 0
+
   if (!features) {
     return (
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -32,6 +36,9 @@ export function KanbanBoard({ features, onFeatureClick }: KanbanBoardProps) {
         features={features.pending}
         color="pending"
         onFeatureClick={onFeatureClick}
+        onAddFeature={onAddFeature}
+        onExpandProject={onExpandProject}
+        showExpandButton={hasFeatures}
       />
       <KanbanColumn
         title="In Progress"

@@ -1,6 +1,9 @@
 # Agent-generated output directories
 generations/
 
+nul
+issues/
+
 # Log files
 logs/
 *.log

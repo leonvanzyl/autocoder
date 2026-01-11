@@ -13,6 +13,24 @@ import subprocess
 import sys
 from pathlib import Path
 
+from dotenv import load_dotenv
+
+from auth import is_auth_error, print_auth_error_help
+
+# Load environment variables from .env file if present
+load_dotenv()
+
+
+def get_cli_command() -> str:
+    """
+    Get the CLI command to use for the agent.
+
+    Reads from CLI_COMMAND environment variable, defaults to 'claude'.
+    This allows users to use alternative CLIs like 'glm'.
+    """
+    return os.getenv("CLI_COMMAND", "claude")
+
+
 from prompts import (
     get_project_prompts_dir,
     has_project_prompts,
@@ -203,6 +221,7 @@ def run_spec_creation(project_dir: Path) -> bool:
     Run Claude Code with /create-spec command to create project specification.
 
     The project path is passed as an argument so create-spec knows where to write files.
+    Captures stderr to detect authentication errors and provide helpful guidance.
     """
     print("\n" + "=" * 50)
     print("  Project Specification Setup")
@@ -215,13 +234,27 @@ def run_spec_creation(project_dir: Path) -> bool:
     print("Exit Claude Code (Ctrl+C or /exit) when finished.\n")
 
     try:
-        # Launch Claude Code with /create-spec command
+        # Launch CLI with /create-spec command
         # Project path included in command string so it populates $ARGUMENTS
-        subprocess.run(
-            ["claude", f"/create-spec {project_dir}"],
+        # Capture stderr to detect auth errors while letting stdout flow to terminal
+        cli_command = get_cli_command()
+        result = subprocess.run(
+            [cli_command, f"/create-spec {project_dir}"],
             check=False,  # Don't raise on non-zero exit
-            cwd=str(Path(__file__).parent)  # Run from project root
+            cwd=str(Path(__file__).parent),  # Run from project root
+            stderr=subprocess.PIPE,
+            text=True
         )
+
+        # Check for authentication errors in stderr
+        stderr_output = result.stderr or ""
+        if result.returncode != 0 and is_auth_error(stderr_output):
+            print_auth_error_help()
+            return False
+
+        # If there was stderr output but not an auth error, show it
+        if stderr_output.strip() and result.returncode != 0:
+            print(f"\nClaude CLI error: {stderr_output.strip()}")
 
         # Check if spec was created in project prompts directory
         if check_spec_exists(project_dir):
@@ -232,12 +265,19 @@ def run_spec_creation(project_dir: Path) -> bool:
             print("\n" + "-" * 50)
             print("Spec creation incomplete.")
             print(f"Please ensure app_spec.txt exists in: {get_project_prompts_dir(project_dir)}")
+            # If failed with non-zero exit and no spec, might be auth issue
+            if result.returncode != 0:
+                print(f"\nIf you're having authentication issues, try running: {cli_command} login")
             return False
 
     except FileNotFoundError:
-        print("\nError: 'claude' command not found.")
-        print("Make sure Claude Code CLI is installed:")
-        print("  npm install -g @anthropic-ai/claude-code")
+        cli_command = get_cli_command()
+        print(f"\nError: '{cli_command}' command not found.")
+        if cli_command == "claude":
+            print("Make sure Claude Code CLI is installed:")
+            print("  npm install -g @anthropic-ai/claude-code")
+        else:
+            print(f"Make sure the '{cli_command}' CLI is installed and in your PATH.")
         return False
     except KeyboardInterrupt:
         print("\n\nSpec creation cancelled.")
@@ -348,6 +388,8 @@ def create_new_project_flow() -> tuple[str, Path] | None:
 def run_agent(project_name: str, project_dir: Path) -> None:
     """Run the autonomous agent with the given project.
 
+    Captures stderr to detect authentication errors and provide helpful guidance.
+
     Args:
         project_name: Name of the project
         project_dir: Absolute path to the project directory
@@ -367,9 +409,29 @@ def run_agent(project_name: str, project_dir: Path) -> None:
     # Build the command - pass absolute path
     cmd = [sys.executable, "autonomous_agent_demo.py", "--project-dir", str(project_dir.resolve())]
 
-    # Run the agent
+    # Run the agent with stderr capture to detect auth errors
+    # stdout goes directly to terminal for real-time output
     try:
-        subprocess.run(cmd, check=False)
+        result = subprocess.run(
+            cmd,
+            check=False,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+
+        # Check for authentication errors
+        stderr_output = result.stderr or ""
+        if result.returncode != 0:
+            if is_auth_error(stderr_output):
+                print_auth_error_help()
+            elif stderr_output.strip():
+                # Show any other errors
+                print(f"\nAgent error:\n{stderr_output.strip()}")
+                # Still hint about auth if exit was unexpected
+                if "error" in stderr_output.lower() or "exception" in stderr_output.lower():
+                    cli_command = get_cli_command()
+                    print(f"\nIf this is an authentication issue, try running: {cli_command} login")
+
     except KeyboardInterrupt:
         print("\n\nAgent interrupted. Run again to resume.")
 

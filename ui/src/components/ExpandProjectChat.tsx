@@ -1,15 +1,14 @@
 /**
- * Spec Creation Chat Component
+ * Expand Project Chat Component
  *
- * Full chat interface for interactive spec creation with Claude.
- * Handles the 7-phase conversation flow for creating app specifications.
+ * Full chat interface for interactive project expansion with Claude.
+ * Allows users to describe new features in natural language.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Send, X, CheckCircle2, AlertCircle, Wifi, WifiOff, RotateCcw, Loader2, ArrowRight, Zap, Paperclip, ExternalLink } from 'lucide-react'
-import { useSpecChat } from '../hooks/useSpecChat'
+import { Send, X, CheckCircle2, AlertCircle, Wifi, WifiOff, RotateCcw, Paperclip, Plus } from 'lucide-react'
+import { useExpandChat } from '../hooks/useExpandChat'
 import { ChatMessage } from './ChatMessage'
-import { QuestionOptions } from './QuestionOptions'
 import { TypingIndicator } from './TypingIndicator'
 import type { ImageAttachment } from '../lib/types'
 
@@ -17,49 +16,40 @@ import type { ImageAttachment } from '../lib/types'
 const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5 MB
 const ALLOWED_TYPES = ['image/jpeg', 'image/png']
 
-type InitializerStatus = 'idle' | 'starting' | 'error'
-
-interface SpecCreationChatProps {
+interface ExpandProjectChatProps {
   projectName: string
-  onComplete: (specPath: string, yoloMode?: boolean) => void
+  onComplete: (featuresAdded: number) => void
   onCancel: () => void
-  onExitToProject: () => void  // Exit to project without starting agent
-  initializerStatus?: InitializerStatus
-  initializerError?: string | null
-  onRetryInitializer?: () => void
 }
 
-export function SpecCreationChat({
+export function ExpandProjectChat({
   projectName,
   onComplete,
   onCancel,
-  onExitToProject,
-  initializerStatus = 'idle',
-  initializerError = null,
-  onRetryInitializer,
-}: SpecCreationChatProps) {
+}: ExpandProjectChatProps) {
   const [input, setInput] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const [yoloEnabled, setYoloEnabled] = useState(false)
   const [pendingAttachments, setPendingAttachments] = useState<ImageAttachment[]>([])
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  const inputRef = useRef<HTMLTextAreaElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Memoize error handler to keep hook dependencies stable
+  const handleError = useCallback((err: string) => setError(err), [])
 
   const {
     messages,
     isLoading,
     isComplete,
     connectionStatus,
-    currentQuestions,
+    featuresCreated,
     start,
     sendMessage,
-    sendAnswer,
     disconnect,
-  } = useSpecChat({
+  } = useExpandChat({
     projectName,
     onComplete,
-    onError: (err) => setError(err),
+    onError: handleError,
   })
 
   // Start the chat session when component mounts
@@ -74,34 +64,23 @@ export function SpecCreationChat({
   // Scroll to bottom when messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, currentQuestions, isLoading])
+  }, [messages, isLoading])
 
-  // Focus input when not loading and no questions
+  // Focus input when not loading
   useEffect(() => {
-    if (!isLoading && !currentQuestions && inputRef.current) {
+    if (!isLoading && inputRef.current) {
       inputRef.current.focus()
     }
-  }, [isLoading, currentQuestions])
+  }, [isLoading])
 
   const handleSendMessage = () => {
     const trimmed = input.trim()
     // Allow sending if there's text OR attachments
     if ((!trimmed && pendingAttachments.length === 0) || isLoading) return
 
-    // Detect /exit command - exit to project without sending to Claude
-    if (/^\s*\/exit\s*$/i.test(trimmed)) {
-      setInput('')
-      onExitToProject()
-      return
-    }
-
     sendMessage(trimmed, pendingAttachments.length > 0 ? pendingAttachments : undefined)
     setInput('')
     setPendingAttachments([]) // Clear attachments after sending
-    // Reset textarea height after sending
-    if (inputRef.current) {
-      inputRef.current.style.height = 'auto'
-    }
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -109,10 +88,6 @@ export function SpecCreationChat({
       e.preventDefault()
       handleSendMessage()
     }
-  }
-
-  const handleAnswerSubmit = (answers: Record<string, string | string[]>) => {
-    sendAnswer(answers)
   }
 
   // File handling for image attachments
@@ -136,7 +111,6 @@ export function SpecCreationChat({
       const reader = new FileReader()
       reader.onload = (e) => {
         const dataUrl = e.target?.result as string
-        // dataUrl is "data:image/png;base64,XXXXXX"
         const base64Data = dataUrl.split(',')[1]
 
         const attachment: ImageAttachment = {
@@ -149,6 +123,9 @@ export function SpecCreationChat({
         }
 
         setPendingAttachments((prev) => [...prev, attachment])
+      }
+      reader.onerror = () => {
+        setError(`Failed to read file: ${file.name}`)
       }
       reader.readAsDataURL(file)
     })
@@ -210,9 +187,15 @@ export function SpecCreationChat({
       <div className="flex items-center justify-between p-4 border-b-3 border-[var(--color-neo-border)] bg-white">
         <div className="flex items-center gap-3">
           <h2 className="font-display font-bold text-lg text-[#1a1a1a]">
-            Create Spec: {projectName}
+            Expand Project: {projectName}
           </h2>
           <ConnectionIndicator />
+          {featuresCreated > 0 && (
+            <span className="flex items-center gap-1 text-sm text-[var(--color-neo-done)] font-bold">
+              <Plus size={14} />
+              {featuresCreated} added
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
@@ -223,20 +206,10 @@ export function SpecCreationChat({
             </span>
           )}
 
-          {/* Exit to Project - always visible escape hatch */}
-          <button
-            onClick={onExitToProject}
-            className="neo-btn neo-btn-ghost text-sm py-2"
-            title="Exit chat and go to project (you can start the agent manually)"
-          >
-            <ExternalLink size={16} />
-            Exit to Project
-          </button>
-
           <button
             onClick={onCancel}
             className="neo-btn neo-btn-ghost p-2"
-            title="Cancel"
+            title="Close"
           >
             <X size={20} />
           </button>
@@ -263,10 +236,10 @@ export function SpecCreationChat({
           <div className="flex flex-col items-center justify-center h-full text-center p-8">
             <div className="neo-card p-6 max-w-md">
               <h3 className="font-display font-bold text-lg mb-2">
-                Starting Spec Creation
+                Starting Project Expansion
               </h3>
               <p className="text-sm text-[var(--color-neo-text-secondary)]">
-                Connecting to Claude to help you create your app specification...
+                Connecting to Claude to help you add new features to your project...
               </p>
               {connectionStatus === 'error' && (
                 <button
@@ -285,17 +258,8 @@ export function SpecCreationChat({
           <ChatMessage key={message.id} message={message} />
         ))}
 
-        {/* Structured questions */}
-        {currentQuestions && currentQuestions.length > 0 && (
-          <QuestionOptions
-            questions={currentQuestions}
-            onSubmit={handleAnswerSubmit}
-            disabled={isLoading}
-          />
-        )}
-
-        {/* Typing indicator - don't show when we have questions (waiting for user) */}
-        {isLoading && !currentQuestions && <TypingIndicator />}
+        {/* Typing indicator */}
+        {isLoading && <TypingIndicator />}
 
         {/* Scroll anchor */}
         <div ref={messagesEndRef} />
@@ -359,32 +323,25 @@ export function SpecCreationChat({
               <Paperclip size={18} />
             </button>
 
-            <textarea
+            <input
               ref={inputRef}
+              type="text"
               value={input}
-              onChange={(e) => {
-                setInput(e.target.value)
-                // Auto-resize the textarea
-                e.target.style.height = 'auto'
-                e.target.style.height = `${Math.min(e.target.scrollHeight, 200)}px`
-              }}
+              onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder={
-                currentQuestions
-                  ? 'Or type a custom response...'
-                  : pendingAttachments.length > 0
-                    ? 'Add a message with your image(s)...'
-                    : 'Type your response... (or /exit to go to project)'
+                pendingAttachments.length > 0
+                  ? 'Add a message with your image(s)...'
+                  : 'Describe the features you want to add...'
               }
-              className="neo-input flex-1 resize-none min-h-[46px] max-h-[200px] overflow-y-auto"
-              disabled={(isLoading && !currentQuestions) || connectionStatus !== 'connected'}
-              rows={1}
+              className="neo-input flex-1"
+              disabled={isLoading || connectionStatus !== 'connected'}
             />
             <button
               onClick={handleSendMessage}
               disabled={
                 (!input.trim() && pendingAttachments.length === 0) ||
-                (isLoading && !currentQuestions) ||
+                isLoading ||
                 connectionStatus !== 'connected'
               }
               className="neo-btn neo-btn-primary px-6"
@@ -395,74 +352,27 @@ export function SpecCreationChat({
 
           {/* Help text */}
           <p className="text-xs text-[var(--color-neo-text-secondary)] mt-2">
-            Press Enter to send, Shift+Enter for new line. Drag & drop or click <Paperclip size={12} className="inline" /> to attach images (JPEG/PNG, max 5MB).
+            Press Enter to send. Drag & drop or click <Paperclip size={12} className="inline" /> to attach images.
           </p>
         </div>
       )}
 
       {/* Completion footer */}
       {isComplete && (
-        <div className={`p-4 border-t-3 border-[var(--color-neo-border)] ${
-          initializerStatus === 'error' ? 'bg-[var(--color-neo-danger)]' : 'bg-[var(--color-neo-done)]'
-        }`}>
+        <div className="p-4 border-t-3 border-[var(--color-neo-border)] bg-[var(--color-neo-done)]">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              {initializerStatus === 'starting' ? (
-                <>
-                  <Loader2 size={20} className="animate-spin" />
-                  <span className="font-bold">
-                    Starting agent{yoloEnabled ? ' (YOLO mode)' : ''}...
-                  </span>
-                </>
-              ) : initializerStatus === 'error' ? (
-                <>
-                  <AlertCircle size={20} className="text-white" />
-                  <span className="font-bold text-white">
-                    {initializerError || 'Failed to start agent'}
-                  </span>
-                </>
-              ) : (
-                <>
-                  <CheckCircle2 size={20} />
-                  <span className="font-bold">Specification created successfully!</span>
-                </>
-              )}
+              <CheckCircle2 size={20} />
+              <span className="font-bold">
+                Added {featuresCreated} new feature{featuresCreated !== 1 ? 's' : ''}!
+              </span>
             </div>
-            <div className="flex items-center gap-2">
-              {initializerStatus === 'error' && onRetryInitializer && (
-                <button
-                  onClick={onRetryInitializer}
-                  className="neo-btn bg-white"
-                >
-                  <RotateCcw size={14} />
-                  Retry
-                </button>
-              )}
-              {initializerStatus === 'idle' && (
-                <>
-                  {/* YOLO Mode Toggle */}
-                  <button
-                    onClick={() => setYoloEnabled(!yoloEnabled)}
-                    className={`neo-btn text-sm py-2 px-3 ${
-                      yoloEnabled ? 'neo-btn-warning' : 'bg-white'
-                    }`}
-                    title="YOLO Mode: Skip testing for rapid prototyping"
-                  >
-                    <Zap size={16} className={yoloEnabled ? 'text-yellow-900' : ''} />
-                    <span className={yoloEnabled ? 'text-yellow-900 font-bold' : ''}>
-                      YOLO
-                    </span>
-                  </button>
-                  <button
-                    onClick={() => onComplete('', yoloEnabled)}
-                    className="neo-btn neo-btn-primary"
-                  >
-                    Continue to Project
-                    <ArrowRight size={16} />
-                  </button>
-                </>
-              )}
-            </div>
+            <button
+              onClick={() => onComplete(featuresCreated)}
+              className="neo-btn bg-white"
+            >
+              Close
+            </button>
           </div>
         </div>
       )}

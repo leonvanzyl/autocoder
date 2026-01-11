@@ -28,8 +28,8 @@ ls -la
 # 3. Read the project specification to understand what you're building
 cat app_spec.txt
 
-# 4. Read progress notes from previous sessions
-cat claude-progress.txt
+# 4. Read progress notes from previous sessions (last 500 lines to avoid context overflow)
+tail -500 claude-progress.txt
 
 # 5. Check recent git history
 git log --oneline -20

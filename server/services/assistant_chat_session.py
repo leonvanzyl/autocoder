@@ -18,11 +18,26 @@ from pathlib import Path
 from typing import AsyncGenerator, Optional
 
 from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
+from dotenv import load_dotenv
 
 from .assistant_database import (
     add_message,
     create_conversation,
 )
+
+# Load environment variables from .env file if present
+load_dotenv()
+
+
+def get_cli_command() -> str:
+    """
+    Get the CLI command to use for the agent.
+
+    Reads from CLI_COMMAND environment variable, defaults to 'claude'.
+    This allows users to use alternative CLIs like 'glm'.
+    """
+    return os.getenv("CLI_COMMAND", "claude")
+
 
 logger = logging.getLogger(__name__)
 
@@ -130,6 +145,12 @@ When a user asks to add a feature, gather the following information:
 4. **Steps**: How to verify/implement the feature (as a list)
 
 You can ask clarifying questions if the user's request is vague, or make reasonable assumptions for simple requests.
+
+**Example interaction:**
+User: "Add a feature for S3 sync"
+You: I'll create that feature. Let me add it to the backlog...
+[calls feature_create with appropriate parameters]
+You: Done! I've added "S3 Sync Integration" to your backlog. It's now visible on the kanban board.
 
 ## Updating Features
 
@@ -253,8 +274,9 @@ class AssistantChatSession:
         # Get system prompt with project context
         system_prompt = get_system_prompt(self.project_name, self.project_dir)
 
-        # Use system Claude CLI
-        system_cli = shutil.which("claude")
+        # Use system CLI (configurable via CLI_COMMAND environment variable)
+        cli_command = get_cli_command()
+        system_cli = shutil.which(cli_command)
 
         try:
             self.client = ClaudeSDKClient(

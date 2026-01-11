@@ -58,8 +58,8 @@ Examples:
   python autonomous_agent_demo.py --project-dir my-app --yolo
 
 Authentication:
-  Uses Claude CLI credentials from ~/.claude/.credentials.json
-  Run 'claude login' to authenticate (handled by start.bat/start.sh)
+  Uses Claude CLI authentication (run 'claude login' if not logged in)
+  Authentication is handled by start.bat/start.sh before this runs
         """,
     )
 

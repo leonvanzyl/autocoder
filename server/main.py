@@ -6,9 +6,25 @@ Main entry point for the Autonomous Coding UI server.
 Provides REST API, WebSocket, and static file serving.
 """
 
+import os
 import shutil
 from contextlib import asynccontextmanager
 from pathlib import Path
+
+from dotenv import load_dotenv
+
+# Load environment variables from .env file if present
+load_dotenv()
+
+
+def get_cli_command() -> str:
+    """
+    Get the CLI command to use for the agent.
+
+    Reads from CLI_COMMAND environment variable, defaults to 'claude'.
+    This allows users to use alternative CLIs like 'glm'.
+    """
+    return os.getenv("CLI_COMMAND", "claude")
 
 from fastapi import FastAPI, HTTPException, Request, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
@@ -18,6 +34,7 @@ from fastapi.staticfiles import StaticFiles
 from .routers import (
     agent_router,
     assistant_chat_router,
+    expand_project_router,
     features_router,
     filesystem_router,
     projects_router,
@@ -26,6 +43,7 @@ from .routers import (
 )
 from .schemas import SetupStatus
 from .services.assistant_chat_session import cleanup_all_sessions as cleanup_assistant_sessions
+from .services.expand_chat_session import cleanup_all_expand_sessions
 from .services.process_manager import cleanup_all_managers, cleanup_orphaned_locks
 from .websocket import project_websocket
 
@@ -40,9 +58,10 @@ async def lifespan(app: FastAPI):
     # Startup - clean up orphaned lock files from previous runs
     cleanup_orphaned_locks()
     yield
-    # Shutdown - cleanup all running agents and assistant sessions
+    # Shutdown - cleanup all running agents and sessions
     await cleanup_all_managers()
     await cleanup_assistant_sessions()
+    await cleanup_all_expand_sessions()
 
 
 # Create FastAPI app
@@ -92,6 +111,7 @@ app.include_router(projects_router)
 app.include_router(features_router)
 app.include_router(agent_router)
 app.include_router(spec_creation_router)
+app.include_router(expand_project_router)
 app.include_router(filesystem_router)
 app.include_router(assistant_chat_router)
 app.include_router(settings_router)
@@ -120,12 +140,15 @@ async def health_check():
 @app.get("/api/setup/status", response_model=SetupStatus)
 async def setup_status():
     """Check system setup status."""
-    # Check for Claude CLI
-    claude_cli = shutil.which("claude") is not None
+    # Check for CLI (configurable via CLI_COMMAND environment variable)
+    cli_command = get_cli_command()
+    claude_cli = shutil.which(cli_command) is not None
 
-    # Check for credentials file
-    credentials_path = Path.home() / ".claude" / ".credentials.json"
-    credentials = credentials_path.exists()
+    # Check for CLI configuration directory
+    # Note: CLI no longer stores credentials in ~/.claude/.credentials.json
+    # The existence of ~/.claude indicates the CLI has been configured
+    claude_dir = Path.home() / ".claude"
+    credentials = claude_dir.exists() and claude_dir.is_dir()
 
     # Check for Node.js and npm
     node = shutil.which("node") is not None

@@ -1,29 +1,33 @@
 /**
- * Hook for managing spec creation chat WebSocket connection
+ * Hook for managing project expansion chat WebSocket connection
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react'
-import type { ChatMessage, ImageAttachment, SpecChatServerMessage, SpecQuestion } from '../lib/types'
-import { getSpecStatus } from '../lib/api'
+import type { ChatMessage, ImageAttachment, ExpandChatServerMessage } from '../lib/types'
 
 type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error'
 
-interface UseSpecChatOptions {
+interface CreatedFeature {
+  id: number
+  name: string
+  category: string
+}
+
+interface UseExpandChatOptions {
   projectName: string
-  onComplete?: (specPath: string) => void
+  onComplete?: (totalAdded: number) => void
   onError?: (error: string) => void
 }
 
-interface UseSpecChatReturn {
+interface UseExpandChatReturn {
   messages: ChatMessage[]
   isLoading: boolean
   isComplete: boolean
   connectionStatus: ConnectionStatus
-  currentQuestions: SpecQuestion[] | null
-  currentToolId: string | null
+  featuresCreated: number
+  recentFeatures: CreatedFeature[]
   start: () => void
   sendMessage: (content: string, attachments?: ImageAttachment[]) => void
-  sendAnswer: (answers: Record<string, string | string[]>) => void
   disconnect: () => void
 }
 
@@ -31,17 +35,17 @@ function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
 }
 
-export function useSpecChat({
+export function useExpandChat({
   projectName,
-  // onComplete intentionally not used - user clicks "Continue to Project" button instead
+  onComplete,
   onError,
-}: UseSpecChatOptions): UseSpecChatReturn {
+}: UseExpandChatOptions): UseExpandChatReturn {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [isComplete, setIsComplete] = useState(false)
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('disconnected')
-  const [currentQuestions, setCurrentQuestions] = useState<SpecQuestion[] | null>(null)
-  const [currentToolId, setCurrentToolId] = useState<string | null>(null)
+  const [featuresCreated, setFeaturesCreated] = useState(0)
+  const [recentFeatures, setRecentFeatures] = useState<CreatedFeature[]>([])
 
   const wsRef = useRef<WebSocket | null>(null)
   const currentAssistantMessageRef = useRef<string | null>(null)
@@ -50,6 +54,7 @@ export function useSpecChat({
   const pingIntervalRef = useRef<number | null>(null)
   const reconnectTimeoutRef = useRef<number | null>(null)
   const isCompleteRef = useRef(false)
+  const manuallyDisconnectedRef = useRef(false)
 
   // Keep isCompleteRef in sync with isComplete state
   useEffect(() => {
@@ -71,67 +76,11 @@ export function useSpecChat({
     }
   }, [])
 
-  // Poll status file as fallback completion detection
-  // Claude writes .spec_status.json when done with all spec work
-  useEffect(() => {
-    // Don't poll if already complete
-    if (isComplete) return
-
-    // Start polling after initial delay (let WebSocket try first)
-    const startDelay = setTimeout(() => {
-      const pollInterval = setInterval(async () => {
-        // Stop if already complete
-        if (isCompleteRef.current) {
-          clearInterval(pollInterval)
-          return
-        }
-
-        try {
-          const status = await getSpecStatus(projectName)
-
-          if (status.exists && status.status === 'complete') {
-            // Status file indicates completion - set complete state
-            setIsComplete(true)
-            setIsLoading(false)
-
-            // Mark any streaming message as done
-            setMessages((prev) => {
-              const lastMessage = prev[prev.length - 1]
-              if (lastMessage?.role === 'assistant' && lastMessage.isStreaming) {
-                return [
-                  ...prev.slice(0, -1),
-                  { ...lastMessage, isStreaming: false },
-                ]
-              }
-              return prev
-            })
-
-            // Add system message about completion
-            setMessages((prev) => [
-              ...prev,
-              {
-                id: generateId(),
-                role: 'system',
-                content: `Spec creation complete! Files written: ${status.files_written.join(', ')}${status.feature_count ? ` (${status.feature_count} features)` : ''}`,
-                timestamp: new Date(),
-              },
-            ])
-
-            clearInterval(pollInterval)
-          }
-        } catch {
-          // Silently ignore polling errors - WebSocket is primary mechanism
-        }
-      }, 3000) // Poll every 3 seconds
-
-      // Cleanup interval on unmount
-      return () => clearInterval(pollInterval)
-    }, 3000) // Start polling after 3 second delay
-
-    return () => clearTimeout(startDelay)
-  }, [projectName, isComplete])
-
   const connect = useCallback(() => {
+    // Don't reconnect if manually disconnected
+    if (manuallyDisconnectedRef.current) {
+      return
+    }
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       return
     }
@@ -140,7 +89,7 @@ export function useSpecChat({
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     const host = window.location.host
-    const wsUrl = `${protocol}//${host}/api/spec/ws/${encodeURIComponent(projectName)}`
+    const wsUrl = `${protocol}//${host}/api/expand/ws/${encodeURIComponent(projectName)}`
 
     const ws = new WebSocket(wsUrl)
     wsRef.current = ws
@@ -148,6 +97,7 @@ export function useSpecChat({
     ws.onopen = () => {
       setConnectionStatus('connected')
       reconnectAttempts.current = 0
+      manuallyDisconnectedRef.current = false
 
       // Start ping interval to keep connection alive
       pingIntervalRef.current = window.setInterval(() => {
@@ -165,7 +115,11 @@ export function useSpecChat({
       }
 
       // Attempt reconnection if not intentionally closed
-      if (reconnectAttempts.current < maxReconnectAttempts && !isCompleteRef.current) {
+      if (
+        !manuallyDisconnectedRef.current &&
+        reconnectAttempts.current < maxReconnectAttempts &&
+        !isCompleteRef.current
+      ) {
         reconnectAttempts.current++
         const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 10000)
         reconnectTimeoutRef.current = window.setTimeout(connect, delay)
@@ -179,7 +133,7 @@ export function useSpecChat({
 
     ws.onmessage = (event) => {
       try {
-        const data = JSON.parse(event.data) as SpecChatServerMessage
+        const data = JSON.parse(event.data) as ExpandChatServerMessage
 
         switch (data.type) {
           case 'text': {
@@ -213,31 +167,25 @@ export function useSpecChat({
             break
           }
 
-          case 'question': {
-            // Show structured question UI
-            setCurrentQuestions(data.questions)
-            setCurrentToolId(data.tool_id || null)
-            setIsLoading(false)
+          case 'features_created': {
+            // Features were created
+            setFeaturesCreated((prev) => prev + data.count)
+            setRecentFeatures(data.features)
 
-            // Mark current message as done streaming
-            setMessages((prev) => {
-              const lastMessage = prev[prev.length - 1]
-              if (lastMessage?.role === 'assistant' && lastMessage.isStreaming) {
-                return [
-                  ...prev.slice(0, -1),
-                  {
-                    ...lastMessage,
-                    isStreaming: false,
-                    questions: data.questions,
-                  },
-                ]
-              }
-              return prev
-            })
+            // Add system message about feature creation
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: generateId(),
+                role: 'system',
+                content: `Created ${data.count} new feature${data.count !== 1 ? 's' : ''}!`,
+                timestamp: new Date(),
+              },
+            ])
             break
           }
 
-          case 'spec_complete': {
+          case 'expansion_complete': {
             setIsComplete(true)
             setIsLoading(false)
 
@@ -253,52 +201,7 @@ export function useSpecChat({
               return prev
             })
 
-            // Add system message about spec completion
-            setMessages((prev) => [
-              ...prev,
-              {
-                id: generateId(),
-                role: 'system',
-                content: `Specification file created: ${data.path}`,
-                timestamp: new Date(),
-              },
-            ])
-
-            // NOTE: Do NOT auto-call onComplete here!
-            // User should click "Continue to Project" button to start the agent.
-            // This matches the CLI behavior where user closes the chat manually.
-            break
-          }
-
-          case 'file_written': {
-            // Optional: notify about other files being written
-            setMessages((prev) => [
-              ...prev,
-              {
-                id: generateId(),
-                role: 'system',
-                content: `File created: ${data.path}`,
-                timestamp: new Date(),
-              },
-            ])
-            break
-          }
-
-          case 'complete': {
-            setIsComplete(true)
-            setIsLoading(false)
-
-            // Mark current message as done
-            setMessages((prev) => {
-              const lastMessage = prev[prev.length - 1]
-              if (lastMessage?.role === 'assistant' && lastMessage.isStreaming) {
-                return [
-                  ...prev.slice(0, -1),
-                  { ...lastMessage, isStreaming: false },
-                ]
-              }
-              return prev
-            })
+            onComplete?.(data.total_added)
             break
           }
 
@@ -346,23 +249,30 @@ export function useSpecChat({
         console.error('Failed to parse WebSocket message:', e)
       }
     }
-  }, [projectName, onError])
+  }, [projectName, onComplete, onError])
 
   const start = useCallback(() => {
     connect()
 
-    // Wait for connection then send start message
+    // Wait for connection then send start message (with timeout to prevent infinite loop)
+    let attempts = 0
+    const maxAttempts = 50 // 5 seconds max (50 * 100ms)
     const checkAndSend = () => {
       if (wsRef.current?.readyState === WebSocket.OPEN) {
         setIsLoading(true)
         wsRef.current.send(JSON.stringify({ type: 'start' }))
       } else if (wsRef.current?.readyState === WebSocket.CONNECTING) {
-        setTimeout(checkAndSend, 100)
+        if (attempts++ < maxAttempts) {
+          setTimeout(checkAndSend, 100)
+        } else {
+          onError?.('Connection timeout')
+          setIsLoading(false)
+        }
       }
     }
 
     setTimeout(checkAndSend, 100)
-  }, [connect])
+  }, [connect, onError])
 
   const sendMessage = useCallback((content: string, attachments?: ImageAttachment[]) => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
@@ -382,9 +292,6 @@ export function useSpecChat({
       },
     ])
 
-    // Clear current questions
-    setCurrentQuestions(null)
-    setCurrentToolId(null)
     setIsLoading(true)
 
     // Build message payload
@@ -406,48 +313,16 @@ export function useSpecChat({
     wsRef.current.send(JSON.stringify(payload))
   }, [onError])
 
-  const sendAnswer = useCallback((answers: Record<string, string | string[]>) => {
-    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-      onError?.('Not connected')
-      return
-    }
-
-    // Format answers for display
-    const answerText = Object.values(answers)
-      .map((v) => (Array.isArray(v) ? v.join(', ') : v))
-      .join('; ')
-
-    // Add user message
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: generateId(),
-        role: 'user',
-        content: answerText,
-        timestamp: new Date(),
-      },
-    ])
-
-    // Clear current questions
-    setCurrentQuestions(null)
-    setCurrentToolId(null)
-    setIsLoading(true)
-
-    // Send to server
-    wsRef.current.send(
-      JSON.stringify({
-        type: 'answer',
-        answers,
-        tool_id: currentToolId,
-      })
-    )
-  }, [currentToolId, onError])
-
   const disconnect = useCallback(() => {
+    manuallyDisconnectedRef.current = true
     reconnectAttempts.current = maxReconnectAttempts // Prevent reconnection
     if (pingIntervalRef.current) {
       clearInterval(pingIntervalRef.current)
       pingIntervalRef.current = null
+    }
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current)
+      reconnectTimeoutRef.current = null
     }
     if (wsRef.current) {
       wsRef.current.close()
@@ -461,11 +336,10 @@ export function useSpecChat({
     isLoading,
     isComplete,
     connectionStatus,
-    currentQuestions,
-    currentToolId,
+    featuresCreated,
+    recentFeatures,
     start,
     sendMessage,
-    sendAnswer,
     disconnect,
   }
 }

@@ -13,8 +13,44 @@ from pathlib import Path
 
 from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
 from claude_agent_sdk.types import HookMatcher
+from dotenv import load_dotenv
 
 from security import bash_security_hook
+
+# Load environment variables from .env file if present
+load_dotenv()
+
+# Default CLI command - can be overridden via CLI_COMMAND environment variable
+# Common values: "claude" (default), "glm"
+DEFAULT_CLI_COMMAND = "claude"
+
+# Default Playwright headless mode - can be overridden via PLAYWRIGHT_HEADLESS env var
+# When True, browser runs invisibly in background
+# When False, browser window is visible (default - useful for monitoring agent progress)
+DEFAULT_PLAYWRIGHT_HEADLESS = False
+
+
+def get_cli_command() -> str:
+    """
+    Get the CLI command to use for the agent.
+
+    Reads from CLI_COMMAND environment variable, defaults to 'claude'.
+    This allows users to use alternative CLIs like 'glm'.
+    """
+    return os.getenv("CLI_COMMAND", DEFAULT_CLI_COMMAND)
+
+
+def get_playwright_headless() -> bool:
+    """
+    Get the Playwright headless mode setting.
+
+    Reads from PLAYWRIGHT_HEADLESS environment variable, defaults to False.
+    Returns True for headless mode (invisible browser), False for visible browser.
+    """
+    value = os.getenv("PLAYWRIGHT_HEADLESS", "false").lower()
+    # Accept various truthy/falsy values
+    return value in ("true", "1", "yes", "on")
+
 
 # Feature MCP tools for feature/test management
 FEATURE_MCP_TOOLS = [
@@ -92,7 +128,7 @@ def create_client(project_dir: Path, model: str, yolo_mode: bool = False):
        (see security.py for ALLOWED_COMMANDS)
 
     Note: Authentication is handled by start.bat/start.sh before this runs.
-    The Claude SDK auto-detects credentials from ~/.claude/.credentials.json
+    The Claude SDK auto-detects credentials from the Claude CLI configuration
     """
     # Build allowed tools list based on mode
     # In YOLO mode, exclude Playwright tools for faster prototyping
@@ -151,12 +187,14 @@ def create_client(project_dir: Path, model: str, yolo_mode: bool = False):
     print("   - Project settings enabled (skills, commands, CLAUDE.md)")
     print()
 
-    # Use system Claude CLI instead of bundled one (avoids Bun runtime crash on Windows)
-    system_cli = shutil.which("claude")
+    # Use system CLI instead of bundled one (avoids Bun runtime crash on Windows)
+    # CLI command is configurable via CLI_COMMAND environment variable
+    cli_command = get_cli_command()
+    system_cli = shutil.which(cli_command)
     if system_cli:
         print(f"   - Using system CLI: {system_cli}")
     else:
-        print("   - Warning: System Claude CLI not found, using bundled CLI")
+        print(f"   - Warning: System CLI '{cli_command}' not found, using bundled CLI")
 
     # Build MCP servers config - features is always included, playwright only in standard mode
     mcp_servers = {
@@ -174,9 +212,13 @@ def create_client(project_dir: Path, model: str, yolo_mode: bool = False):
     }
     if not yolo_mode:
         # Include Playwright MCP server for browser automation (standard mode only)
+        # Headless mode is configurable via PLAYWRIGHT_HEADLESS environment variable
+        playwright_args = ["@playwright/mcp@latest", "--viewport-size", "1280x720"]
+        if get_playwright_headless():
+            playwright_args.append("--headless")
         mcp_servers["playwright"] = {
             "command": "npx",
-            "args": ["@playwright/mcp@latest", "--viewport-size", "1280x720"],
+            "args": playwright_args,
         }
 
     return ClaudeSDKClient(

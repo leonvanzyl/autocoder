@@ -21,7 +21,6 @@ if str(ROOT_DIR) not in sys.path:
 from registry import (
     AVAILABLE_MODELS,
     DEFAULT_MODEL,
-    DEFAULT_YOLO_MODE,
     get_all_settings,
     set_setting,
 )

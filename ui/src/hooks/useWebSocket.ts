@@ -125,6 +125,14 @@ export function useProjectWebSocket(projectName: string | null) {
 
   // Connect when project changes
   useEffect(() => {
+    // Reset state when project changes to clear stale data
+    setState({
+      progress: { passing: 0, in_progress: 0, total: 0, percentage: 0 },
+      agentStatus: 'stopped',
+      logs: [],
+      isConnected: false,
+    })
+
     if (!projectName) {
       // Disconnect if no project
       if (wsRef.current) {

@@ -22,6 +22,7 @@ Tools:
 import json
 import os
 import sys
+import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated
@@ -82,6 +83,9 @@ class BulkCreateInput(BaseModel):
 # Global database session maker (initialized on startup)
 _session_maker = None
 _engine = None
+
+# Lock for priority assignment to prevent race conditions
+_priority_lock = threading.Lock()
 
 
 @asynccontextmanager
@@ -270,13 +274,16 @@ def feature_skip(
 
         old_priority = feature.priority
 
-        # Get max priority and set this feature to max + 1
-        max_priority_result = session.query(Feature.priority).order_by(Feature.priority.desc()).first()
-        new_priority = (max_priority_result[0] + 1) if max_priority_result else 1
+        # Use lock to prevent race condition in priority assignment
+        with _priority_lock:
+            # Get max priority and set this feature to max + 1
+            max_priority_result = session.query(Feature.priority).order_by(Feature.priority.desc()).first()
+            new_priority = (max_priority_result[0] + 1) if max_priority_result else 1
 
-        feature.priority = new_priority
-        feature.in_progress = False
-        session.commit()
+            feature.priority = new_priority
+            feature.in_progress = False
+            session.commit()
+
         session.refresh(feature)
 
         return json.dumps({
@@ -382,30 +389,32 @@ def feature_create_bulk(
     """
     session = get_session()
     try:
-        # Get the starting priority
-        max_priority_result = session.query(Feature.priority).order_by(Feature.priority.desc()).first()
-        start_priority = (max_priority_result[0] + 1) if max_priority_result else 1
+        # Use lock to prevent race condition in priority assignment
+        with _priority_lock:
+            # Get the starting priority
+            max_priority_result = session.query(Feature.priority).order_by(Feature.priority.desc()).first()
+            start_priority = (max_priority_result[0] + 1) if max_priority_result else 1
 
-        created_count = 0
-        for i, feature_data in enumerate(features):
-            # Validate required fields
-            if not all(key in feature_data for key in ["category", "name", "description", "steps"]):
-                return json.dumps({
-                    "error": f"Feature at index {i} missing required fields (category, name, description, steps)"
-                })
+            created_count = 0
+            for i, feature_data in enumerate(features):
+                # Validate required fields
+                if not all(key in feature_data for key in ["category", "name", "description", "steps"]):
+                    return json.dumps({
+                        "error": f"Feature at index {i} missing required fields (category, name, description, steps)"
+                    })
 
-            db_feature = Feature(
-                priority=start_priority + i,
-                category=feature_data["category"],
-                name=feature_data["name"],
-                description=feature_data["description"],
-                steps=feature_data["steps"],
-                passes=False,
-            )
-            session.add(db_feature)
-            created_count += 1
+                db_feature = Feature(
+                    priority=start_priority + i,
+                    category=feature_data["category"],
+                    name=feature_data["name"],
+                    description=feature_data["description"],
+                    steps=feature_data["steps"],
+                    passes=False,
+                )
+                session.add(db_feature)
+                created_count += 1
 
-        session.commit()
+            session.commit()
 
         return json.dumps({"created": created_count}, indent=2)
     except Exception as e:
@@ -438,20 +447,23 @@ def feature_create(
     """
     session = get_session()
     try:
-        # Get the next priority
-        max_priority_result = session.query(Feature.priority).order_by(Feature.priority.desc()).first()
-        next_priority = (max_priority_result[0] + 1) if max_priority_result else 1
+        # Use lock to prevent race condition in priority assignment
+        with _priority_lock:
+            # Get the next priority
+            max_priority_result = session.query(Feature.priority).order_by(Feature.priority.desc()).first()
+            next_priority = (max_priority_result[0] + 1) if max_priority_result else 1
 
-        db_feature = Feature(
-            priority=next_priority,
-            category=category,
-            name=name,
-            description=description,
-            steps=steps,
-            passes=False,
-        )
-        session.add(db_feature)
-        session.commit()
+            db_feature = Feature(
+                priority=next_priority,
+                category=category,
+                name=name,
+                description=description,
+                steps=steps,
+                passes=False,
+            )
+            session.add(db_feature)
+            session.commit()
+
         session.refresh(db_feature)
 
         return json.dumps({

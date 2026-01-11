@@ -18,8 +18,8 @@ from security import (
 )
 
 
-def test_hook(command: str, should_block: bool) -> bool:
-    """Test a single command against the security hook."""
+def check_hook(command: str, should_block: bool) -> bool:
+    """Check a single command against the security hook (helper function)."""
     input_data = {"tool_name": "Bash", "tool_input": {"command": command}}
     result = asyncio.run(bash_security_hook(input_data))
     was_blocked = result.get("decision") == "block"
@@ -203,7 +203,7 @@ def main():
     ]
 
     for cmd in dangerous:
-        if test_hook(cmd, should_block=True):
+        if check_hook(cmd, should_block=True):
             passed += 1
         else:
             failed += 1
@@ -273,7 +273,7 @@ def main():
     ]
 
     for cmd in safe:
-        if test_hook(cmd, should_block=False):
+        if check_hook(cmd, should_block=False):
             passed += 1
         else:
             failed += 1
