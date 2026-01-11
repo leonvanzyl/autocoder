@@ -79,6 +79,47 @@ def get_coding_prompt_yolo(project_dir: Path | None = None) -> str:
     return load_prompt("coding_prompt_yolo", project_dir)
 
 
+def get_architect_prompt(project_dir: Path | None = None) -> str:
+    """Load the architect agent prompt (project-specific if available)."""
+    return load_prompt("architect_prompt", project_dir)
+
+
+def get_reviewer_prompt(project_dir: Path | None = None) -> str:
+    """Load the reviewer agent prompt (project-specific if available)."""
+    return load_prompt("reviewer_prompt", project_dir)
+
+
+def get_testing_prompt(project_dir: Path | None = None) -> str:
+    """Load the testing agent prompt (project-specific if available)."""
+    return load_prompt("testing_prompt", project_dir)
+
+
+def get_prompt_for_agent_type(agent_type: str, project_dir: Path | None = None) -> str:
+    """
+    Load the prompt for a given agent type.
+
+    Args:
+        agent_type: The agent type string (architect, initializer, coding, reviewer, testing)
+        project_dir: Optional project directory for project-specific prompts
+
+    Returns:
+        The prompt content as a string
+    """
+    prompt_loaders = {
+        "architect": get_architect_prompt,
+        "initializer": get_initializer_prompt,
+        "coding": get_coding_prompt,
+        "reviewer": get_reviewer_prompt,
+        "testing": get_testing_prompt,
+    }
+
+    loader = prompt_loaders.get(agent_type)
+    if loader is None:
+        raise ValueError(f"Unknown agent type: {agent_type}")
+
+    return loader(project_dir)
+
+
 def get_app_spec(project_dir: Path) -> str:
     """
     Load the app spec from the project.
