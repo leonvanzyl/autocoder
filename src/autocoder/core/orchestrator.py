@@ -334,6 +334,9 @@ class Orchestrator:
                 # Check for crashed agents and recover
                 self._recover_crashed_agents()
 
+                # Release ports from completed agents
+                self._recover_completed_agents()
+
                 # Get count of active agents
                 active_count = stats["agents"]["active"]
                 available_slots = self.max_agents - active_count
@@ -737,6 +740,24 @@ class Orchestrator:
                     logger.info(f"   Released ports for {agent_id}")
 
                 self.database.mark_agent_crashed(agent_id)
+
+    def _recover_completed_agents(self):
+        """
+        Release ports from completed agents.
+
+        This is called periodically to clean up port allocations from agents
+        that completed successfully (not crashed).
+        """
+        completed_agents = self.database.get_completed_agents()
+
+        for agent in completed_agents:
+            logger.info(f"Releasing ports from completed agent: {agent['agent_id']}")
+
+            if self.port_allocator.release_ports(agent['agent_id']):
+                logger.info(f"   Released ports for {agent['agent_id']}")
+
+                # Mark as cleaned up to avoid repeated releases
+                self.database.unregister_agent(agent['agent_id'])
 
     def _cleanup_all_agents(self):
         """Clean up all agent worktrees and release ports."""

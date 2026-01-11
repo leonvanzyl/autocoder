@@ -526,6 +526,23 @@ class Database:
             """, (timeout_minutes,))
             return [dict(row) for row in cursor.fetchall()]
 
+    def get_completed_agents(self) -> List[Dict[str, Any]]:
+        """
+        Get agents that have completed successfully.
+
+        Returns:
+            List of completed agent records with port allocations
+        """
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT * FROM agent_heartbeats
+                WHERE status = 'COMPLETED'
+                  AND (api_port IS NOT NULL OR web_port IS NOT NULL)
+                ORDER BY last_ping ASC
+            """)
+            return [dict(row) for row in cursor.fetchall()]
+
     def mark_agent_completed(self, agent_id: str) -> bool:
         """Mark an agent as completed (no longer eligible for stale/crash detection)."""
         with self.get_connection() as conn:
