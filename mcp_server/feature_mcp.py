@@ -28,7 +28,6 @@ from typing import Annotated
 
 from mcp.server.fastmcp import FastMCP
 from pydantic import BaseModel, Field
-from sqlalchemy.sql.expression import func
 
 # Add parent directory to path so we can import from api module
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -178,11 +177,14 @@ def feature_get_next() -> str:
 def feature_get_for_regression(
     limit: Annotated[int, Field(default=3, ge=1, le=10, description="Maximum number of passing features to return")] = 3
 ) -> str:
-    """Get random passing features for regression testing.
+    """Get passing features for regression testing, prioritizing least-tested features.
 
-    Returns a random selection of features that are currently passing.
-    Use this to verify that previously implemented features still work
-    after making changes.
+    Returns features that are currently passing, ordered by regression_count (ascending)
+    so that features tested fewer times are prioritized. This ensures even distribution
+    of regression testing across all features, avoiding duplicate testing of the same
+    features while others are never tested.
+
+    Each returned feature has its regression_count incremented to track testing frequency.
 
     Args:
         limit: Maximum number of features to return (1-10, default 3)
@@ -192,13 +194,24 @@ def feature_get_for_regression(
     """
     session = get_session()
     try:
+        # Select features with lowest regression_count first (least tested)
+        # Use id as secondary sort for deterministic ordering when counts are equal
         features = (
             session.query(Feature)
             .filter(Feature.passes == True)
-            .order_by(func.random())
+            .order_by(Feature.regression_count.asc(), Feature.id.asc())
             .limit(limit)
             .all()
         )
+
+        # Increment regression_count for selected features
+        for feature in features:
+            feature.regression_count = (feature.regression_count or 0) + 1
+        session.commit()
+
+        # Refresh to get updated counts
+        for feature in features:
+            session.refresh(feature)
 
         return json.dumps({
             "features": [f.to_dict() for f in features],
