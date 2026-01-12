@@ -289,6 +289,7 @@ class SettingsResponse(BaseModel):
     """Response schema for global settings."""
     yolo_mode: bool = False
     model: str = DEFAULT_MODEL
+    glm_mode: bool = False  # True if GLM API is configured via .env
 
 
 class ModelsResponse(BaseModel):
@@ -308,3 +309,61 @@ class SettingsUpdate(BaseModel):
         if v is not None and v not in VALID_MODELS:
             raise ValueError(f"Invalid model. Must be one of: {VALID_MODELS}")
         return v
+
+
+# ============================================================================
+# Dev Server Schemas
+# ============================================================================
+
+
+class DevServerStartRequest(BaseModel):
+    """Request schema for starting the dev server."""
+    command: str | None = None  # If None, uses effective command from config
+
+
+class DevServerStatus(BaseModel):
+    """Current dev server status."""
+    status: Literal["stopped", "running", "crashed"]
+    pid: int | None = None
+    url: str | None = None
+    command: str | None = None
+    started_at: datetime | None = None
+
+
+class DevServerActionResponse(BaseModel):
+    """Response for dev server control actions."""
+    success: bool
+    status: Literal["stopped", "running", "crashed"]
+    message: str = ""
+
+
+class DevServerConfigResponse(BaseModel):
+    """Response for dev server configuration."""
+    detected_type: str | None = None
+    detected_command: str | None = None
+    custom_command: str | None = None
+    effective_command: str | None = None
+
+
+class DevServerConfigUpdate(BaseModel):
+    """Request schema for updating dev server configuration."""
+    custom_command: str | None = None  # None clears the custom command
+
+
+# ============================================================================
+# Dev Server WebSocket Message Schemas
+# ============================================================================
+
+
+class WSDevLogMessage(BaseModel):
+    """WebSocket message for dev server log output."""
+    type: Literal["dev_log"] = "dev_log"
+    line: str
+    timestamp: datetime
+
+
+class WSDevServerStatusMessage(BaseModel):
+    """WebSocket message for dev server status changes."""
+    type: Literal["dev_server_status"] = "dev_server_status"
+    status: Literal["stopped", "running", "crashed"]
+    url: str | None = None

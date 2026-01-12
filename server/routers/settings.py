@@ -6,6 +6,7 @@ API endpoints for global settings management.
 Settings are stored in the registry database and shared across all projects.
 """
 
+import os
 import sys
 from pathlib import Path
 
@@ -33,6 +34,11 @@ def _parse_yolo_mode(value: str | None) -> bool:
     return (value or "false").lower() == "true"
 
 
+def _is_glm_mode() -> bool:
+    """Check if GLM API is configured via environment variables."""
+    return bool(os.getenv("ANTHROPIC_BASE_URL"))
+
+
 @router.get("/models", response_model=ModelsResponse)
 async def get_available_models():
     """Get list of available models.
@@ -54,6 +60,7 @@ async def get_settings():
     return SettingsResponse(
         yolo_mode=_parse_yolo_mode(all_settings.get("yolo_mode")),
         model=all_settings.get("model", DEFAULT_MODEL),
+        glm_mode=_is_glm_mode(),
     )
 
 
@@ -71,4 +78,5 @@ async def update_settings(update: SettingsUpdate):
     return SettingsResponse(
         yolo_mode=_parse_yolo_mode(all_settings.get("yolo_mode")),
         model=all_settings.get("model", DEFAULT_MODEL),
+        glm_mode=_is_glm_mode(),
     )

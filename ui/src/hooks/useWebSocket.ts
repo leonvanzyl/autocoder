@@ -3,7 +3,7 @@
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react'
-import type { WSMessage, AgentStatus } from '../lib/types'
+import type { WSMessage, AgentStatus, DevServerStatus } from '../lib/types'
 
 interface WebSocketState {
   progress: {
@@ -15,6 +15,9 @@ interface WebSocketState {
   agentStatus: AgentStatus
   logs: Array<{ line: string; timestamp: string }>
   isConnected: boolean
+  devServerStatus: DevServerStatus
+  devServerUrl: string | null
+  devLogs: Array<{ line: string; timestamp: string }>
 }
 
 const MAX_LOGS = 100 // Keep last 100 log lines
@@ -25,6 +28,9 @@ export function useProjectWebSocket(projectName: string | null) {
     agentStatus: 'stopped',
     logs: [],
     isConnected: false,
+    devServerStatus: 'stopped',
+    devServerUrl: null,
+    devLogs: [],
   })
 
   const wsRef = useRef<WebSocket | null>(null)
@@ -86,6 +92,24 @@ export function useProjectWebSocket(projectName: string | null) {
               // Feature updates will trigger a refetch via React Query
               break
 
+            case 'dev_log':
+              setState(prev => ({
+                ...prev,
+                devLogs: [
+                  ...prev.devLogs.slice(-MAX_LOGS + 1),
+                  { line: message.line, timestamp: message.timestamp },
+                ],
+              }))
+              break
+
+            case 'dev_server_status':
+              setState(prev => ({
+                ...prev,
+                devServerStatus: message.status,
+                devServerUrl: message.url,
+              }))
+              break
+
             case 'pong':
               // Heartbeat response
               break
@@ -131,6 +155,9 @@ export function useProjectWebSocket(projectName: string | null) {
       agentStatus: 'stopped',
       logs: [],
       isConnected: false,
+      devServerStatus: 'stopped',
+      devServerUrl: null,
+      devLogs: [],
     })
 
     if (!projectName) {
@@ -164,8 +191,14 @@ export function useProjectWebSocket(projectName: string | null) {
     setState(prev => ({ ...prev, logs: [] }))
   }, [])
 
+  // Clear dev logs function
+  const clearDevLogs = useCallback(() => {
+    setState(prev => ({ ...prev, devLogs: [] }))
+  }, [])
+
   return {
     ...state,
     clearLogs,
+    clearDevLogs,
   }
 }

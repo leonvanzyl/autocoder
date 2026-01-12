@@ -2,7 +2,7 @@
 WebSocket Handlers
 ==================
 
-Real-time updates for project progress and agent output.
+Real-time updates for project progress, agent output, and dev server output.
 """
 
 import asyncio
@@ -15,6 +15,7 @@ from typing import Set
 
 from fastapi import WebSocket, WebSocketDisconnect
 
+from .services.dev_server_manager import get_devserver_manager
 from .services.process_manager import get_manager
 
 # Lazy imports
@@ -195,14 +196,50 @@ async def project_websocket(websocket: WebSocket, project_name: str):
     agent_manager.add_output_callback(on_output)
     agent_manager.add_status_callback(on_status_change)
 
+    # Get dev server manager and register callbacks
+    devserver_manager = get_devserver_manager(project_name, project_dir)
+
+    async def on_dev_output(line: str):
+        """Handle dev server output - broadcast to this WebSocket."""
+        try:
+            await websocket.send_json({
+                "type": "dev_log",
+                "line": line,
+                "timestamp": datetime.now().isoformat(),
+            })
+        except Exception:
+            pass  # Connection may be closed
+
+    async def on_dev_status_change(status: str):
+        """Handle dev server status change - broadcast to this WebSocket."""
+        try:
+            await websocket.send_json({
+                "type": "dev_server_status",
+                "status": status,
+                "url": devserver_manager.detected_url,
+            })
+        except Exception:
+            pass  # Connection may be closed
+
+    # Register dev server callbacks
+    devserver_manager.add_output_callback(on_dev_output)
+    devserver_manager.add_status_callback(on_dev_status_change)
+
     # Start progress polling task
     poll_task = asyncio.create_task(poll_progress(websocket, project_name, project_dir))
 
     try:
-        # Send initial status
+        # Send initial agent status
         await websocket.send_json({
             "type": "agent_status",
             "status": agent_manager.status,
+        })
+
+        # Send initial dev server status
+        await websocket.send_json({
+            "type": "dev_server_status",
+            "status": devserver_manager.status,
+            "url": devserver_manager.detected_url,
         })
 
         # Send initial progress
@@ -244,9 +281,13 @@ async def project_websocket(websocket: WebSocket, project_name: str):
         except asyncio.CancelledError:
             pass
 
-        # Unregister callbacks
+        # Unregister agent callbacks
         agent_manager.remove_output_callback(on_output)
         agent_manager.remove_status_callback(on_status_change)
+
+        # Unregister dev server callbacks
+        devserver_manager.remove_output_callback(on_dev_output)
+        devserver_manager.remove_status_callback(on_dev_status_change)
 
         # Disconnect from manager
         await manager.disconnect(websocket, project_name)

@@ -20,24 +20,22 @@ from security import bash_security_hook
 # Load environment variables from .env file if present
 load_dotenv()
 
-# Default CLI command - can be overridden via CLI_COMMAND environment variable
-# Common values: "claude" (default), "glm"
-DEFAULT_CLI_COMMAND = "claude"
-
 # Default Playwright headless mode - can be overridden via PLAYWRIGHT_HEADLESS env var
 # When True, browser runs invisibly in background
 # When False, browser window is visible (default - useful for monitoring agent progress)
 DEFAULT_PLAYWRIGHT_HEADLESS = False
 
-
-def get_cli_command() -> str:
-    """
-    Get the CLI command to use for the agent.
-
-    Reads from CLI_COMMAND environment variable, defaults to 'claude'.
-    This allows users to use alternative CLIs like 'glm'.
-    """
-    return os.getenv("CLI_COMMAND", DEFAULT_CLI_COMMAND)
+# Environment variables to pass through to Claude CLI for API configuration
+# These allow using alternative API endpoints (e.g., GLM via z.ai) without
+# affecting the user's global Claude Code settings
+API_ENV_VARS = [
+    "ANTHROPIC_BASE_URL",              # Custom API endpoint (e.g., https://api.z.ai/api/anthropic)
+    "ANTHROPIC_AUTH_TOKEN",            # API authentication token
+    "API_TIMEOUT_MS",                  # Request timeout in milliseconds
+    "ANTHROPIC_DEFAULT_SONNET_MODEL",  # Model override for Sonnet
+    "ANTHROPIC_DEFAULT_OPUS_MODEL",    # Model override for Opus
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL",   # Model override for Haiku
+]
 
 
 def get_playwright_headless() -> bool:
@@ -187,14 +185,12 @@ def create_client(project_dir: Path, model: str, yolo_mode: bool = False):
     print("   - Project settings enabled (skills, commands, CLAUDE.md)")
     print()
 
-    # Use system CLI instead of bundled one (avoids Bun runtime crash on Windows)
-    # CLI command is configurable via CLI_COMMAND environment variable
-    cli_command = get_cli_command()
-    system_cli = shutil.which(cli_command)
+    # Use system Claude CLI instead of bundled one (avoids Bun runtime crash on Windows)
+    system_cli = shutil.which("claude")
     if system_cli:
         print(f"   - Using system CLI: {system_cli}")
     else:
-        print(f"   - Warning: System CLI '{cli_command}' not found, using bundled CLI")
+        print("   - Warning: System 'claude' CLI not found, using bundled CLI")
 
     # Build MCP servers config - features is always included, playwright only in standard mode
     mcp_servers = {
@@ -202,9 +198,8 @@ def create_client(project_dir: Path, model: str, yolo_mode: bool = False):
             "command": sys.executable,  # Use the same Python that's running this script
             "args": ["-m", "mcp_server.feature_mcp"],
             "env": {
-                # Inherit parent environment (PATH, ANTHROPIC_API_KEY, etc.)
-                **os.environ,
-                # Add custom variables
+                # Only specify variables the MCP server needs
+                # (subprocess inherits parent environment automatically)
                 "PROJECT_DIR": str(project_dir.resolve()),
                 "PYTHONPATH": str(Path(__file__).parent.resolve()),
             },
@@ -228,6 +223,21 @@ def create_client(project_dir: Path, model: str, yolo_mode: bool = False):
             "args": playwright_args,
         }
 
+    # Build environment overrides for API endpoint configuration
+    # These override system env vars for the Claude CLI subprocess,
+    # allowing AutoCoder to use alternative APIs (e.g., GLM) without
+    # affecting the user's global Claude Code settings
+    sdk_env = {}
+    for var in API_ENV_VARS:
+        value = os.getenv(var)
+        if value:
+            sdk_env[var] = value
+
+    if sdk_env:
+        print(f"   - API overrides: {', '.join(sdk_env.keys())}")
+        if "ANTHROPIC_BASE_URL" in sdk_env:
+            print(f"   - GLM Mode: Using {sdk_env['ANTHROPIC_BASE_URL']}")
+
     return ClaudeSDKClient(
         options=ClaudeAgentOptions(
             model=model,
@@ -245,5 +255,6 @@ def create_client(project_dir: Path, model: str, yolo_mode: bool = False):
             max_turns=1000,
             cwd=str(project_dir.resolve()),
             settings=str(settings_file.resolve()),  # Use absolute path
+            env=sdk_env,  # Pass API configuration overrides to CLI subprocess
         )
     )

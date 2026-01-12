@@ -21,6 +21,9 @@ import type {
   Settings,
   SettingsUpdate,
   ModelsResponse,
+  DevServerStatusResponse,
+  DevServerConfig,
+  TerminalInfo,
 } from './types'
 
 const API_BASE = '/api'
@@ -299,5 +302,73 @@ export async function updateSettings(settings: SettingsUpdate): Promise<Settings
   return fetchJSON('/settings', {
     method: 'PATCH',
     body: JSON.stringify(settings),
+  })
+}
+
+// ============================================================================
+// Dev Server API
+// ============================================================================
+
+export async function getDevServerStatus(projectName: string): Promise<DevServerStatusResponse> {
+  return fetchJSON(`/projects/${encodeURIComponent(projectName)}/devserver/status`)
+}
+
+export async function startDevServer(
+  projectName: string,
+  command?: string
+): Promise<{ success: boolean; message: string }> {
+  return fetchJSON(`/projects/${encodeURIComponent(projectName)}/devserver/start`, {
+    method: 'POST',
+    body: JSON.stringify({ command }),
+  })
+}
+
+export async function stopDevServer(
+  projectName: string
+): Promise<{ success: boolean; message: string }> {
+  return fetchJSON(`/projects/${encodeURIComponent(projectName)}/devserver/stop`, {
+    method: 'POST',
+  })
+}
+
+export async function getDevServerConfig(projectName: string): Promise<DevServerConfig> {
+  return fetchJSON(`/projects/${encodeURIComponent(projectName)}/devserver/config`)
+}
+
+// ============================================================================
+// Terminal API
+// ============================================================================
+
+export async function listTerminals(projectName: string): Promise<TerminalInfo[]> {
+  return fetchJSON(`/terminal/${encodeURIComponent(projectName)}`)
+}
+
+export async function createTerminal(
+  projectName: string,
+  name?: string
+): Promise<TerminalInfo> {
+  return fetchJSON(`/terminal/${encodeURIComponent(projectName)}`, {
+    method: 'POST',
+    body: JSON.stringify({ name: name ?? null }),
+  })
+}
+
+export async function renameTerminal(
+  projectName: string,
+  terminalId: string,
+  name: string
+): Promise<TerminalInfo> {
+  return fetchJSON(`/terminal/${encodeURIComponent(projectName)}/${terminalId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ name }),
+  })
+}
+
+export async function deleteTerminal(
+  projectName: string,
+  terminalId: string
+): Promise<void> {
+  await fetchJSON(`/terminal/${encodeURIComponent(projectName)}/${terminalId}`, {
+    method: 'DELETE',
   })
 }

@@ -26,17 +26,17 @@ from ..schemas import ImageAttachment
 # Load environment variables from .env file if present
 load_dotenv()
 
-
-def get_cli_command() -> str:
-    """
-    Get the CLI command to use for the agent.
-
-    Reads from CLI_COMMAND environment variable, defaults to 'claude'.
-    This allows users to use alternative CLIs like 'glm'.
-    """
-    return os.getenv("CLI_COMMAND", "claude")
-
 logger = logging.getLogger(__name__)
+
+# Environment variables to pass through to Claude CLI for API configuration
+API_ENV_VARS = [
+    "ANTHROPIC_BASE_URL",
+    "ANTHROPIC_AUTH_TOKEN",
+    "API_TIMEOUT_MS",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+]
 
 
 async def _make_multimodal_message(content_blocks: list[dict]) -> AsyncGenerator[dict, None]:
@@ -135,14 +135,12 @@ class ExpandChatSession:
         except UnicodeDecodeError:
             skill_content = skill_path.read_text(encoding="utf-8", errors="replace")
 
-        # Find and validate CLI before creating temp files
-        # CLI command is configurable via CLI_COMMAND environment variable
-        cli_command = get_cli_command()
-        system_cli = shutil.which(cli_command)
+        # Find and validate Claude CLI before creating temp files
+        system_cli = shutil.which("claude")
         if not system_cli:
             yield {
                 "type": "error",
-                "content": f"CLI '{cli_command}' not found. Please install it or check your CLI_COMMAND setting."
+                "content": "Claude CLI not found. Please install it: npm install -g @anthropic-ai/claude-code"
             }
             return
 
@@ -167,6 +165,9 @@ class ExpandChatSession:
         project_path = str(self.project_dir.resolve())
         system_prompt = skill_content.replace("$ARGUMENTS", project_path)
 
+        # Build environment overrides for API configuration
+        sdk_env = {var: os.getenv(var) for var in API_ENV_VARS if os.getenv(var)}
+
         # Create Claude SDK client
         try:
             self.client = ClaudeSDKClient(
@@ -183,6 +184,7 @@ class ExpandChatSession:
                     max_turns=100,
                     cwd=str(self.project_dir.resolve()),
                     settings=str(settings_file.resolve()),
+                    env=sdk_env,
                 )
             )
             await self.client.__aenter__()

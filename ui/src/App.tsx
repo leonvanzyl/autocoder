@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { useProjects, useFeatures, useAgentStatus } from './hooks/useProjects'
+import { useProjects, useFeatures, useAgentStatus, useSettings } from './hooks/useProjects'
 import { useProjectWebSocket } from './hooks/useWebSocket'
 import { useFeatureSound } from './hooks/useFeatureSound'
 import { useCelebration } from './hooks/useCelebration'
@@ -13,12 +13,13 @@ import { ProgressDashboard } from './components/ProgressDashboard'
 import { SetupWizard } from './components/SetupWizard'
 import { AddFeatureForm } from './components/AddFeatureForm'
 import { FeatureModal } from './components/FeatureModal'
-import { DebugLogViewer } from './components/DebugLogViewer'
+import { DebugLogViewer, type TabType } from './components/DebugLogViewer'
 import { AgentThought } from './components/AgentThought'
 import { AssistantFAB } from './components/AssistantFAB'
 import { AssistantPanel } from './components/AssistantPanel'
 import { ExpandProjectModal } from './components/ExpandProjectModal'
 import { SettingsModal } from './components/SettingsModal'
+import { DevServerControl } from './components/DevServerControl'
 import { Loader2, Settings } from 'lucide-react'
 import type { Feature } from './lib/types'
 
@@ -48,6 +49,7 @@ function App() {
   const [setupComplete, setSetupComplete] = useState(true) // Start optimistic
   const [debugOpen, setDebugOpen] = useState(false)
   const [debugPanelHeight, setDebugPanelHeight] = useState(288) // Default height
+  const [debugActiveTab, setDebugActiveTab] = useState<TabType>('agent')
   const [assistantOpen, setAssistantOpen] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [isSpecCreating, setIsSpecCreating] = useState(false)
@@ -55,6 +57,7 @@ function App() {
   const queryClient = useQueryClient()
   const { data: projects, isLoading: projectsLoading } = useProjects()
   const { data: features } = useFeatures(selectedProject)
+  const { data: settings } = useSettings()
   useAgentStatus(selectedProject) // Keep polling for status updates
   const wsState = useProjectWebSocket(selectedProject)
 
@@ -105,6 +108,22 @@ function App() {
         setDebugOpen(prev => !prev)
       }
 
+      // T : Toggle terminal tab in debug panel
+      if (e.key === 't' || e.key === 'T') {
+        e.preventDefault()
+        if (!debugOpen) {
+          // If panel is closed, open it and switch to terminal tab
+          setDebugOpen(true)
+          setDebugActiveTab('terminal')
+        } else if (debugActiveTab === 'terminal') {
+          // If already on terminal tab, close the panel
+          setDebugOpen(false)
+        } else {
+          // If open but on different tab, switch to terminal
+          setDebugActiveTab('terminal')
+        }
+      }
+
       // N : Add new feature (when project selected)
       if ((e.key === 'n' || e.key === 'N') && selectedProject) {
         e.preventDefault()
@@ -150,7 +169,7 @@ function App() {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [selectedProject, showAddFeature, showExpandProject, selectedFeature, debugOpen, assistantOpen, features, showSettings, isSpecCreating])
+  }, [selectedProject, showAddFeature, showExpandProject, selectedFeature, debugOpen, debugActiveTab, assistantOpen, features, showSettings, isSpecCreating])
 
   // Combine WebSocket progress with feature data
   const progress = wsState.progress.total > 0 ? wsState.progress : {
@@ -195,6 +214,12 @@ function App() {
                     status={wsState.agentStatus}
                   />
 
+                  <DevServerControl
+                    projectName={selectedProject}
+                    status={wsState.devServerStatus}
+                    url={wsState.devServerUrl}
+                  />
+
                   <button
                     onClick={() => setShowSettings(true)}
                     className="neo-btn text-sm py-2 px-3"
@@ -203,6 +228,16 @@ function App() {
                   >
                     <Settings size={18} />
                   </button>
+
+                  {/* GLM Mode Badge */}
+                  {settings?.glm_mode && (
+                    <span
+                      className="px-2 py-1 text-xs font-bold bg-purple-500 text-white rounded border-2 border-black shadow-neo-sm"
+                      title="Using GLM API (configured via .env)"
+                    >
+                      GLM
+                    </span>
+                  )}
                 </>
               )}
             </div>
@@ -302,10 +337,15 @@ function App() {
       {selectedProject && (
         <DebugLogViewer
           logs={wsState.logs}
+          devLogs={wsState.devLogs}
           isOpen={debugOpen}
           onToggle={() => setDebugOpen(!debugOpen)}
           onClear={wsState.clearLogs}
+          onClearDevLogs={wsState.clearDevLogs}
           onHeightChange={setDebugPanelHeight}
+          projectName={selectedProject}
+          activeTab={debugActiveTab}
+          onTabChange={setDebugActiveTab}
         />
       )}
 

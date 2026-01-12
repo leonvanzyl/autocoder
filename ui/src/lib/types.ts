@@ -107,8 +107,33 @@ export interface SetupStatus {
   npm: boolean
 }
 
+// Dev Server types
+export type DevServerStatus = 'stopped' | 'running' | 'crashed'
+
+export interface DevServerStatusResponse {
+  status: DevServerStatus
+  pid: number | null
+  url: string | null
+  command: string | null
+  started_at: string | null
+}
+
+export interface DevServerConfig {
+  detected_type: string | null
+  detected_command: string | null
+  custom_command: string | null
+  effective_command: string | null
+}
+
+// Terminal types
+export interface TerminalInfo {
+  id: string
+  name: string
+  created_at: string
+}
+
 // WebSocket message types
-export type WSMessageType = 'progress' | 'feature_update' | 'log' | 'agent_status' | 'pong'
+export type WSMessageType = 'progress' | 'feature_update' | 'log' | 'agent_status' | 'pong' | 'dev_log' | 'dev_server_status'
 
 export interface WSProgressMessage {
   type: 'progress'
@@ -139,12 +164,26 @@ export interface WSPongMessage {
   type: 'pong'
 }
 
+export interface WSDevLogMessage {
+  type: 'dev_log'
+  line: string
+  timestamp: string
+}
+
+export interface WSDevServerStatusMessage {
+  type: 'dev_server_status'
+  status: DevServerStatus
+  url: string | null
+}
+
 export type WSMessage =
   | WSProgressMessage
   | WSFeatureUpdateMessage
   | WSLogMessage
   | WSAgentStatusMessage
   | WSPongMessage
+  | WSDevLogMessage
+  | WSDevServerStatusMessage
 
 // ============================================================================
 // Spec Chat Types
@@ -348,6 +387,7 @@ export interface ModelsResponse {
 export interface Settings {
   yolo_mode: boolean
   model: string
+  glm_mode: boolean
 }
 
 export interface SettingsUpdate {

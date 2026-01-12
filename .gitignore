@@ -136,3 +136,4 @@ Pipfile.lock
 *.temp
 .tmp/
 .temp/
+tmpclaude-*-cwd

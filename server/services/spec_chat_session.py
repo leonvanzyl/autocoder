@@ -23,17 +23,17 @@ from ..schemas import ImageAttachment
 # Load environment variables from .env file if present
 load_dotenv()
 
-
-def get_cli_command() -> str:
-    """
-    Get the CLI command to use for the agent.
-
-    Reads from CLI_COMMAND environment variable, defaults to 'claude'.
-    This allows users to use alternative CLIs like 'glm'.
-    """
-    return os.getenv("CLI_COMMAND", "claude")
-
 logger = logging.getLogger(__name__)
+
+# Environment variables to pass through to Claude CLI for API configuration
+API_ENV_VARS = [
+    "ANTHROPIC_BASE_URL",
+    "ANTHROPIC_AUTH_TOKEN",
+    "API_TIMEOUT_MS",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+]
 
 
 async def _make_multimodal_message(content_blocks: list[dict]) -> AsyncGenerator[dict, None]:
@@ -154,18 +154,29 @@ class SpecChatSession:
         project_path = str(self.project_dir.resolve())
         system_prompt = skill_content.replace("$ARGUMENTS", project_path)
 
+        # Write system prompt to CLAUDE.md file to avoid Windows command line length limit
+        # The SDK will read this via setting_sources=["project"]
+        claude_md_path = self.project_dir / "CLAUDE.md"
+        with open(claude_md_path, "w", encoding="utf-8") as f:
+            f.write(system_prompt)
+        logger.info(f"Wrote system prompt to {claude_md_path}")
+
         # Create Claude SDK client with limited tools for spec creation
         # Use Opus for best quality spec generation
-        # Use system CLI to avoid bundled Bun runtime crash (exit code 3) on Windows
-        # CLI command is configurable via CLI_COMMAND environment variable
-        cli_command = get_cli_command()
-        system_cli = shutil.which(cli_command)
+        # Use system Claude CLI to avoid bundled Bun runtime crash (exit code 3) on Windows
+        system_cli = shutil.which("claude")
+
+        # Build environment overrides for API configuration
+        sdk_env = {var: os.getenv(var) for var in API_ENV_VARS if os.getenv(var)}
+
         try:
             self.client = ClaudeSDKClient(
                 options=ClaudeAgentOptions(
                     model="claude-opus-4-5-20251101",
                     cli_path=system_cli,
-                    system_prompt=system_prompt,
+                    # System prompt loaded from CLAUDE.md via setting_sources
+                    # This avoids Windows command line length limit (~8191 chars)
+                    setting_sources=["project"],
                     allowed_tools=[
                         "Read",
                         "Write",
@@ -176,6 +187,7 @@ class SpecChatSession:
                     max_turns=100,
                     cwd=str(self.project_dir.resolve()),
                     settings=str(settings_file.resolve()),
+                    env=sdk_env,
                 )
             )
             # Enter the async context and track it
