@@ -109,6 +109,72 @@ autocoder parallel --project-dir my-app --parallel 3 --preset balanced
 autocoder-ui
 ```
 
+### Ports
+
+- Web UI server port: set `AUTOCODER_UI_PORT` (default: `8888`).
+- UI dev proxy port: set `VITE_API_PORT` (or reuse `AUTOCODER_UI_PORT`) when running `ui/` via Vite.
+- Parallel agent runs allocate unique target-app ports per worker via `AUTOCODER_API_PORT` and `AUTOCODER_WEB_PORT` (configurable pools via `AUTOCODER_API_PORT_RANGE_START/END` and `AUTOCODER_WEB_PORT_RANGE_START/END`).
+- For common dev servers, workers also export compatibility vars: `PORT` (API) and `VITE_PORT` (web).
+- Design/implementation details: `PORT_ALLOCATION_IMPLEMENTATION_REPORT.md`.
+
+### Web UI Settings
+
+- Quick run settings: **Settings** button (or press `S`).
+- Full settings hub: open `http://127.0.0.1:8888/#/settings` (Run / Models / Advanced).
+
+### Parallel-Safe Feature Claiming
+
+When running multiple agents (or multiple Claude Agent SDK sessions), feature selection must be atomic to avoid two sessions picking the same work item.
+
+- Prefer `feature_claim_next` (atomic) over `feature_get_next` (legacy, non-atomic).
+- In prompts/templates, follow the guidance to claim a feature before implementing it.
+
+### Verified “Passing” in Parallel Mode
+
+In parallel mode, workers should not self-attest `passes=true`. Instead, `feature_mark_passing` submits the feature for Gatekeeper verification, and the orchestrator sets `passes=true` only after deterministic verification and merge.
+
+By default, Gatekeeper rejects features if no test framework is detected (or no tests run). Override with `AUTOCODER_ALLOW_NO_TESTS=1` if you want “merge without tests” for a project.
+
+### Agent Guardrails
+
+To prevent runaway tool loops, the SDK session enforces basic guardrails:
+
+- `AUTOCODER_GUARDRAIL_MAX_TOOL_CALLS` (default `400`)
+- `AUTOCODER_GUARDRAIL_MAX_SAME_TOOL_CALLS` (default `50`)
+- `AUTOCODER_GUARDRAIL_MAX_CONSECUTIVE_TOOL_ERRORS` (default `25`)
+- `AUTOCODER_GUARDRAIL_MAX_TOOL_ERRORS` (default `150`)
+
+### Parallel Worker Logs
+
+Parallel workers write stdout/stderr to `./.autocoder/logs/<agent-id>.log` in the project directory.
+
+Logs are pruned automatically (defaults: keep 7 days, 200 files, 200MB total). Override with:
+
+- `AUTOCODER_LOGS_KEEP_DAYS`
+- `AUTOCODER_LOGS_KEEP_FILES`
+- `AUTOCODER_LOGS_MAX_TOTAL_MB`
+
+You can also prune manually:
+
+`autocoder logs --project-dir <path> --prune [--dry-run]`
+
+In the Web UI, use **Logs** (press `L`) to view/tail, prune, or delete worker log files.
+
+### SDK Retry/Backoff
+
+Transient Claude SDK errors (rate limits, timeouts, connection blips) use exponential backoff:
+
+- `AUTOCODER_SDK_MAX_ATTEMPTS` (default `3`)
+- `AUTOCODER_SDK_INITIAL_DELAY_S` (default `1`)
+- `AUTOCODER_SDK_RATE_LIMIT_INITIAL_DELAY_S` (default `30`)
+- `AUTOCODER_SDK_MAX_DELAY_S` (default `60`)
+- `AUTOCODER_SDK_EXPONENTIAL_BASE` (default `2`)
+- `AUTOCODER_SDK_JITTER` (default `true`)
+
+### UI Server Lock
+
+The UI server uses a per-port PID lock to avoid two instances fighting over the same port. Disable with `AUTOCODER_DISABLE_UI_LOCK=1`.
+
 ### Model Presets (for Parallel Mode)
 
 - `quality` - Opus only (best quality, highest cost)

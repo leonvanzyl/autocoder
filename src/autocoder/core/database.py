@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
 from contextlib import contextmanager
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -43,8 +44,16 @@ class Database:
     @contextmanager
     def get_connection(self):
         """Get a database connection with context manager."""
-        conn = sqlite3.connect(self.db_path)
+        conn = sqlite3.connect(self.db_path, timeout=30)
         conn.row_factory = sqlite3.Row
+        try:
+            conn.execute("PRAGMA foreign_keys = ON")
+            conn.execute("PRAGMA journal_mode = WAL")
+            conn.execute("PRAGMA synchronous = NORMAL")
+            conn.execute("PRAGMA busy_timeout = 10000")
+        except sqlite3.OperationalError:
+            # Some pragmas may be unsupported in constrained environments; best-effort only.
+            pass
         try:
             yield conn
         finally:
@@ -54,6 +63,16 @@ class Database:
         """Initialize database schema."""
         with self.get_connection() as conn:
             cursor = conn.cursor()
+
+            # Pragmas for better concurrency under multiple processes.
+            # (Safe to run repeatedly; journal_mode is persistent for the DB file.)
+            try:
+                cursor.execute("PRAGMA journal_mode = WAL")
+                cursor.execute("PRAGMA synchronous = NORMAL")
+                cursor.execute("PRAGMA busy_timeout = 10000")
+                cursor.execute("PRAGMA foreign_keys = ON")
+            except sqlite3.OperationalError:
+                pass
 
             # Features table
             cursor.execute("""
@@ -110,6 +129,12 @@ class Database:
             except sqlite3.OperationalError:
                 pass  # Column already exists
 
+            try:
+                cursor.execute("ALTER TABLE agent_heartbeats ADD COLUMN log_file_path TEXT")
+                logger.info("Added log_file_path column to existing agent_heartbeats table")
+            except sqlite3.OperationalError:
+                pass  # Column already exists
+
             # Migration: Normalize legacy lowercase statuses to uppercase
             cursor.execute("""
                 UPDATE features
@@ -136,6 +161,9 @@ class Database:
                     -- Port allocation
                     api_port INTEGER,
                     web_port INTEGER,
+
+                    -- Logging/diagnostics
+                    log_file_path TEXT,
 
                     FOREIGN KEY (feature_id) REFERENCES features(id)
                 )
@@ -291,6 +319,55 @@ class Database:
             row = cursor.fetchone()
             return dict(row) if row else None
 
+    def claim_next_pending_feature(
+        self,
+        agent_id: str,
+        *,
+        branch_prefix: str = "feat",
+        max_attempts: int = 10,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Atomically claim the next pending feature.
+
+        This is safe under concurrency: it uses an UPDATE gated by status='PENDING'
+        and retries if another agent wins the race.
+        """
+        if not agent_id:
+            raise ValueError("agent_id is required to claim a feature")
+
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+
+            for _ in range(max_attempts):
+                cursor.execute("""
+                    SELECT id FROM features
+                    WHERE status = 'PENDING'
+                    ORDER BY priority DESC, id ASC
+                    LIMIT 1
+                """)
+                row = cursor.fetchone()
+                if not row:
+                    return None
+
+                feature_id = int(row[0])
+                branch_name = f"{branch_prefix}/{feature_id}-{int(time.time())}"
+
+                cursor.execute("""
+                    UPDATE features
+                    SET status = 'IN_PROGRESS',
+                        assigned_agent_id = ?,
+                        assigned_at = CURRENT_TIMESTAMP,
+                        branch_name = ?,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ? AND status = 'PENDING'
+                """, (agent_id, branch_name, feature_id))
+
+                if cursor.rowcount > 0:
+                    conn.commit()
+                    return self.get_feature(feature_id)
+
+            return None
+
     def get_passing_features_for_regression(
         self,
         limit: int = 3
@@ -328,17 +405,6 @@ class Database:
         with self.get_connection() as conn:
             cursor = conn.cursor()
 
-            # Transaction provides locking (no FOR UPDATE needed in SQLite)
-            cursor.execute("""
-                SELECT id FROM features
-                WHERE id = ? AND status = 'PENDING'
-            """, (feature_id,))
-
-            row = cursor.fetchone()
-            if not row:
-                return False  # Feature already claimed or doesn't exist
-
-            # Claim the feature
             cursor.execute("""
                 UPDATE features
                 SET status = 'IN_PROGRESS',
@@ -346,11 +412,11 @@ class Database:
                     assigned_at = CURRENT_TIMESTAMP,
                     branch_name = ?,
                     updated_at = CURRENT_TIMESTAMP
-                WHERE id = ?
+                WHERE id = ? AND status = 'PENDING'
             """, (agent_id, branch_name, feature_id))
 
             conn.commit()
-            return True
+            return cursor.rowcount > 0
 
     def claim_batch(
         self,
@@ -397,10 +463,11 @@ class Database:
                         assigned_at = CURRENT_TIMESTAMP,
                         branch_name = ?,
                         updated_at = CURRENT_TIMESTAMP
-                    WHERE id = ?
+                    WHERE id = ? AND status = 'PENDING'
                 """, (agent_id, branch_name, feature_id))
 
-                claimed_ids.append(feature_id)
+                if cursor.rowcount > 0:
+                    claimed_ids.append(feature_id)
 
             conn.commit()
             return claimed_ids
@@ -434,10 +501,33 @@ class Database:
                 UPDATE features
                 SET status = 'DONE',
                     passes = TRUE,
+                    review_status = 'VERIFIED',
                     completed_at = CURRENT_TIMESTAMP,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE id = ?
             """, (feature_id,))
+            conn.commit()
+            return cursor.rowcount > 0
+
+    def mark_feature_ready_for_verification(self, feature_id: int) -> bool:
+        """
+        Mark a feature as ready for deterministic verification (Gatekeeper).
+
+        Parallel workers should call this instead of directly setting `passes = TRUE`.
+        """
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                UPDATE features
+                SET status = 'IN_PROGRESS',
+                    passes = FALSE,
+                    review_status = 'READY_FOR_VERIFICATION',
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (feature_id,),
+            )
             conn.commit()
             return cursor.rowcount > 0
 
@@ -455,9 +545,31 @@ class Database:
                     assigned_agent_id = NULL,
                     assigned_at = NULL,
                     branch_name = NULL,
+                    review_status = NULL,
+                    passes = FALSE,
+                    completed_at = NULL,
                     attempts = attempts + 1,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE id = ?
+            """, (feature_id,))
+            conn.commit()
+            return cursor.rowcount > 0
+
+    def clear_feature_in_progress(self, feature_id: int) -> bool:
+        """Clear an in-progress feature back to pending without counting an attempt."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                UPDATE features
+                SET status = 'PENDING',
+                    assigned_agent_id = NULL,
+                    assigned_at = NULL,
+                    branch_name = NULL,
+                    review_status = NULL,
+                    passes = FALSE,
+                    completed_at = NULL,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ? AND status = 'IN_PROGRESS'
             """, (feature_id,))
             conn.commit()
             return cursor.rowcount > 0
@@ -473,15 +585,18 @@ class Database:
         worktree_path: Optional[str] = None,
         feature_id: Optional[int] = None,
         api_port: Optional[int] = None,
-        web_port: Optional[int] = None
+        web_port: Optional[int] = None,
+        log_file_path: Optional[str] = None,
     ) -> bool:
         """Register an agent as active."""
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                INSERT INTO agent_heartbeats (agent_id, pid, worktree_path, feature_id, api_port, web_port)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, (agent_id, pid, worktree_path, feature_id, api_port, web_port))
+                INSERT INTO agent_heartbeats (
+                    agent_id, pid, worktree_path, feature_id, api_port, web_port, log_file_path
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (agent_id, pid, worktree_path, feature_id, api_port, web_port, log_file_path))
             conn.commit()
             return True
 
@@ -524,6 +639,17 @@ class Database:
                   AND last_ping < datetime('now', '-' || ? || ' minutes')
                 ORDER BY last_ping ASC
             """, (timeout_minutes,))
+            return [dict(row) for row in cursor.fetchall()]
+
+    def get_active_agents(self) -> List[Dict[str, Any]]:
+        """Get active agents (used for port bootstrapping on orchestrator startup)."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT * FROM agent_heartbeats
+                WHERE status = 'ACTIVE'
+                ORDER BY last_ping ASC
+            """)
             return [dict(row) for row in cursor.fetchall()]
 
     def get_completed_agents(self) -> List[Dict[str, Any]]:
@@ -626,6 +752,11 @@ class Database:
             cursor.execute("SELECT COUNT(*) FROM features WHERE status = 'IN_PROGRESS'")
             in_progress = cursor.fetchone()[0]
 
+            cursor.execute(
+                "SELECT COUNT(*) FROM features WHERE review_status = 'READY_FOR_VERIFICATION'"
+            )
+            ready_for_verification = cursor.fetchone()[0]
+
             cursor.execute("SELECT COUNT(*) FROM features WHERE passes = TRUE")
             completed = cursor.fetchone()[0]
 
@@ -640,6 +771,7 @@ class Database:
                 "features": {
                     "pending": pending,
                     "in_progress": in_progress,
+                    "ready_for_verification": ready_for_verification,
                     "completed": completed,
                     "total": pending + in_progress + completed
                 },

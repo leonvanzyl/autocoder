@@ -18,7 +18,7 @@ from autocoder.agent.security import (
 )
 
 
-def test_hook(command: str, should_block: bool) -> bool:
+def run_hook_case(command: str, should_block: bool) -> bool:
     """Test a single command against the security hook."""
     input_data = {"tool_name": "Bash", "tool_input": {"command": command}}
     result = asyncio.run(bash_security_hook(input_data))
@@ -210,7 +210,7 @@ def main():
     ]
 
     for cmd in dangerous:
-        if test_hook(cmd, should_block=True):
+        if run_hook_case(cmd, should_block=True):
             passed += 1
         else:
             failed += 1
@@ -268,7 +268,7 @@ def main():
     ]
 
     for cmd in safe:
-        if test_hook(cmd, should_block=False):
+        if run_hook_case(cmd, should_block=False):
             passed += 1
         else:
             failed += 1

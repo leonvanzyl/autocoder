@@ -9,6 +9,46 @@ Start by reading `app_spec.txt` in your working directory. This file contains
 the complete specification for what you need to build. Read it carefully
 before proceeding.
 
+### CRITICAL: DYNAMIC PORT CONFIGURATION
+
+**Ports are dynamically assigned per agent instance.** NEVER hardcode port numbers in your code or commands.
+
+**Environment Variables (set automatically by the agent system):**
+- `$AUTOCODER_API_PORT` - Backend API server port (e.g., 5001, 5002, etc.)
+- `$AUTOCODER_WEB_PORT` - Frontend web server port (e.g., 5173, 5174, etc.)
+
+**Rules:**
+1. **ALWAYS** use environment variables for port references
+2. **NEVER** hardcode ports like `3000`, `3001`, `5001`, `5173`, etc.
+3. When starting servers, use: `--port $AUTOCODER_WEB_PORT` or `$PORT` or equivalent
+4. When configuring API endpoints, use: `http://localhost:$AUTOCODER_API_PORT`
+5. When accessing the frontend, use: `http://localhost:$AUTOCODER_WEB_PORT`
+6. When creating init.sh scripts, use these environment variables
+7. **Do NOT rely on `.env` variable interpolation** (most `.env` loaders won’t expand `$AUTOCODER_API_PORT`); prefer setting `PORT=$AUTOCODER_API_PORT` at process start.
+
+**Example correct usage in init.sh:**
+```bash
+#!/bin/bash
+# Start backend with dynamic port
+export PORT=$AUTOCODER_API_PORT
+npm run start &
+
+# Start frontend with dynamic port
+export PORT=$AUTOCODER_WEB_PORT
+npm run dev &
+
+echo "Backend: http://localhost:$AUTOCODER_API_PORT"
+echo "Frontend: http://localhost:$AUTOCODER_WEB_PORT"
+```
+
+**Example WRONG usage (NEVER DO THIS):**
+```bash
+npm run dev -- --port 5173  # WRONG - hardcoded port
+export VITE_API_URL=http://localhost:5001  # WRONG - hardcoded port
+```
+
+
+
 ---
 
 ## REQUIRED FEATURE COUNT
@@ -495,10 +535,10 @@ components mentioned in the spec.
 ### OPTIONAL: Start Implementation
 
 If you have time remaining in this session, you may begin implementing
-the highest-priority features. Get the next feature with:
+the highest-priority features. Claim the next feature with:
 
 ```
-Use the feature_get_next tool
+Use the feature_claim_next tool (pass a stable agent_id, e.g. "agent-local")
 ```
 
 Remember:

@@ -17,6 +17,11 @@ import type {
   PathValidationResponse,
   AssistantConversation,
   AssistantConversationDetail,
+  WorkerLogsListResponse,
+  WorkerLogTailResponse,
+  PruneWorkerLogsRequest,
+  PruneWorkerLogsResponse,
+  AdvancedSettings,
 } from './types'
 
 const API_BASE = '/api'
@@ -150,6 +155,56 @@ export async function pauseAgent(projectName: string): Promise<AgentActionRespon
 export async function resumeAgent(projectName: string): Promise<AgentActionResponse> {
   return fetchJSON(`/projects/${encodeURIComponent(projectName)}/agent/resume`, {
     method: 'POST',
+  })
+}
+
+// ============================================================================
+// Worker Logs API
+// ============================================================================
+
+export async function listWorkerLogs(projectName: string): Promise<WorkerLogsListResponse> {
+  return fetchJSON(`/projects/${encodeURIComponent(projectName)}/logs/worker`)
+}
+
+export async function getWorkerLogTail(
+  projectName: string,
+  filename: string,
+  tail: number = 400
+): Promise<WorkerLogTailResponse> {
+  const params = new URLSearchParams({ tail: String(tail) })
+  return fetchJSON(
+    `/projects/${encodeURIComponent(projectName)}/logs/worker/${encodeURIComponent(filename)}?${params}`
+  )
+}
+
+export async function pruneWorkerLogs(
+  projectName: string,
+  req: PruneWorkerLogsRequest
+): Promise<PruneWorkerLogsResponse> {
+  return fetchJSON(`/projects/${encodeURIComponent(projectName)}/logs/worker/prune`, {
+    method: 'POST',
+    body: JSON.stringify(req),
+  })
+}
+
+export async function deleteWorkerLog(projectName: string, filename: string): Promise<void> {
+  await fetchJSON(`/projects/${encodeURIComponent(projectName)}/logs/worker/${encodeURIComponent(filename)}`, {
+    method: 'DELETE',
+  })
+}
+
+// ============================================================================
+// Advanced Settings API
+// ============================================================================
+
+export async function getAdvancedSettings(): Promise<AdvancedSettings> {
+  return fetchJSON('/settings/advanced')
+}
+
+export async function updateAdvancedSettings(settings: AdvancedSettings): Promise<AdvancedSettings> {
+  return fetchJSON('/settings/advanced', {
+    method: 'PUT',
+    body: JSON.stringify(settings),
   })
 }
 

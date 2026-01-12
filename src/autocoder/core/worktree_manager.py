@@ -51,15 +51,19 @@ class WorktreeManager:
         if not (self.project_dir / ".git").exists():
             raise ValueError(f"Not a git repository: {self.project_dir}")
 
+        # Backwards-compatible attribute name (used by older tests)
+        self.repo_path = str(self.project_dir)
+
         logger.info(f"WorktreeManager initialized: {self.project_dir}")
         logger.info(f"Worktrees base: {self.worktrees_base_dir}")
 
     def create_worktree(
         self,
         agent_id: str,
-        feature_id: int,
-        feature_name: str
-    ) -> dict:
+        feature_id: Optional[int] = None,
+        feature_name: Optional[str] = None,
+        branch_name: Optional[str] = None,
+    ) -> dict | str:
         """
         Create a new isolated worktree for an agent.
 
@@ -67,6 +71,7 @@ class WorktreeManager:
             agent_id: Agent identifier (e.g., "agent-1")
             feature_id: Feature ID from database
             feature_name: Human-readable feature name
+            branch_name: Optional explicit branch name to use
 
         Returns:
             Dictionary with worktree details:
@@ -79,9 +84,21 @@ class WorktreeManager:
         Raises:
             subprocess.CalledProcessError: If git worktree creation fails
         """
-        # Create branch name with timestamp for uniqueness
-        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-        branch_name = f"feat/feature-{feature_id}-{timestamp}"
+        legacy_return_path_only = False
+        if feature_id is None and feature_name is None:
+            # Backwards-compatible calling convention used by older tests:
+            # create_worktree("feature-1") -> returns worktree_path string.
+            legacy_return_path_only = True
+            feature_id = 0
+            feature_name = agent_id
+            if branch_name is None:
+                timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+                branch_name = f"feat/{agent_id}-{timestamp}"
+
+        # Create branch name with timestamp for uniqueness (unless provided)
+        if branch_name is None:
+            timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+            branch_name = f"feat/feature-{feature_id}-{timestamp}"
 
         # Sanitize feature name for directory name
         safe_agent_id = agent_id.replace("/", "-").replace("\\", "-")
@@ -96,17 +113,35 @@ class WorktreeManager:
         logger.info(f"Creating worktree: {worktree_path}")
         logger.info(f"Branch: {branch_name}")
 
+        # Prefer creating feature branches from main/master rather than whatever the repo is currently on.
+        base_ref: Optional[str] = None
+        for candidate in ("main", "master"):
+            try:
+                subprocess.run(
+                    ["git", "rev-parse", "--verify", candidate],
+                    cwd=self.project_dir,
+                    check=True,
+                    capture_output=True,
+                )
+                base_ref = candidate
+                break
+            except subprocess.CalledProcessError:
+                continue
+
         try:
             # Git worktree add command
+            cmd = [
+                "git",
+                "worktree",
+                "add",
+                str(worktree_path),
+                "-b",
+                branch_name,
+            ]
+            if base_ref:
+                cmd.append(base_ref)
             subprocess.run(
-                [
-                    "git",
-                    "worktree",
-                    "add",
-                    str(worktree_path),
-                    "-b",
-                    branch_name
-                ],
+                cmd,
                 cwd=self.project_dir,
                 check=True,
                 capture_output=True,
@@ -115,12 +150,14 @@ class WorktreeManager:
 
             logger.info(f"✅ Worktree created successfully")
 
-            return {
+            result = {
                 "worktree_path": str(worktree_path),
                 "branch_name": branch_name,
                 "relative_path": worktree_path.relative_to(self.project_dir.parent),
                 "created_at": datetime.now().isoformat()
             }
+
+            return result["worktree_path"] if legacy_return_path_only else result
 
         except subprocess.CalledProcessError as e:
             logger.error(f"Failed to create worktree: {e.stderr}")
@@ -197,6 +234,10 @@ class WorktreeManager:
                     return False
 
             return False
+
+    def remove_worktree(self, agent_id: str) -> bool:
+        """Backwards-compatible alias for delete_worktree()."""
+        return self.delete_worktree(agent_id, force=True)
 
     def list_worktrees(self) -> list[dict]:
         """

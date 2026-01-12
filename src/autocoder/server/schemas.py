@@ -105,7 +105,7 @@ class AgentStartRequest(BaseModel):
     yolo_mode: bool = False
     parallel_mode: bool = False
     parallel_count: int = 3
-    model_preset: Literal["quality", "balanced", "economy", "cheap", "experimental"] = "balanced"
+    model_preset: Literal["quality", "balanced", "economy", "cheap", "experimental", "custom"] = "balanced"
 
 
 class AgentStatus(BaseModel):

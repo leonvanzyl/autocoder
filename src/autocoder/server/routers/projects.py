@@ -38,16 +38,14 @@ def _init_imports():
     if _imports_initialized:
         return
 
-    import sys
-    root = Path(__file__).parent.parent.parent
-    if str(root) not in sys.path:
-        sys.path.insert(0, str(root))
+    from autocoder.agent.prompts import (
+        scaffold_project_prompts,
+        get_project_prompts_dir,
+        has_project_prompts,
+    )
+    from autocoder.agent.progress import count_passing_tests
 
-    from prompts import scaffold_project_prompts, get_project_prompts_dir
-    from progress import count_passing_tests
-    from start import check_spec_exists
-
-    _check_spec_exists = check_spec_exists
+    _check_spec_exists = has_project_prompts
     _scaffold_project_prompts = scaffold_project_prompts
     _get_project_prompts_dir = get_project_prompts_dir
     _count_passing_tests = count_passing_tests
@@ -56,12 +54,7 @@ def _init_imports():
 
 def _get_registry_functions():
     """Get registry functions with lazy import."""
-    import sys
-    root = Path(__file__).parent.parent.parent
-    if str(root) not in sys.path:
-        sys.path.insert(0, str(root))
-
-    from registry import (
+    from autocoder.agent.registry import (
         register_project,
         unregister_project,
         get_project_path,

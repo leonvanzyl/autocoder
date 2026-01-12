@@ -34,12 +34,8 @@ ROOT_DIR = Path(__file__).parent.parent.parent
 
 def _get_project_path(project_name: str) -> Path:
     """Get project path from registry."""
-    import sys
-    root = Path(__file__).parent.parent.parent
-    if str(root) not in sys.path:
-        sys.path.insert(0, str(root))
+    from autocoder.agent.registry import get_project_path
 
-    from registry import get_project_path
     return get_project_path(project_name)
 
 

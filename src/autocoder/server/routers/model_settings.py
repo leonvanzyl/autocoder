@@ -20,7 +20,7 @@ from pydantic import BaseModel, Field
 
 from autocoder.core.model_settings import ModelSettings, get_preset_info, parse_models_arg
 
-router = APIRouter(prefix="/model-settings", tags=["model-settings"])
+router = APIRouter(prefix="/api/model-settings", tags=["model-settings"])
 
 
 # Pydantic models for API

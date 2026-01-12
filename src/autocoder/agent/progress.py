@@ -26,8 +26,10 @@ def has_features(project_dir: Path) -> bool:
     We check the database directly (not via API) since the API server
     may not be running yet when this check is performed.
 
+    Uses the UNIFIED database (agent_system.db) shared with Orchestrator.
+
     Returns True if:
-    - features.db exists AND has at least 1 feature, OR
+    - agent_system.db exists AND has at least 1 feature, OR
     - feature_list.json exists (legacy format)
 
     Returns False if no features exist (initializer needs to run).
@@ -39,8 +41,8 @@ def has_features(project_dir: Path) -> bool:
     if json_file.exists():
         return True
 
-    # Check SQLite database
-    db_file = project_dir / "features.db"
+    # Check UNIFIED SQLite database (agent_system.db)
+    db_file = project_dir / "agent_system.db"
     if not db_file.exists():
         return False
 
@@ -60,13 +62,15 @@ def count_passing_tests(project_dir: Path) -> tuple[int, int, int]:
     """
     Count passing, in_progress, and total tests via direct database access.
 
+    Uses the UNIFIED database (agent_system.db) shared with Orchestrator.
+
     Args:
         project_dir: Directory containing the project
 
     Returns:
         (passing_count, in_progress_count, total_count)
     """
-    db_file = project_dir / "features.db"
+    db_file = project_dir / "agent_system.db"
     if not db_file.exists():
         return 0, 0, 0
 
@@ -75,11 +79,11 @@ def count_passing_tests(project_dir: Path) -> tuple[int, int, int]:
         cursor = conn.cursor()
         cursor.execute("SELECT COUNT(*) FROM features")
         total = cursor.fetchone()[0]
-        cursor.execute("SELECT COUNT(*) FROM features WHERE passes = 1")
+        cursor.execute("SELECT COUNT(*) FROM features WHERE passes = TRUE")
         passing = cursor.fetchone()[0]
-        # Handle case where in_progress column doesn't exist yet
+        # Use status field for in_progress check
         try:
-            cursor.execute("SELECT COUNT(*) FROM features WHERE in_progress = 1")
+            cursor.execute("SELECT COUNT(*) FROM features WHERE UPPER(status) = 'IN_PROGRESS'")
             in_progress = cursor.fetchone()[0]
         except sqlite3.OperationalError:
             in_progress = 0
@@ -100,7 +104,7 @@ def get_all_passing_features(project_dir: Path) -> list[dict]:
     Returns:
         List of dicts with id, category, name for each passing feature
     """
-    db_file = project_dir / "features.db"
+    db_file = project_dir / "agent_system.db"
     if not db_file.exists():
         return []
 
@@ -108,7 +112,7 @@ def get_all_passing_features(project_dir: Path) -> list[dict]:
         conn = sqlite3.connect(db_file)
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT id, category, name FROM features WHERE passes = 1 ORDER BY priority ASC"
+            "SELECT id, category, name FROM features WHERE passes = TRUE ORDER BY priority DESC, id ASC"
         )
         features = [
             {"id": row[0], "category": row[1], "name": row[2]}

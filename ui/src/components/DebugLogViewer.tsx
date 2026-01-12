@@ -1,5 +1,5 @@
 /**
- * Debug Log Viewer Component
+ * Logs Drawer Component
  *
  * Collapsible panel at the bottom of the screen showing real-time
  * agent output (tool calls, results, steps). Similar to browser DevTools.
@@ -7,12 +7,13 @@
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { ChevronUp, ChevronDown, Trash2, Terminal, GripHorizontal } from 'lucide-react'
+import { ChevronUp, ChevronDown, Trash2, Terminal, GripHorizontal, FileText } from 'lucide-react'
+import { WorkerLogsPanel } from './WorkerLogsPanel'
 
 const MIN_HEIGHT = 150
 const MAX_HEIGHT = 600
 const DEFAULT_HEIGHT = 288
-const STORAGE_KEY = 'debug-panel-height'
+const STORAGE_KEY = 'logs-drawer-height'
 
 interface DebugLogViewerProps {
   logs: Array<{ line: string; timestamp: string }>
@@ -20,6 +21,8 @@ interface DebugLogViewerProps {
   onToggle: () => void
   onClear: () => void
   onHeightChange?: (height: number) => void
+  projectName?: string | null
+  openTab?: 'live' | 'workers'
 }
 
 type LogLevel = 'error' | 'warn' | 'debug' | 'info'
@@ -30,22 +33,29 @@ export function DebugLogViewer({
   onToggle,
   onClear,
   onHeightChange,
+  projectName,
+  openTab = 'live',
 }: DebugLogViewerProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const [autoScroll, setAutoScroll] = useState(true)
   const [isResizing, setIsResizing] = useState(false)
+  const [tab, setTab] = useState<'live' | 'workers'>(openTab)
   const [panelHeight, setPanelHeight] = useState(() => {
     // Load saved height from localStorage
     const saved = localStorage.getItem(STORAGE_KEY)
     return saved ? Math.min(Math.max(parseInt(saved, 10), MIN_HEIGHT), MAX_HEIGHT) : DEFAULT_HEIGHT
   })
 
+  useEffect(() => {
+    if (isOpen) setTab(openTab)
+  }, [openTab, isOpen])
+
   // Auto-scroll to bottom when new logs arrive (if user hasn't scrolled up)
   useEffect(() => {
-    if (autoScroll && scrollRef.current && isOpen) {
+    if (tab === 'live' && autoScroll && scrollRef.current && isOpen) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
-  }, [logs, autoScroll, isOpen])
+  }, [logs, autoScroll, isOpen, tab])
 
   // Notify parent of height changes
   useEffect(() => {
@@ -168,27 +178,62 @@ export function DebugLogViewer({
         onClick={onToggle}
       >
         <div className="flex items-center gap-2">
-          <Terminal size={16} className="text-green-400" />
+          {tab === 'workers' ? (
+            <FileText size={16} className="text-cyan-300" />
+          ) : (
+            <Terminal size={16} className="text-green-400" />
+          )}
           <span className="font-mono text-sm text-white font-bold">
-            Debug
+            Logs
           </span>
-          <span className="px-1.5 py-0.5 text-xs font-mono bg-[#333] text-gray-500 rounded" title="Toggle debug panel">
+          <span className="px-1.5 py-0.5 text-xs font-mono bg-[#333] text-gray-500 rounded" title="Toggle logs drawer (live)">
             D
           </span>
-          {logs.length > 0 && (
-            <span className="px-2 py-0.5 text-xs font-mono bg-[#333] text-gray-300 rounded">
-              {logs.length}
-            </span>
+          <span className="px-1.5 py-0.5 text-xs font-mono bg-[#333] text-gray-500 rounded" title="Open worker logs">
+            L
+          </span>
+
+          {tab === 'live' && logs.length > 0 && (
+            <span className="px-2 py-0.5 text-xs font-mono bg-[#333] text-gray-300 rounded">{logs.length}</span>
           )}
-          {!autoScroll && isOpen && (
+          {tab === 'live' && !autoScroll && isOpen && (
             <span className="px-2 py-0.5 text-xs font-mono bg-yellow-600 text-white rounded">
               Paused
             </span>
           )}
+
+          {isOpen && (
+            <div className="ml-2 flex items-center gap-1">
+              <button
+                className={`px-2 py-1 text-xs font-mono rounded border border-[#333] ${
+                  tab === 'live' ? 'bg-[#333] text-white' : 'text-gray-400 hover:bg-[#222]'
+                }`}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setTab('live')
+                }}
+                title="Live logs"
+              >
+                Live
+              </button>
+              <button
+                className={`px-2 py-1 text-xs font-mono rounded border border-[#333] ${
+                  tab === 'workers' ? 'bg-[#333] text-white' : 'text-gray-400 hover:bg-[#222]'
+                }`}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setTab('workers')
+                }}
+                title="Worker log files"
+              >
+                Workers
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
-          {isOpen && (
+          {isOpen && tab === 'live' && (
             <button
               onClick={(e) => {
                 e.stopPropagation()
@@ -212,36 +257,46 @@ export function DebugLogViewer({
 
       {/* Log content area */}
       {isOpen && (
-        <div
-          ref={scrollRef}
-          onScroll={handleScroll}
-          className="h-[calc(100%-2.5rem)] overflow-y-auto bg-[#1a1a1a] p-2 font-mono text-sm"
-        >
-          {logs.length === 0 ? (
-            <div className="flex items-center justify-center h-full text-gray-500">
-              No logs yet. Start the agent to see output.
+        <div className="h-[calc(100%-2.5rem)] overflow-hidden bg-[#1a1a1a]">
+          {tab === 'live' ? (
+            <div
+              ref={scrollRef}
+              onScroll={handleScroll}
+              className="h-full overflow-y-auto p-2 font-mono text-sm"
+            >
+              {logs.length === 0 ? (
+                <div className="flex items-center justify-center h-full text-gray-500">
+                  No logs yet. Start the agent to see output.
+                </div>
+              ) : (
+                <div className="space-y-0.5">
+                  {logs.map((log, index) => {
+                    const level = getLogLevel(log.line)
+                    const colorClass = getLogColor(level)
+                    const timestamp = formatTimestamp(log.timestamp)
+
+                    return (
+                      <div
+                        key={`${log.timestamp}-${index}`}
+                        className="flex gap-2 hover:bg-[#2a2a2a] px-1 py-0.5 rounded"
+                      >
+                        <span className="text-gray-500 select-none shrink-0">{timestamp}</span>
+                        <span className={`${colorClass} whitespace-pre-wrap break-all`}>{log.line}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </div>
           ) : (
-            <div className="space-y-0.5">
-              {logs.map((log, index) => {
-                const level = getLogLevel(log.line)
-                const colorClass = getLogColor(level)
-                const timestamp = formatTimestamp(log.timestamp)
-
-                return (
-                  <div
-                    key={`${log.timestamp}-${index}`}
-                    className="flex gap-2 hover:bg-[#2a2a2a] px-1 py-0.5 rounded"
-                  >
-                    <span className="text-gray-500 select-none shrink-0">
-                      {timestamp}
-                    </span>
-                    <span className={`${colorClass} whitespace-pre-wrap break-all`}>
-                      {log.line}
-                    </span>
-                  </div>
-                )
-              })}
+            <div className="h-full p-2 overflow-hidden">
+              {projectName ? (
+                <WorkerLogsPanel projectName={projectName} />
+              ) : (
+                <div className="flex items-center justify-center h-full text-gray-500 font-mono text-sm">
+                  Select a project to view worker logs.
+                </div>
+              )}
             </div>
           )}
         </div>

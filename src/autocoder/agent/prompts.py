@@ -14,7 +14,8 @@ from pathlib import Path
 
 
 # Base templates location (generic templates)
-TEMPLATES_DIR = Path(__file__).parent / ".claude" / "templates"
+# Go up from src/autocoder/agent/ to root, then to .claude/templates
+TEMPLATES_DIR = Path(__file__).parent.parent.parent.parent / ".claude" / "templates"
 
 
 def get_project_prompts_dir(project_dir: Path) -> Path:

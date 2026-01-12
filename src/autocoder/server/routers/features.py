@@ -3,94 +3,82 @@ Features Router
 ===============
 
 API endpoints for feature/test case management.
+
+This UI layer uses the unified project database: `agent_system.db`.
 """
 
-import re
+from __future__ import annotations
+
+import json
 import logging
+import re
 from pathlib import Path
-from contextlib import contextmanager
 
 from fastapi import APIRouter, HTTPException
 
-from ..schemas import (
-    FeatureCreate,
-    FeatureResponse,
-    FeatureListResponse,
-)
+from autocoder.core.database import get_database
+from ..schemas import FeatureCreate, FeatureListResponse, FeatureResponse
 
-# Lazy imports to avoid circular dependencies
-_create_database = None
-_Feature = None
 
 logger = logging.getLogger(__name__)
+router = APIRouter(prefix="/api/projects/{project_name}/features", tags=["features"])
 
 
 def _get_project_path(project_name: str) -> Path:
     """Get project path from registry."""
-    import sys
-    root = Path(__file__).parent.parent.parent
-    if str(root) not in sys.path:
-        sys.path.insert(0, str(root))
+    from autocoder.agent.registry import get_project_path
 
-    from registry import get_project_path
-    return get_project_path(project_name)
-
-
-def _get_db_classes():
-    """Lazy import of database classes."""
-    global _create_database, _Feature
-    if _create_database is None:
-        import sys
-        from pathlib import Path
-        root = Path(__file__).parent.parent.parent
-        if str(root) not in sys.path:
-            sys.path.insert(0, str(root))
-        from api.database import create_database, Feature
-        _create_database = create_database
-        _Feature = Feature
-    return _create_database, _Feature
-
-
-router = APIRouter(prefix="/api/projects/{project_name}/features", tags=["features"])
+    p = get_project_path(project_name)
+    if not p:
+        raise HTTPException(status_code=404, detail=f"Project '{project_name}' not found in registry")
+    return Path(p)
 
 
 def validate_project_name(name: str) -> str:
     """Validate and sanitize project name to prevent path traversal."""
-    if not re.match(r'^[a-zA-Z0-9_-]{1,50}$', name):
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid project name"
-        )
+    if not re.match(r"^[a-zA-Z0-9_-]{1,50}$", name):
+        raise HTTPException(status_code=400, detail="Invalid project name")
     return name
 
 
-@contextmanager
-def get_db_session(project_dir: Path):
-    """
-    Context manager for database sessions.
-    Ensures session is always closed, even on exceptions.
-    """
-    create_database, _ = _get_db_classes()
-    _, SessionLocal = create_database(project_dir)
-    session = SessionLocal()
-    try:
-        yield session
-    finally:
-        session.close()
+def _parse_steps(raw: object) -> list[str]:
+    if raw is None:
+        return []
+    if isinstance(raw, list):
+        return [str(s) for s in raw]
+    if isinstance(raw, str):
+        if not raw.strip():
+            return []
+        try:
+            decoded = json.loads(raw)
+        except Exception:
+            return []
+        if isinstance(decoded, list):
+            return [str(s) for s in decoded]
+    return []
 
 
-def feature_to_response(f) -> FeatureResponse:
-    """Convert a Feature model to a FeatureResponse."""
+def _feature_to_response(row: dict) -> FeatureResponse:
+    status = (row.get("status") or "").upper()
     return FeatureResponse(
-        id=f.id,
-        priority=f.priority,
-        category=f.category,
-        name=f.name,
-        description=f.description,
-        steps=f.steps if isinstance(f.steps, list) else [],
-        passes=f.passes,
-        in_progress=f.in_progress,
+        id=int(row["id"]),
+        priority=int(row.get("priority") or 0),
+        category=str(row.get("category") or ""),
+        name=str(row.get("name") or ""),
+        description=str(row.get("description") or ""),
+        steps=_parse_steps(row.get("steps")),
+        passes=bool(row.get("passes")) or status == "DONE",
+        in_progress=status == "IN_PROGRESS",
     )
+
+
+def _get_next_priority(project_dir: Path) -> int:
+    db = get_database(str(project_dir))
+    with db.get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT COALESCE(MAX(priority), 0) FROM features")
+        max_priority = int(cursor.fetchone()[0] or 0)
+    return max_priority + 1
 
 
 @router.get("", response_model=FeatureListResponse)
@@ -99,50 +87,31 @@ async def list_features(project_name: str):
     List all features for a project organized by status.
 
     Returns features in three lists:
-    - pending: passes=False, not currently being worked on
-    - in_progress: features currently being worked on (tracked via agent output)
-    - done: passes=True
+    - pending: status=PENDING
+    - in_progress: status=IN_PROGRESS
+    - done: status=DONE (passes=true)
     """
     project_name = validate_project_name(project_name)
-    project_dir = _get_project_path(project_name)
-
-    if not project_dir:
-        raise HTTPException(status_code=404, detail=f"Project '{project_name}' not found in registry")
+    project_dir = _get_project_path(project_name).resolve()
 
     if not project_dir.exists():
-        raise HTTPException(status_code=404, detail=f"Project directory not found")
+        raise HTTPException(status_code=404, detail="Project directory not found")
 
-    db_file = project_dir / "features.db"
-    if not db_file.exists():
-        return FeatureListResponse(pending=[], in_progress=[], done=[])
-
-    _, Feature = _get_db_classes()
+    db = get_database(str(project_dir))
 
     try:
-        with get_db_session(project_dir) as session:
-            all_features = session.query(Feature).order_by(Feature.priority).all()
+        pending_rows = db.get_features_by_status("PENDING")
+        in_progress_rows = db.get_features_by_status("IN_PROGRESS")
+        done_rows = db.get_features_by_status("DONE")
 
-            pending = []
-            in_progress = []
-            done = []
-
-            for f in all_features:
-                feature_response = feature_to_response(f)
-                if f.passes:
-                    done.append(feature_response)
-                elif f.in_progress:
-                    in_progress.append(feature_response)
-                else:
-                    pending.append(feature_response)
-
-            return FeatureListResponse(
-                pending=pending,
-                in_progress=in_progress,
-                done=done,
-            )
+        return FeatureListResponse(
+            pending=[_feature_to_response(r) for r in pending_rows],
+            in_progress=[_feature_to_response(r) for r in in_progress_rows],
+            done=[_feature_to_response(r) for r in done_rows],
+        )
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         logger.exception("Database error in list_features")
         raise HTTPException(status_code=500, detail="Database error occurred")
 
@@ -151,43 +120,29 @@ async def list_features(project_name: str):
 async def create_feature(project_name: str, feature: FeatureCreate):
     """Create a new feature/test case manually."""
     project_name = validate_project_name(project_name)
-    project_dir = _get_project_path(project_name)
-
-    if not project_dir:
-        raise HTTPException(status_code=404, detail=f"Project '{project_name}' not found in registry")
+    project_dir = _get_project_path(project_name).resolve()
 
     if not project_dir.exists():
-        raise HTTPException(status_code=404, detail=f"Project directory not found")
+        raise HTTPException(status_code=404, detail="Project directory not found")
 
-    _, Feature = _get_db_classes()
+    db = get_database(str(project_dir))
 
     try:
-        with get_db_session(project_dir) as session:
-            # Get next priority if not specified
-            if feature.priority is None:
-                max_priority = session.query(Feature).order_by(Feature.priority.desc()).first()
-                priority = (max_priority.priority + 1) if max_priority else 1
-            else:
-                priority = feature.priority
-
-            # Create new feature
-            db_feature = Feature(
-                priority=priority,
-                category=feature.category,
-                name=feature.name,
-                description=feature.description,
-                steps=feature.steps,
-                passes=False,
-            )
-
-            session.add(db_feature)
-            session.commit()
-            session.refresh(db_feature)
-
-            return feature_to_response(db_feature)
+        priority = feature.priority if feature.priority is not None else _get_next_priority(project_dir)
+        feature_id = db.create_feature(
+            name=feature.name,
+            description=feature.description,
+            category=feature.category,
+            steps=json.dumps(feature.steps),
+            priority=int(priority),
+        )
+        row = db.get_feature(int(feature_id))
+        if not row:
+            raise HTTPException(status_code=500, detail="Failed to load created feature")
+        return _feature_to_response(row)
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to create feature")
         raise HTTPException(status_code=500, detail="Failed to create feature")
 
@@ -196,31 +151,21 @@ async def create_feature(project_name: str, feature: FeatureCreate):
 async def get_feature(project_name: str, feature_id: int):
     """Get details of a specific feature."""
     project_name = validate_project_name(project_name)
-    project_dir = _get_project_path(project_name)
-
-    if not project_dir:
-        raise HTTPException(status_code=404, detail=f"Project '{project_name}' not found in registry")
+    project_dir = _get_project_path(project_name).resolve()
 
     if not project_dir.exists():
-        raise HTTPException(status_code=404, detail=f"Project directory not found")
+        raise HTTPException(status_code=404, detail="Project directory not found")
 
-    db_file = project_dir / "features.db"
-    if not db_file.exists():
-        raise HTTPException(status_code=404, detail="No features database found")
-
-    _, Feature = _get_db_classes()
+    db = get_database(str(project_dir))
 
     try:
-        with get_db_session(project_dir) as session:
-            feature = session.query(Feature).filter(Feature.id == feature_id).first()
-
-            if not feature:
-                raise HTTPException(status_code=404, detail=f"Feature {feature_id} not found")
-
-            return feature_to_response(feature)
+        row = db.get_feature(int(feature_id))
+        if not row:
+            raise HTTPException(status_code=404, detail=f"Feature {feature_id} not found")
+        return _feature_to_response(row)
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         logger.exception("Database error in get_feature")
         raise HTTPException(status_code=500, detail="Database error occurred")
 
@@ -229,30 +174,26 @@ async def get_feature(project_name: str, feature_id: int):
 async def delete_feature(project_name: str, feature_id: int):
     """Delete a feature."""
     project_name = validate_project_name(project_name)
-    project_dir = _get_project_path(project_name)
-
-    if not project_dir:
-        raise HTTPException(status_code=404, detail=f"Project '{project_name}' not found in registry")
+    project_dir = _get_project_path(project_name).resolve()
 
     if not project_dir.exists():
-        raise HTTPException(status_code=404, detail=f"Project directory not found")
+        raise HTTPException(status_code=404, detail="Project directory not found")
 
-    _, Feature = _get_db_classes()
+    db = get_database(str(project_dir))
 
     try:
-        with get_db_session(project_dir) as session:
-            feature = session.query(Feature).filter(Feature.id == feature_id).first()
-
-            if not feature:
+        with db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM branches WHERE feature_id = ?", (int(feature_id),))
+            cursor.execute("UPDATE agent_heartbeats SET feature_id = NULL WHERE feature_id = ?", (int(feature_id),))
+            cursor.execute("DELETE FROM features WHERE id = ?", (int(feature_id),))
+            conn.commit()
+            if cursor.rowcount <= 0:
                 raise HTTPException(status_code=404, detail=f"Feature {feature_id} not found")
-
-            session.delete(feature)
-            session.commit()
-
-            return {"success": True, "message": f"Feature {feature_id} deleted"}
+        return {"success": True, "message": f"Feature {feature_id} deleted"}
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to delete feature")
         raise HTTPException(status_code=500, detail="Failed to delete feature")
 
@@ -262,36 +203,36 @@ async def skip_feature(project_name: str, feature_id: int):
     """
     Mark a feature as skipped by moving it to the end of the priority queue.
 
-    This doesn't delete the feature but gives it a very high priority number
-    so it will be processed last.
+    This doesn't delete the feature; it increases priority so it will be processed last.
     """
     project_name = validate_project_name(project_name)
-    project_dir = _get_project_path(project_name)
-
-    if not project_dir:
-        raise HTTPException(status_code=404, detail=f"Project '{project_name}' not found in registry")
+    project_dir = _get_project_path(project_name).resolve()
 
     if not project_dir.exists():
-        raise HTTPException(status_code=404, detail=f"Project directory not found")
+        raise HTTPException(status_code=404, detail="Project directory not found")
 
-    _, Feature = _get_db_classes()
+    db = get_database(str(project_dir))
 
     try:
-        with get_db_session(project_dir) as session:
-            feature = session.query(Feature).filter(Feature.id == feature_id).first()
-
-            if not feature:
+        with db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT 1 FROM features WHERE id = ?", (int(feature_id),))
+            if not cursor.fetchone():
                 raise HTTPException(status_code=404, detail=f"Feature {feature_id} not found")
 
-            # Set priority to max + 1000 to push to end
-            max_priority = session.query(Feature).order_by(Feature.priority.desc()).first()
-            feature.priority = (max_priority.priority if max_priority else 0) + 1000
+            cursor.execute("SELECT COALESCE(MAX(priority), 0) FROM features")
+            max_priority = int(cursor.fetchone()[0] or 0)
+            new_priority = max_priority + 1000
 
-            session.commit()
+            cursor.execute(
+                "UPDATE features SET priority = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                (new_priority, int(feature_id)),
+            )
+            conn.commit()
 
-            return {"success": True, "message": f"Feature {feature_id} moved to end of queue"}
+        return {"success": True, "message": f"Feature {feature_id} moved to end of queue"}
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to skip feature")
         raise HTTPException(status_code=500, detail="Failed to skip feature")

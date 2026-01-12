@@ -25,12 +25,8 @@ logger = logging.getLogger(__name__)
 
 def _get_project_path(project_name: str) -> Path:
     """Get project path from registry."""
-    import sys
-    root = Path(__file__).parent.parent
-    if str(root) not in sys.path:
-        sys.path.insert(0, str(root))
+    from autocoder.agent.registry import get_project_path
 
-    from registry import get_project_path
     return get_project_path(project_name)
 
 
@@ -38,11 +34,8 @@ def _get_count_passing_tests():
     """Lazy import of count_passing_tests."""
     global _count_passing_tests
     if _count_passing_tests is None:
-        import sys
-        root = Path(__file__).parent.parent
-        if str(root) not in sys.path:
-            sys.path.insert(0, str(root))
-        from progress import count_passing_tests
+        from autocoder.agent.progress import count_passing_tests
+
         _count_passing_tests = count_passing_tests
     return _count_passing_tests
 

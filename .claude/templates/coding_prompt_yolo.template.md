@@ -14,6 +14,42 @@ Use for rapid prototyping only - not for production-quality development.
 You are continuing work on a long-running autonomous development task.
 This is a FRESH context window - you have no memory of previous sessions.
 
+### CRITICAL: DYNAMIC PORT CONFIGURATION
+
+**Ports are dynamically assigned per agent instance.** NEVER hardcode port numbers in your code or commands.
+
+**Environment Variables (set automatically by the agent system):**
+- `$AUTOCODER_API_PORT` - Backend API server port (e.g., 5001, 5002, etc.)
+- `$AUTOCODER_WEB_PORT` - Frontend web server port (e.g., 5173, 5174, etc.)
+
+**Rules:**
+1. **ALWAYS** use environment variables for port references
+2. **NEVER** hardcode ports like `3000`, `3001`, `5001`, `5173`, etc.
+3. When starting servers, use: `--port $AUTOCODER_WEB_PORT` or `$PORT` or equivalent
+4. When configuring API endpoints, use: `http://localhost:$AUTOCODER_API_PORT`
+5. When accessing the frontend, use: `http://localhost:$AUTOCODER_WEB_PORT`
+6. **Do NOT rely on `.env` variable interpolation** (most `.env` loaders won’t expand `$AUTOCODER_API_PORT`); prefer setting `PORT=$AUTOCODER_API_PORT` at process start.
+
+**Example correct usage:**
+```bash
+# Start backend with dynamic port
+npm run start -- --port $AUTOCODER_API_PORT
+
+# Start frontend with dynamic port
+npm run dev -- --port $AUTOCODER_WEB_PORT
+
+# Configure API URL
+export VITE_API_URL=http://localhost:$AUTOCODER_API_PORT
+```
+
+**Example WRONG usage (NEVER DO THIS):**
+```bash
+npm run dev -- --port 5173  # WRONG - hardcoded port
+export VITE_API_URL=http://localhost:5001  # WRONG - hardcoded port
+```
+
+
+
 ### STEP 1: GET YOUR BEARINGS (MANDATORY)
 
 Start by orienting yourself:
@@ -41,8 +77,8 @@ Then use MCP tools to check feature status:
 # 6. Get progress statistics (passing/total counts)
 Use the feature_get_stats tool
 
-# 7. Get the next feature to work on
-Use the feature_get_next tool
+# 7. Claim the next feature to work on (atomic)
+Use the feature_claim_next tool
 ```
 
 Understanding the `app_spec.txt` is critical - it contains the full requirements
@@ -61,17 +97,17 @@ Otherwise, start servers manually and document the process.
 
 ### STEP 3: CHOOSE ONE FEATURE TO IMPLEMENT
 
-Get the next feature to implement:
+Claim the next feature to implement (atomic):
 
 ```
-# Get the highest-priority pending feature
-Use the feature_get_next tool
+# Atomically claim the highest-priority pending feature
+Use the feature_claim_next tool (pass a stable agent_id, e.g. "agent-local")
 ```
 
-Once you've retrieved the feature, **immediately mark it as in-progress**:
+Once you've claimed the feature, **you usually do NOT need to mark it in-progress** (claiming does this).
 
 ```
-# Mark feature as in-progress to prevent other sessions from working on it
+# Only call this if you are working with a legacy feature record that wasn't claimed
 Use the feature_mark_in_progress tool with feature_id=42
 ```
 
@@ -148,6 +184,8 @@ After lint/type-check passes, mark the feature as passing:
 Use the feature_mark_passing tool with feature_id=42
 ```
 
+**Parallel note:** In parallel worker mode the orchestrator may require Gatekeeper verification (`AUTOCODER_REQUIRE_GATEKEEPER=1`). In that case, `feature_mark_passing` submits the feature for deterministic verification/merge; `passes=true` is set only after Gatekeeper approves.
+
 **NEVER:**
 
 - Delete features
@@ -202,10 +240,11 @@ The feature tools exist to reduce token usage. **DO NOT make exploratory queries
 # 1. Get progress stats (passing/in_progress/total counts)
 feature_get_stats
 
-# 2. Get the NEXT feature to work on (one feature only)
-feature_get_next
+# 2. Atomically CLAIM the next feature to work on (one feature only)
+feature_claim_next with agent_id=agent-local
 
-# 3. Mark a feature as in-progress (call immediately after feature_get_next)
+# (Optional) Mark a feature as in-progress
+# Note: claim_next already sets IN_PROGRESS, so you usually do NOT need this.
 feature_mark_in_progress with feature_id={id}
 
 # 4. Mark a feature as passing (after lint/type-check succeeds)
@@ -224,7 +263,7 @@ feature_clear_in_progress with feature_id={id}
 - Do NOT query features by category
 - Do NOT list all pending features
 
-**You do NOT need to see all features.** The feature_get_next tool tells you exactly what to work on. Trust it.
+**You do NOT need to see all features.** Use feature_claim_next to safely claim exactly one pending feature.
 
 ---
 

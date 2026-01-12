@@ -51,6 +51,8 @@ from autocoder.agent import (
 )
 from autocoder.core import Orchestrator
 from autocoder.server import start_server
+from autocoder.core.port_config import get_ui_port
+from autocoder.core.logs import prune_worker_logs
 
 
 # Default configuration
@@ -648,6 +650,29 @@ Model Presets:
         help=f"Model preset (default: {DEFAULT_PRESET})",
     )
 
+    # Logs maintenance
+    logs_parser = subparsers.add_parser(
+        "logs",
+        help="Manage AutoCoder runtime logs",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  autocoder logs --project-dir my-app --prune
+  autocoder logs --project-dir my-app --prune --keep-days 3 --keep-files 50 --max-mb 50
+        """,
+    )
+    logs_parser.add_argument(
+        "--project-dir",
+        type=str,
+        required=True,
+        help="Project directory containing .autocoder/logs/",
+    )
+    logs_parser.add_argument("--prune", action="store_true", help="Prune .autocoder/logs/*.log")
+    logs_parser.add_argument("--dry-run", action="store_true", help="Show what would be deleted")
+    logs_parser.add_argument("--keep-days", type=int, default=7)
+    logs_parser.add_argument("--keep-files", type=int, default=200)
+    logs_parser.add_argument("--max-mb", type=int, default=200)
+
     args = parser.parse_args()
 
     # Route to appropriate mode
@@ -655,6 +680,23 @@ Model Presets:
         run_agent(args)
     elif args.mode == 'parallel':
         run_parallel(args)
+    elif args.mode == "logs":
+        project_dir = resolve_project_dir(args.project_dir)
+        if args.prune:
+            result = prune_worker_logs(
+                project_dir,
+                keep_days=args.keep_days,
+                keep_files=args.keep_files,
+                max_total_mb=args.max_mb,
+                dry_run=args.dry_run,
+            )
+            verb = "Would delete" if args.dry_run else "Deleted"
+            print(
+                f"{verb} {result.deleted_files} log file(s) "
+                f"({result.deleted_bytes} bytes); kept {result.kept_files} file(s)."
+            )
+        else:
+            print("No action specified. Try: autocoder logs --project-dir <path> --prune")
     else:
         # Default: Run setup check and ask what to launch
         setup = check_setup()
@@ -683,7 +725,7 @@ Model Presets:
                 print("\n❌ Cannot launch UI - build failed or Node.js not installed.")
                 return
             print("\n🚀 Starting Web UI...")
-            print("   Open http://127.0.0.1:8888 in your browser")
+            print(f"   Open http://127.0.0.1:{get_ui_port()} in your browser")
             print("   Press Ctrl+C to stop\n")
             try:
                 start_server()

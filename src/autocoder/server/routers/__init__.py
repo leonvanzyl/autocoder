@@ -12,7 +12,9 @@ from .spec_creation import router as spec_creation_router
 from .filesystem import router as filesystem_router
 from .assistant_chat import router as assistant_chat_router
 from .model_settings import router as model_settings_router
-from .parallel_agents import router as parallel_agents_router
+from .logs import router as logs_router
+from .parallel import router as parallel_router
+from .settings import router as settings_router
 
 __all__ = [
     "projects_router",
@@ -22,5 +24,7 @@ __all__ = [
     "filesystem_router",
     "assistant_chat_router",
     "model_settings_router",
-    "parallel_agents_router",
+    "logs_router",
+    "parallel_router",
+    "settings_router",
 ]

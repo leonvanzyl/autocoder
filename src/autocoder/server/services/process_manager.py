@@ -12,11 +12,14 @@ import re
 import subprocess
 import sys
 import threading
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Literal, Callable, Awaitable, Set
 
 import psutil
+
+from ..settings_store import load_advanced_settings
 
 
 logger = logging.getLogger(__name__)
@@ -155,8 +158,16 @@ class AgentProcessManager:
                 try:
                     proc = psutil.Process(pid)
                     cmdline = " ".join(proc.cmdline())
-                    if "autonomous_agent_demo.py" in cmdline:
-                        return False  # Another agent is running
+                    cmdline_l = cmdline.lower()
+                    project_l = str(self.project_dir.resolve()).lower()
+
+                    # Legacy entry points (older versions)
+                    if "autonomous_agent_demo.py" in cmdline_l or "orchestrator_demo.py" in cmdline_l:
+                        return False
+
+                    # Current entry point: `python -m autocoder.cli ...`
+                    if "autocoder.cli" in cmdline_l and project_l in cmdline_l:
+                        return False
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
                     pass
             # Stale lock file
@@ -251,10 +262,11 @@ class AgentProcessManager:
 
         # Choose entry point based on mode
         if parallel_mode:
-            entry_point = "orchestrator_demo.py"
             cmd = [
                 sys.executable,
-                str(self.root_dir / entry_point),
+                "-m",
+                "autocoder.cli",
+                "parallel",
                 "--project-dir",
                 str(self.project_dir.resolve()),
                 "--parallel",
@@ -264,10 +276,11 @@ class AgentProcessManager:
             ]
             mode_desc = f"Parallel mode ({parallel_count} agents, {model_preset} preset)"
         else:
-            entry_point = "autonomous_agent_demo.py"
             cmd = [
                 sys.executable,
-                str(self.root_dir / entry_point),
+                "-m",
+                "autocoder.cli",
+                "agent",
                 "--project-dir",
                 str(self.project_dir.resolve()),
             ]
@@ -280,6 +293,12 @@ class AgentProcessManager:
                 mode_desc = "Standard mode"
 
         try:
+            # Apply server-side advanced settings to the spawned process env (unless user already set env vars).
+            env = os.environ.copy()
+            advanced_env = load_advanced_settings().to_env()
+            for k, v in advanced_env.items():
+                env.setdefault(k, v)
+
             # Start subprocess with piped stdout/stderr
             # Use project_dir as cwd so Claude SDK sandbox allows access to project files
             self.process = subprocess.Popen(
@@ -287,6 +306,7 @@ class AgentProcessManager:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 cwd=str(self.project_dir),
+                env=env,
             )
 
             self._create_lock()

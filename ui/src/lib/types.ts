@@ -105,7 +105,7 @@ export interface AgentStartRequest {
   yolo_mode?: boolean
   parallel_mode?: boolean
   parallel_count?: number
-  model_preset?: 'quality' | 'balanced' | 'economy' | 'cheap' | 'experimental'
+  model_preset?: 'quality' | 'balanced' | 'economy' | 'cheap' | 'experimental' | 'custom'
 }
 
 // Setup types
@@ -114,6 +114,62 @@ export interface SetupStatus {
   credentials: boolean
   node: boolean
   npm: boolean
+}
+
+// Worker logs (parallel agents)
+export interface WorkerLogFile {
+  name: string
+  size_bytes: number
+  modified_at: string
+}
+
+export interface WorkerLogsListResponse {
+  directory: string
+  files: WorkerLogFile[]
+}
+
+export interface WorkerLogTailResponse {
+  name: string
+  size_bytes: number
+  modified_at: string
+  lines: string[]
+}
+
+export interface PruneWorkerLogsRequest {
+  keep_days: number
+  keep_files: number
+  max_mb: number
+  dry_run: boolean
+}
+
+export interface PruneWorkerLogsResponse {
+  deleted_files: number
+  deleted_bytes: number
+  kept_files: number
+  kept_bytes: number
+}
+
+// Advanced settings (UI server)
+export interface AdvancedSettings {
+  logs_keep_days: number
+  logs_keep_files: number
+  logs_max_total_mb: number
+
+  sdk_max_attempts: number
+  sdk_initial_delay_s: number
+  sdk_rate_limit_initial_delay_s: number
+  sdk_max_delay_s: number
+  sdk_exponential_base: number
+  sdk_jitter: boolean
+
+  require_gatekeeper: boolean
+  allow_no_tests: boolean
+
+  api_port_range_start: number
+  api_port_range_end: number
+  web_port_range_start: number
+  web_port_range_end: number
+  skip_port_check: boolean
 }
 
 // WebSocket message types

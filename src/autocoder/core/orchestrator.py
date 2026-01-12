@@ -25,6 +25,9 @@ import logging
 import subprocess
 import psutil
 import threading
+import socket
+import contextlib
+import errno
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple, Set
 from datetime import datetime, timedelta
@@ -35,6 +38,7 @@ from .model_settings import ModelSettings, ModelPreset, get_full_model_id
 from .worktree_manager import WorktreeManager
 from .database import Database, get_database
 from .gatekeeper import Gatekeeper
+from .logs import prune_worker_logs_from_env
 
 # Agent imports (for initializer)
 from autocoder.agent import run_autonomous_agent
@@ -60,31 +64,143 @@ class PortAllocator:
     conflicts when running multiple agents in parallel.
     """
 
-    # Port ranges
-    API_PORT_RANGE = (5000, 5100)  # 100 ports for backend APIs
-    WEB_PORT_RANGE = (5173, 5273)  # 100 ports for frontend dev servers
+    # Default port ranges (end is exclusive, like Python's range()).
+    DEFAULT_API_PORT_RANGE = (5000, 5100)  # 5000-5099
+    DEFAULT_WEB_PORT_RANGE = (5173, 5273)  # 5173-5272
 
-    def __init__(self):
-        """Initialize the port allocator with empty pools."""
+    def __init__(
+        self,
+        *,
+        api_port_range: Optional[Tuple[int, int]] = None,
+        web_port_range: Optional[Tuple[int, int]] = None,
+        bind_host_ipv4: str = "127.0.0.1",
+        bind_host_ipv6: str = "::1",
+        verify_availability: Optional[bool] = None,
+    ):
+        """Initialize the port allocator with pools and optional bind checks."""
         self._lock = threading.Lock()
+
+        self.api_port_range = api_port_range or self._range_from_env(
+            "AUTOCODER_API_PORT_RANGE_START",
+            "AUTOCODER_API_PORT_RANGE_END",
+            self.DEFAULT_API_PORT_RANGE,
+        )
+        self.web_port_range = web_port_range or self._range_from_env(
+            "AUTOCODER_WEB_PORT_RANGE_START",
+            "AUTOCODER_WEB_PORT_RANGE_END",
+            self.DEFAULT_WEB_PORT_RANGE,
+        )
+
+        if verify_availability is None:
+            verify_availability = os.environ.get("AUTOCODER_SKIP_PORT_CHECK", "").lower() not in (
+                "1",
+                "true",
+                "yes",
+            )
+        self._verify_availability = verify_availability
+        self._bind_host_ipv4 = bind_host_ipv4
+        self._bind_host_ipv6 = bind_host_ipv6
 
         # Track available and in-use ports
         self._available_api_ports: Set[int] = set(
-            range(self.API_PORT_RANGE[0], self.API_PORT_RANGE[1])
+            range(self.api_port_range[0], self.api_port_range[1])
         )
         self._available_web_ports: Set[int] = set(
-            range(self.WEB_PORT_RANGE[0], self.WEB_PORT_RANGE[1])
+            range(self.web_port_range[0], self.web_port_range[1])
         )
 
         self._in_use_api_ports: Set[int] = set()
         self._in_use_web_ports: Set[int] = set()
+        self._blocked_api_ports: Set[int] = set()
+        self._blocked_web_ports: Set[int] = set()
 
         # Track which agent owns which ports
         self._agent_ports: Dict[str, Tuple[int, int]] = {}
 
         logger.info(f"PortAllocator initialized:")
-        logger.info(f"  API ports: {self.API_PORT_RANGE[0]}-{self.API_PORT_RANGE[1]} ({len(self._available_api_ports)} available)")
-        logger.info(f"  Web ports: {self.WEB_PORT_RANGE[0]}-{self.WEB_PORT_RANGE[1]} ({len(self._available_web_ports)} available)")
+        logger.info(
+            f"  API ports: {self.api_port_range[0]}-{self.api_port_range[1]} "
+            f"({len(self._available_api_ports)} available)"
+        )
+        logger.info(
+            f"  Web ports: {self.web_port_range[0]}-{self.web_port_range[1]} "
+            f"({len(self._available_web_ports)} available)"
+        )
+        logger.info(f"  Port availability verification: {self._verify_availability}")
+
+    @staticmethod
+    def _range_from_env(start_env: str, end_env: str, default: Tuple[int, int]) -> Tuple[int, int]:
+        start_raw = os.environ.get(start_env)
+        end_raw = os.environ.get(end_env)
+        if not start_raw and not end_raw:
+            return default
+        try:
+            start = int(start_raw) if start_raw else default[0]
+            end = int(end_raw) if end_raw else default[1]
+        except ValueError:
+            logger.warning(f"Invalid {start_env}/{end_env} values; using default {default}")
+            return default
+        if start < 1024 or end <= start or end > 65536:
+            logger.warning(f"Invalid port range {start}-{end}; using default {default}")
+            return default
+        return (start, end)
+
+    def _port_is_available(self, port: int) -> bool:
+        """Best-effort check whether a port is bindable on localhost."""
+        if not self._verify_availability:
+            return True
+
+        # Check IPv4
+        try:
+            s4 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s4.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            s4.bind((self._bind_host_ipv4, port))
+        except OSError:
+            return False
+        finally:
+            with contextlib.suppress(Exception):
+                s4.close()
+
+        # Check IPv6 as well (common dev servers bind to ::)
+        try:
+            s6 = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
+            with contextlib.suppress(Exception):
+                s6.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 1)
+            s6.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            s6.bind((self._bind_host_ipv6, port))
+        except OSError as e:
+            # If IPv6 isn't supported/available on this machine, don't fail allocation.
+            if e.errno in (errno.EAFNOSUPPORT, errno.EADDRNOTAVAIL):
+                return True
+            return False
+        finally:
+            with contextlib.suppress(Exception):
+                s6.close()
+
+        return True
+
+    def reserve_ports(self, agent_id: str, api_port: int, web_port: int) -> bool:
+        """Reserve an explicit port pair (used when bootstrapping from DB)."""
+        if not (self.api_port_range[0] <= api_port < self.api_port_range[1]):
+            logger.warning(f"Cannot reserve API port {api_port}: outside allocator range")
+            return False
+        if not (self.web_port_range[0] <= web_port < self.web_port_range[1]):
+            logger.warning(f"Cannot reserve web port {web_port}: outside allocator range")
+            return False
+
+        with self._lock:
+            if agent_id in self._agent_ports:
+                return True
+
+            if api_port in self._available_api_ports:
+                self._available_api_ports.remove(api_port)
+                self._in_use_api_ports.add(api_port)
+            if web_port in self._available_web_ports:
+                self._available_web_ports.remove(web_port)
+                self._in_use_web_ports.add(web_port)
+
+            self._agent_ports[agent_id] = (api_port, web_port)
+            return True
 
     def allocate_ports(self, agent_id: str) -> Optional[Tuple[int, int]]:
         """
@@ -107,9 +223,24 @@ class PortAllocator:
                 logger.error(f"No ports available! API: {len(self._available_api_ports)}, Web: {len(self._available_web_ports)}")
                 return None
 
-            # Allocate next available port from each pool
-            api_port = min(self._available_api_ports)
-            web_port = min(self._available_web_ports)
+            def pick_port(available: Set[int], blocked: Set[int]) -> Optional[int]:
+                for candidate in sorted(available):
+                    if self._port_is_available(candidate):
+                        return candidate
+                    # Permanently avoid ports already occupied by other processes.
+                    available.discard(candidate)
+                    blocked.add(candidate)
+                return None
+
+            api_port = pick_port(self._available_api_ports, self._blocked_api_ports)
+            web_port = pick_port(self._available_web_ports, self._blocked_web_ports)
+
+            if api_port is None or web_port is None:
+                logger.error(
+                    "No bindable ports available "
+                    f"(API remaining={len(self._available_api_ports)}, Web remaining={len(self._available_web_ports)})"
+                )
+                return None
 
             # Move to in-use sets
             self._available_api_ports.remove(api_port)
@@ -145,8 +276,10 @@ class PortAllocator:
             # Remove from in-use and add back to available
             self._in_use_api_ports.discard(api_port)
             self._in_use_web_ports.discard(web_port)
-            self._available_api_ports.add(api_port)
-            self._available_web_ports.add(web_port)
+            if self.api_port_range[0] <= api_port < self.api_port_range[1]:
+                self._available_api_ports.add(api_port)
+            if self.web_port_range[0] <= web_port < self.web_port_range[1]:
+                self._available_web_ports.add(web_port)
 
             # Remove from tracking
             del self._agent_ports[agent_id]
@@ -176,14 +309,16 @@ class PortAllocator:
                 "api_ports": {
                     "available": len(self._available_api_ports),
                     "in_use": len(self._in_use_api_ports),
-                    "total": self.API_PORT_RANGE[1] - self.API_PORT_RANGE[0],
-                    "range": f"{self.API_PORT_RANGE[0]}-{self.API_PORT_RANGE[1]}"
+                    "blocked": len(self._blocked_api_ports),
+                    "total": self.api_port_range[1] - self.api_port_range[0],
+                    "range": f"{self.api_port_range[0]}-{self.api_port_range[1]}"
                 },
                 "web_ports": {
                     "available": len(self._available_web_ports),
                     "in_use": len(self._in_use_web_ports),
-                    "total": self.WEB_PORT_RANGE[1] - self.WEB_PORT_RANGE[0],
-                    "range": f"{self.WEB_PORT_RANGE[0]}-{self.WEB_PORT_RANGE[1]}"
+                    "blocked": len(self._blocked_web_ports),
+                    "total": self.web_port_range[1] - self.web_port_range[0],
+                    "range": f"{self.web_port_range[0]}-{self.web_port_range[1]}"
                 },
                 "active_allocations": len(self._agent_ports),
                 "agents": list(self._agent_ports.keys())
@@ -218,28 +353,77 @@ class Orchestrator:
 
         # Direct imports (system logic)
         self.kb = get_knowledge_base()
-        self.model_settings = ModelSettings()
+        # Load persisted model settings (e.g., from Web UI), then optionally override with preset.
+        self.model_settings = ModelSettings.load()
         self.worktree_manager = WorktreeManager(str(self.project_dir))
         self.database = get_database(str(self.project_dir))
         self.gatekeeper = Gatekeeper(str(self.project_dir))
 
         # Initialize port allocator
         self.port_allocator = PortAllocator()
+        self._bootstrap_ports_from_database()
         port_status = self.port_allocator.get_status()
+        self._last_logs_prune_at: Optional[datetime] = None
 
-        # Load model preset
-        self.model_preset = ModelPreset(model_preset)
-        self.model_settings.preset = model_preset
+        # Apply model preset override (workers may pass 'custom' to use persisted available_models).
+        self.model_preset = model_preset
+        if model_preset and model_preset != "custom":
+            try:
+                self.model_settings.set_preset(model_preset)
+            except ValueError:
+                logger.warning("Unknown model_preset=%s; falling back to persisted settings", model_preset)
         self.available_models = self.model_settings.available_models
 
         logger.info(f"Orchestrator initialized:")
         logger.info(f"  Project: {self.project_dir}")
         logger.info(f"  Max agents: {max_agents}")
-        logger.info(f"  Model preset: {model_preset}")
+        logger.info(f"  Model preset: {self.model_settings.preset}")
         logger.info(f"  Available models: {self.available_models}")
         logger.info(f"  Port pools:")
         logger.info(f"    API: {port_status['api_ports']['range']} ({port_status['api_ports']['available']} available)")
         logger.info(f"    Web: {port_status['web_ports']['range']} ({port_status['web_ports']['available']} available)")
+
+    def _bootstrap_ports_from_database(self) -> None:
+        """
+        Reserve ports for already-running agents.
+
+        This prevents port reuse after orchestrator restarts while workers are still running.
+        """
+        try:
+            active_agents = self.database.get_active_agents()
+        except Exception as e:
+            logger.warning(f"Failed to bootstrap port allocations from database: {e}")
+            return
+
+        reserved = 0
+        for agent in active_agents:
+            agent_id = agent.get("agent_id")
+            api_port = agent.get("api_port")
+            web_port = agent.get("web_port")
+            pid = agent.get("pid")
+
+            if not agent_id or api_port is None or web_port is None:
+                continue
+
+            if pid and psutil.pid_exists(pid):
+                if self.port_allocator.reserve_ports(agent_id, int(api_port), int(web_port)):
+                    reserved += 1
+            else:
+                # Agent record exists but process is gone: mark crashed and release feature.
+                logger.warning(f"Active agent {agent_id} has no live PID; marking crashed")
+                with contextlib.suppress(Exception):
+                    self.database.mark_agent_crashed(agent_id)
+                if agent.get("feature_id"):
+                    with contextlib.suppress(Exception):
+                        self.database.mark_feature_failed(
+                            feature_id=agent["feature_id"],
+                            reason="Agent process missing on orchestrator startup",
+                        )
+                with contextlib.suppress(Exception):
+                    self.worktree_manager.delete_worktree(agent_id, force=True)
+
+        if reserved:
+            logger.info(f"Bootstrapped {reserved} port allocation(s) from database")
 
     async def _run_initializer(self) -> bool:
         """
@@ -337,6 +521,9 @@ class Orchestrator:
                 # Release ports from completed agents
                 self._recover_completed_agents()
 
+                # Periodic log maintenance
+                self._prune_worker_logs_if_needed()
+
                 # Get count of active agents
                 active_count = stats["agents"]["active"]
                 available_slots = self.max_agents - active_count
@@ -388,26 +575,13 @@ class Orchestrator:
         for i in range(count):
             agent_id = f"{agent_id_prefix}-{i}"
 
-            # Find and claim a pending feature (retry a few times in case of races)
-            claimed_feature = None
-            claimed_branch = None
-            for _ in range(5):
-                feature = self.database.get_next_pending_feature()
-                if not feature:
-                    break
-
-                feature_id = feature["id"]
-                branch_name = f"feat/feature-{feature_id}-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
-                if self.database.claim_feature(feature_id, agent_id, branch_name):
-                    claimed_feature = feature
-                    claimed_branch = branch_name
-                    break
-
+            claimed_feature = self.database.claim_next_pending_feature(agent_id, branch_prefix="feat")
             if not claimed_feature:
                 logger.info("No pending features to claim")
                 break
 
             feature_id = claimed_feature["id"]
+            claimed_branch = claimed_feature.get("branch_name") or f"feat/{feature_id}"
 
             # Select model for this feature
             model = self._select_model_for_feature(claimed_feature)
@@ -456,23 +630,39 @@ class Orchestrator:
             env = os.environ.copy()
             env["AUTOCODER_API_PORT"] = str(api_port)
             env["AUTOCODER_WEB_PORT"] = str(web_port)
+            # Compatibility for common dev servers that read generic port env vars.
+            env["API_PORT"] = str(api_port)
+            env["WEB_PORT"] = str(web_port)
+            env["PORT"] = str(api_port)
+            env["VITE_PORT"] = str(web_port)
+            # Prevent workers from self-attesting `passes=True`; require Gatekeeper verification.
+            env["AUTOCODER_REQUIRE_GATEKEEPER"] = "1"
+
+            # Per-agent logs (for debugging and post-mortems)
+            logs_dir = (self.project_dir / ".autocoder" / "logs")
+            logs_dir.mkdir(parents=True, exist_ok=True)
+            log_file_path = logs_dir / f"{agent_id}.log"
 
             logger.info(f"🚀 Launching {agent_id}:")
             logger.info(f"   Feature: #{feature_id} - {claimed_feature['name']}")
             logger.info(f"   Model: {model.upper()}")
             logger.info(f"   Worktree: {worktree_info['worktree_path']}")
             logger.info(f"   Ports: API={api_port}, WEB={web_port}")
+            logger.info(f"   Logs: {log_file_path}")
             logger.info(f"   Command: {' '.join(cmd[:3])}...")
 
             try:
+                log_handle = open(log_file_path, "w", encoding="utf-8", errors="replace")
                 # Spawn the process (fire and forget - monitored via DB)
                 process = subprocess.Popen(
                     cmd,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
+                    stdout=log_handle,
+                    stderr=log_handle,
                     env=env,  # Pass environment with port allocations
                     # Don't wait - let it run in background
                 )
+                with contextlib.suppress(Exception):
+                    log_handle.close()
 
                 pid = process.pid
                 logger.info(f"   PID: {pid}")
@@ -484,8 +674,11 @@ class Orchestrator:
                     feature_id=feature_id,
                     pid=pid,
                     api_port=api_port,
-                    web_port=web_port
+                    web_port=web_port,
+                    log_file_path=str(log_file_path),
                 )
+                with contextlib.suppress(Exception):
+                    self.database.create_branch(claimed_branch, feature_id=feature_id, agent_id=agent_id)
 
                 spawned_agents.append(agent_id)
 
@@ -498,6 +691,23 @@ class Orchestrator:
                 continue
 
         return spawned_agents
+
+    def _detect_main_branch(self) -> str:
+        env_branch = os.environ.get("AUTOCODER_MAIN_BRANCH")
+        if env_branch:
+            return env_branch
+        for candidate in ("main", "master"):
+            try:
+                subprocess.run(
+                    ["git", "rev-parse", "--verify", candidate],
+                    cwd=self.project_dir,
+                    check=True,
+                    capture_output=True,
+                )
+                return candidate
+            except subprocess.CalledProcessError:
+                continue
+        return "main"
 
     async def run_feature_lifecycle(
         self,
@@ -743,7 +953,7 @@ class Orchestrator:
 
     def _recover_completed_agents(self):
         """
-        Release ports from completed agents.
+        Verify+merge and cleanup completed agents.
 
         This is called periodically to clean up port allocations from agents
         that completed successfully (not crashed).
@@ -751,13 +961,97 @@ class Orchestrator:
         completed_agents = self.database.get_completed_agents()
 
         for agent in completed_agents:
-            logger.info(f"Releasing ports from completed agent: {agent['agent_id']}")
+            agent_id = agent["agent_id"]
+            feature_id = agent.get("feature_id")
+            worktree_path = agent.get("worktree_path")
 
-            if self.port_allocator.release_ports(agent['agent_id']):
-                logger.info(f"   Released ports for {agent['agent_id']}")
+            logger.info(f"Processing completed agent: {agent_id}")
 
-                # Mark as cleaned up to avoid repeated releases
-                self.database.unregister_agent(agent['agent_id'])
+            if feature_id:
+                feature = self.database.get_feature(feature_id)
+                if feature:
+                    assigned_agent = feature.get("assigned_agent_id")
+                    review_status = feature.get("review_status")
+                    passes = bool(feature.get("passes"))
+                    branch_name = feature.get("branch_name")
+
+                    needs_verification = (
+                        (assigned_agent == agent_id)
+                        and (not passes)
+                        and (review_status == "READY_FOR_VERIFICATION")
+                        and bool(branch_name)
+                    )
+
+                    if needs_verification:
+                        logger.info(f"🧪 Gatekeeper verifying feature #{feature_id} ({branch_name})...")
+                        # Refuse to verify "empty" branches (no commits beyond base).
+                        base = self._detect_main_branch()
+                        try:
+                            commit_count = int(
+                                subprocess.run(
+                                    ["git", "rev-list", "--count", f"{base}..{branch_name}"],
+                                    cwd=self.project_dir,
+                                    check=True,
+                                    capture_output=True,
+                                    text=True,
+                                ).stdout.strip()
+                            )
+                        except Exception:
+                            commit_count = 0
+                        if commit_count <= 0:
+                            logger.warning(
+                                f"Feature #{feature_id} branch {branch_name} has no commits beyond {base}; requeuing"
+                            )
+                            self.database.mark_feature_failed(
+                                feature_id=feature_id,
+                                reason="No commits on branch for verification",
+                            )
+                            continue
+
+                        allow_no_tests = os.environ.get("AUTOCODER_ALLOW_NO_TESTS", "").lower() in (
+                            "1",
+                            "true",
+                            "yes",
+                        )
+                        verification = self.gatekeeper.verify_and_merge(
+                            branch_name=branch_name,
+                            worktree_path=worktree_path,
+                            agent_id=agent_id,
+                            fetch_remote=False,
+                            push_remote=False,
+                            allow_no_tests=allow_no_tests,
+                            delete_feature_branch=True,
+                        )
+
+                        if verification.get("approved"):
+                            logger.info(f"✅ Gatekeeper approved feature #{feature_id}")
+                            self.database.mark_feature_passing(feature_id)
+                            merge_commit = verification.get("merge_commit")
+                            if merge_commit:
+                                with contextlib.suppress(Exception):
+                                    self.database.mark_branch_merged(branch_name, merge_commit)
+                        else:
+                            reason = verification.get("reason") or "Gatekeeper rejected feature"
+                            logger.warning(f"❌ Gatekeeper rejected feature #{feature_id}: {reason}")
+                            self.database.mark_feature_failed(feature_id=feature_id, reason=reason)
+                    elif assigned_agent == agent_id and not passes and review_status == "READY_FOR_VERIFICATION":
+                        # READY but missing branch_name is unrecoverable; requeue.
+                        logger.warning(f"Feature #{feature_id} ready for verification but missing branch_name; requeuing")
+                        self.database.mark_feature_failed(
+                            feature_id=feature_id,
+                            reason="Missing branch_name for verification",
+                        )
+
+            released = self.port_allocator.release_ports(agent_id)
+            if released:
+                logger.info(f"   Released ports for {agent_id}")
+
+            # Always cleanup the agent worktree after completion.
+            with contextlib.suppress(Exception):
+                self.worktree_manager.delete_worktree(agent_id, force=True)
+
+            # Mark as cleaned up to avoid repeated processing (even if allocator restarted)
+            self.database.unregister_agent(agent_id)
 
     def _cleanup_all_agents(self):
         """Clean up all agent worktrees and release ports."""
@@ -778,6 +1072,21 @@ class Orchestrator:
 
         # Note: In production, you might want to keep agents running
         # This is just for cleanup when stopping the orchestrator
+
+    def _prune_worker_logs_if_needed(self) -> None:
+        # Default: once per minute.
+        now = datetime.now()
+        if self._last_logs_prune_at and (now - self._last_logs_prune_at) < timedelta(seconds=60):
+            return
+        self._last_logs_prune_at = now
+        try:
+            result = prune_worker_logs_from_env(self.project_dir)
+            if result.deleted_files:
+                logger.info(
+                    f"Pruned worker logs: deleted_files={result.deleted_files}, deleted_bytes={result.deleted_bytes}"
+                )
+        except Exception as e:
+            logger.warning(f"Failed to prune worker logs: {e}")
 
     def get_status(self) -> Dict[str, Any]:
         """Get current orchestrator status."""
@@ -888,8 +1197,11 @@ async def main():
         if ports["agents"]:
             print(f"Agents with ports:")
             for agent in ports["agents"]:
-                p = self.port_allocator.get_agent_ports(agent)
-                print(f"  {agent}: API={p[0]}, WEB={p[1]}")
+                p = orchestrator.port_allocator.get_agent_ports(agent)
+                if not p:
+                    print(f"  {agent}: (no ports found)")
+                else:
+                    print(f"  {agent}: API={p[0]}, WEB={p[1]}")
         print("=" * 60)
         return 0
 

@@ -15,16 +15,21 @@ from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
 from claude_agent_sdk.types import HookMatcher
 
 from .security import bash_security_hook
+from .hooks import ToolUsageGuardrails
+from ..core.port_config import get_api_port, get_web_port
 
 
 # Feature MCP tools for feature/test management
 FEATURE_MCP_TOOLS = [
     "mcp__features__feature_get_stats",
     "mcp__features__feature_get_next",
+    "mcp__features__feature_claim_next",
+    "mcp__features__feature_get_by_id",
     "mcp__features__feature_get_for_regression",
     "mcp__features__feature_mark_in_progress",
     "mcp__features__feature_mark_passing",
     "mcp__features__feature_skip",
+    "mcp__features__feature_clear_in_progress",
     "mcp__features__feature_create_bulk",
 ]
 
@@ -74,7 +79,13 @@ BUILTIN_TOOLS = [
 ]
 
 
-def create_client(project_dir: Path, model: str, yolo_mode: bool = False):
+def create_client(
+    project_dir: Path,
+    model: str,
+    yolo_mode: bool = False,
+    *,
+    features_project_dir: Path | None = None,
+):
     """
     Create a Claude Agent SDK client with multi-layered security.
 
@@ -181,16 +192,25 @@ def create_client(project_dir: Path, model: str, yolo_mode: bool = False):
     print()
 
     # Build MCP servers config - features is always included, playwright only in standard mode
+    features_state_dir = (features_project_dir or project_dir).resolve()
+    pythonpath = (project_dir / "src").resolve()
+    if not pythonpath.exists():
+        pythonpath = Path(__file__).resolve().parents[2]
+
     mcp_servers = {
         "features": {
             "command": sys.executable,  # Use the same Python that's running this script
-            "args": ["-m", "mcp_server.feature_mcp"],
+            "args": ["-m", "autocoder.tools.feature_mcp"],  # Fixed: Correct module path
             "env": {
                 # Inherit parent environment (PATH, ANTHROPIC_API_KEY, etc.)
                 **os.environ,
-                # Add custom variables
-                "PROJECT_DIR": str(project_dir.resolve()),
-                "PYTHONPATH": str(Path(__file__).parent.resolve()),
+                # Point Feature MCP at the shared project state directory (agent_system.db)
+                "PROJECT_DIR": str(features_state_dir),
+                # Ensure `autocoder` is importable for MCP server processes
+                "PYTHONPATH": str(pythonpath),
+                # Pass port configuration for browser navigation
+                "AUTOCODER_API_PORT": str(get_api_port()),
+                "AUTOCODER_WEB_PORT": str(get_web_port()),
             },
         },
     }
@@ -199,7 +219,14 @@ def create_client(project_dir: Path, model: str, yolo_mode: bool = False):
         mcp_servers["playwright"] = {
             "command": "npx",
             "args": ["@playwright/mcp@latest", "--viewport-size", "1280x720"],
+            "env": {
+                **os.environ,
+                "AUTOCODER_API_PORT": str(get_api_port()),
+                "AUTOCODER_WEB_PORT": str(get_web_port()),
+            },
         }
+
+    guardrails = ToolUsageGuardrails.from_env()
 
     return ClaudeSDKClient(
         options=ClaudeAgentOptions(
@@ -212,6 +239,7 @@ def create_client(project_dir: Path, model: str, yolo_mode: bool = False):
             mcp_servers=mcp_servers,
             hooks={
                 "PreToolUse": [
+                    HookMatcher(hooks=[guardrails.pre_tool_use]),
                     HookMatcher(matcher="Bash", hooks=[bash_security_hook]),
                 ],
             },

@@ -28,17 +28,41 @@ from .routers import (
     filesystem_router,
     assistant_chat_router,
     model_settings_router,
-    parallel_agents_router,
+    logs_router,
+    parallel_router,
+    settings_router,
 )
 from .websocket import project_websocket
 from .services.process_manager import cleanup_all_managers
 from .services.assistant_chat_session import cleanup_all_sessions as cleanup_assistant_sessions
 from .schemas import SetupStatus
+from autocoder.core.port_config import get_ui_port, get_ui_cors_origins
 
 
 # Paths
-ROOT_DIR = Path(__file__).parent.parent
-UI_DIST_DIR = ROOT_DIR / "ui" / "dist"
+ROOT_DIR = Path(__file__).resolve().parent.parent
+
+
+def _find_ui_dist_dir() -> Path | None:
+    """
+    Locate the built React UI `dist/` directory.
+
+    In editable installs, the FastAPI code lives under `src/autocoder/server/`, while the UI lives
+    at repo-root `ui/dist`. When installed as a package, the UI may not exist at all.
+    """
+    # Most common: repo root is 3 parents above this file (server -> autocoder -> src -> repo_root).
+    for base in Path(__file__).resolve().parents:
+        candidate = base / "ui" / "dist"
+        if candidate.exists() and candidate.is_dir():
+            return candidate
+    return None
+
+
+UI_DIST_DIR = _find_ui_dist_dir()
+
+# Get UI server port + CORS allowlist
+API_PORT = get_ui_port()
+CORS_ORIGINS = get_ui_cors_origins()
 
 
 @asynccontextmanager
@@ -62,12 +86,7 @@ app = FastAPI(
 # CORS - allow only localhost origins for security
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",      # Vite dev server
-        "http://127.0.0.1:5173",
-        "http://localhost:8888",      # Production
-        "http://127.0.0.1:8888",
-    ],
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -101,7 +120,9 @@ app.include_router(spec_creation_router)
 app.include_router(filesystem_router)
 app.include_router(assistant_chat_router)
 app.include_router(model_settings_router)
-app.include_router(parallel_agents_router)
+app.include_router(logs_router)
+app.include_router(parallel_router)
+app.include_router(settings_router)
 
 
 # ============================================================================
@@ -151,7 +172,7 @@ async def setup_status():
 # ============================================================================
 
 # Serve React build files if they exist
-if UI_DIST_DIR.exists():
+if UI_DIST_DIR and UI_DIST_DIR.exists():
     # Mount static assets
     app.mount("/assets", StaticFiles(directory=UI_DIST_DIR / "assets"), name="assets")
 
@@ -176,6 +197,17 @@ if UI_DIST_DIR.exists():
 
         # Fall back to index.html for SPA routing
         return FileResponse(UI_DIST_DIR / "index.html")
+else:
+    @app.get("/")
+    async def missing_ui_build():
+        """
+        Friendly message when the UI build isn't available.
+
+        The API still works (use `/api/health`), but serving the React app requires building `ui/dist`.
+        """
+        return {
+            "detail": "UI build not found. Run `npm -C ui install` then `npm -C ui run build`, or run the Vite dev server in `ui/`.",
+        }
 
 
 # ============================================================================
@@ -187,6 +219,6 @@ if __name__ == "__main__":
     uvicorn.run(
         "server.main:app",
         host="127.0.0.1",  # Localhost only for security
-        port=8888,
+        port=API_PORT,
         reload=True,
     )

@@ -1,155 +1,46 @@
 /**
- * Parallel Agents API Hook
- * =======================
- *
- * React Query hooks for managing parallel agent execution.
+ * React Query hooks for parallel agent observability.
  */
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query'
 
-export interface AgentStatus {
-  agent_id: string;
-  feature_id: number;
-  feature_name: string;
-  status: 'running' | 'completed' | 'failed';
-  model_used: string;
-  progress: number;
+export interface ParallelAgentInfo {
+  agent_id: string
+  status: string
+  last_ping: string | null
+  pid: number | null
+  worktree_path: string | null
+  feature_id: number | null
+  feature_name: string | null
+  api_port: number | null
+  web_port: number | null
+  log_file_path: string | null
 }
 
 export interface ParallelAgentsStatus {
-  project_dir: string;
-  parallel_count: number;
-  running_agents: AgentStatus[];
-  completed_count: number;
-  failed_count: number;
-  is_running: boolean;
+  is_running: boolean
+  active_count: number
+  agents: ParallelAgentInfo[]
 }
 
-export interface StartAgentsRequest {
-  project_dir: string;
-  parallel_count: number;
-  preset?: string;
-  models?: string[];
-}
+const API_BASE = '/api'
 
-// API base URL
-const API_BASE = '/api';
-
-// Start parallel agents
-export function useStartAgents() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async (request: StartAgentsRequest) => {
-      const response = await fetch(`${API_BASE}/parallel-agents/start`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(request),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to start agents');
-      }
-
-      return response.json();
-    },
-    onSuccess: (_data, variables) => {
-      // Invalidate status query for this project
-      queryClient.invalidateQueries({
-        queryKey: ['parallel-agents', 'status', variables.project_dir],
-      });
-    },
-  });
-}
-
-// Stop parallel agents
-export function useStopAgents() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async (projectDir: string) => {
-      const response = await fetch(`${API_BASE}/parallel-agents/stop?project_dir=${encodeURIComponent(projectDir)}`, {
-        method: 'POST',
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to stop agents');
-      }
-
-      return response.json();
-    },
-    onSuccess: (_data, variables) => {
-      // Invalidate status query for this project
-      queryClient.invalidateQueries({
-        queryKey: ['parallel-agents', 'status', variables],
-      });
-    },
-  });
-}
-
-// Get parallel agents status
-export function useParallelAgentsStatus(projectDir: string, parallelCount?: number) {
+export function useParallelAgentsStatus(projectName: string | null, limit: number = 50) {
   return useQuery({
-    queryKey: ['parallel-agents', 'status', projectDir, parallelCount],
+    queryKey: ['parallel-agents', 'status', projectName, limit],
     queryFn: async () => {
-      const params = new URLSearchParams({
-        project_dir: projectDir,
-      });
-
-      if (parallelCount !== undefined) {
-        params.append('parallel_count', parallelCount.toString());
-      }
-
-      const response = await fetch(`${API_BASE}/parallel-agents/status?${params}`);
+      const params = new URLSearchParams({ limit: String(limit) })
+      const response = await fetch(
+        `${API_BASE}/projects/${encodeURIComponent(projectName!)}/parallel/agents?${params}`
+      )
       if (!response.ok) {
-        throw new Error('Failed to fetch agent status');
+        const err = await response.json().catch(() => ({ detail: 'Unknown error' }))
+        throw new Error(err.detail || `HTTP ${response.status}`)
       }
-      return response.json() as Promise<ParallelAgentsStatus>;
+      return response.json() as Promise<ParallelAgentsStatus>
     },
-    refetchInterval: 2000, // Poll every 2 seconds
-  });
+    enabled: !!projectName,
+    refetchInterval: 2000,
+  })
 }
 
-// Update parallel configuration
-export function useUpdateParallelConfig() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async ({
-      projectDir,
-      config,
-    }: {
-      projectDir: string;
-      config: { parallel_count: number; preset?: string; models?: string[] };
-    }) => {
-      const response = await fetch(`${API_BASE}/parallel-agents/config?project_dir=${encodeURIComponent(projectDir)}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(config),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to update config');
-      }
-
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['model-settings'] });
-    },
-  });
-}
-
-// Get available presets
-export function useParallelPresets() {
-  return useQuery({
-    queryKey: ['parallel-presets'],
-    queryFn: async () => {
-      const response = await fetch(`${API_BASE}/parallel-agents/presets`);
-      if (!response.ok) {
-        throw new Error('Failed to fetch presets');
-      }
-      return response.json();
-    },
-  });
-}

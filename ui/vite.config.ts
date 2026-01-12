@@ -3,8 +3,8 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import path from 'path'
 
-// Backend port - can be overridden via VITE_API_PORT env var
-const apiPort = process.env.VITE_API_PORT || '8888'
+// Backend port - can be overridden via AUTOCODER_UI_PORT or VITE_API_PORT env vars
+const apiPort = process.env.AUTOCODER_UI_PORT || process.env.VITE_API_PORT || '8888'
 
 // https://vite.dev/config/
 export default defineConfig({

@@ -101,6 +101,7 @@ Desktop.ini
 ui/dist/
 ui/.vite/
 .vite/
+*.tsbuildinfo
 
 # ===================
 # Environment files
@@ -141,3 +142,8 @@ Pipfile.lock
 to_check/
 .serena/
 research/
+
+# Runtime databases and worktrees
+features.db
+agent_system.db
+worktrees/

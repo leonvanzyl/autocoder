@@ -6,19 +6,28 @@ Core agent interaction functions for running autonomous coding sessions.
 """
 
 import asyncio
-import io
 import sys
+import os
 from pathlib import Path
 from typing import Optional
 
 from claude_agent_sdk import ClaudeSDKClient
 
 # Fix Windows console encoding for Unicode characters (emoji, etc.)
-# Without this, print() crashes when Claude outputs emoji like ✅
+# Without this, print() can crash when Claude outputs emoji like ✅
 if sys.platform == "win32":
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+    for stream_name in ("stdout", "stderr"):
+        stream = getattr(sys, stream_name, None)
+        if stream is None:
+            continue
+        reconfigure = getattr(stream, "reconfigure", None)
+        if callable(reconfigure):
+            try:
+                reconfigure(encoding="utf-8", errors="replace")
+            except Exception:
+                pass
 
+from ..core.port_config import get_web_port
 from .client import create_client
 from .progress import print_session_header, print_progress_summary, has_features
 from .prompts import (
@@ -28,6 +37,7 @@ from .prompts import (
     copy_spec_to_project,
     has_project_prompts,
 )
+from .retry import execute_with_retry, retry_config_from_env
 
 
 # Configuration
@@ -54,12 +64,34 @@ async def run_agent_session(
     """
     print("Sending prompt to Claude Agent SDK...\n")
 
+    def _env_int(name: str, default: int) -> int:
+        raw = os.environ.get(name)
+        if raw is None:
+            return default
+        try:
+            value = int(raw)
+        except ValueError:
+            return default
+        return value if value > 0 else default
+
+    max_tool_calls = _env_int("AUTOCODER_GUARDRAIL_MAX_TOOL_CALLS", 400)
+    max_consecutive_tool_errors = _env_int("AUTOCODER_GUARDRAIL_MAX_CONSECUTIVE_TOOL_ERRORS", 25)
+    max_total_tool_errors = _env_int("AUTOCODER_GUARDRAIL_MAX_TOOL_ERRORS", 150)
+
     try:
-        # Send the query
-        await client.query(message)
+        # Send the query (with retry/backoff for transient failures like 429/timeouts)
+        retry_cfg = retry_config_from_env()
+
+        async def _do_query() -> None:
+            await client.query(message)
+
+        await execute_with_retry(_do_query, config=retry_cfg)
 
         # Collect response text and show tool use
         response_text = ""
+        tool_calls = 0
+        consecutive_tool_errors = 0
+        total_tool_errors = 0
         async for msg in client.receive_response():
             msg_type = type(msg).__name__
 
@@ -72,6 +104,14 @@ async def run_agent_session(
                         response_text += block.text
                         print(block.text, end="", flush=True)
                     elif block_type == "ToolUseBlock" and hasattr(block, "name"):
+                        tool_calls += 1
+                        if tool_calls > max_tool_calls:
+                            err = (
+                                f"Guardrail tripped: too many tool calls in one session "
+                                f"({tool_calls} > {max_tool_calls})"
+                            )
+                            print(f"\n[{err}]", flush=True)
+                            return "error", err
                         print(f"\n[Tool: {block.name}]", flush=True)
                         if hasattr(block, "input"):
                             input_str = str(block.input)
@@ -88,17 +128,38 @@ async def run_agent_session(
                     if block_type == "ToolResultBlock":
                         result_content = getattr(block, "content", "")
                         is_error = getattr(block, "is_error", False)
+                        content_str = str(result_content)
 
                         # Check if command was blocked by security hook
-                        if "blocked" in str(result_content).lower():
+                        if "blocked" in content_str.lower():
+                            total_tool_errors += 1
+                            consecutive_tool_errors += 1
                             print(f"   [BLOCKED] {result_content}", flush=True)
                         elif is_error:
                             # Show errors (truncated)
-                            error_str = str(result_content)[:500]
+                            total_tool_errors += 1
+                            consecutive_tool_errors += 1
+                            error_str = content_str[:500]
                             print(f"   [Error] {error_str}", flush=True)
                         else:
+                            consecutive_tool_errors = 0
                             # Tool succeeded - just show brief confirmation
                             print("   [Done]", flush=True)
+
+                        if total_tool_errors > max_total_tool_errors:
+                            err = (
+                                f"Guardrail tripped: too many tool errors "
+                                f"({total_tool_errors} > {max_total_tool_errors})"
+                            )
+                            print(f"\n[{err}]", flush=True)
+                            return "error", err
+                        if consecutive_tool_errors > max_consecutive_tool_errors:
+                            err = (
+                                f"Guardrail tripped: too many consecutive tool errors "
+                                f"({consecutive_tool_errors} > {max_consecutive_tool_errors})"
+                            )
+                            print(f"\n[{err}]", flush=True)
+                            return "error", err
 
         print("\n" + "-" * 70 + "\n")
         return "continue", response_text
@@ -113,6 +174,10 @@ async def run_autonomous_agent(
     model: str,
     max_iterations: Optional[int] = None,
     yolo_mode: bool = False,
+    *,
+    features_project_dir: Optional[Path] = None,
+    assigned_feature_id: Optional[int] = None,
+    agent_id: Optional[str] = None,
 ) -> None:
     """
     Run the autonomous agent loop.
@@ -127,6 +192,8 @@ async def run_autonomous_agent(
     print("  AUTONOMOUS CODING AGENT DEMO")
     print("=" * 70)
     print(f"\nProject directory: {project_dir}")
+    if agent_id:
+        print(f"Agent ID: {agent_id}")
     print(f"Model: {model}")
     if yolo_mode:
         print("Mode: YOLO (testing disabled)")
@@ -141,10 +208,17 @@ async def run_autonomous_agent(
     # Create project directory
     project_dir.mkdir(parents=True, exist_ok=True)
 
+    features_state_dir = (features_project_dir or project_dir).resolve()
+
     # Check if this is a fresh start or continuation
     # Uses has_features() which checks if the database actually has features,
     # not just if the file exists (empty db should still trigger initializer)
-    is_first_run = not has_features(project_dir)
+    is_first_run = not has_features(features_state_dir)
+
+    if assigned_feature_id is not None and is_first_run:
+        raise RuntimeError(
+            f"Assigned feature #{assigned_feature_id} but no features exist in {features_state_dir}"
+        )
 
     if is_first_run:
         print("Fresh start - will use initializer agent")
@@ -159,7 +233,7 @@ async def run_autonomous_agent(
         copy_spec_to_project(project_dir)
     else:
         print("Continuing existing project")
-        print_progress_summary(project_dir)
+        print_progress_summary(features_state_dir)
 
     # Main loop
     iteration = 0
@@ -177,7 +251,12 @@ async def run_autonomous_agent(
         print_session_header(iteration, is_first_run)
 
         # Create client (fresh context)
-        client = create_client(project_dir, model, yolo_mode=yolo_mode)
+        client = create_client(
+            project_dir,
+            model,
+            yolo_mode=yolo_mode,
+            features_project_dir=features_state_dir,
+        )
 
         # Choose prompt based on session type
         # Pass project_dir to enable project-specific prompts
@@ -191,6 +270,16 @@ async def run_autonomous_agent(
             else:
                 prompt = get_coding_prompt(project_dir)
 
+        if assigned_feature_id is not None:
+            prompt = (
+                "IMPORTANT: You are running as a parallel worker with an explicit assignment.\n"
+                f"- Work ONLY on feature_id={assigned_feature_id}.\n"
+                "- Do NOT call `feature_get_next`.\n"
+                "- Call `feature_get_by_id` for the assigned feature, then proceed as usual.\n\n"
+                "- When finished, call `feature_mark_passing` to submit for Gatekeeper verification (it may not immediately set passes=true).\n\n"
+                + prompt
+            )
+
         # Run session with async context manager
         async with client:
             status, response = await run_agent_session(client, prompt, project_dir)
@@ -198,7 +287,7 @@ async def run_autonomous_agent(
         # Handle status
         if status == "continue":
             print(f"\nAgent will auto-continue in {AUTO_CONTINUE_DELAY_SECONDS}s...")
-            print_progress_summary(project_dir)
+            print_progress_summary(features_state_dir)
             await asyncio.sleep(AUTO_CONTINUE_DELAY_SECONDS)
 
         elif status == "error":
@@ -216,7 +305,7 @@ async def run_autonomous_agent(
     print("  SESSION COMPLETE")
     print("=" * 70)
     print(f"\nProject directory: {project_dir}")
-    print_progress_summary(project_dir)
+    print_progress_summary(features_state_dir)
 
     # Print instructions for running the generated application
     print("\n" + "-" * 70)
@@ -226,7 +315,7 @@ async def run_autonomous_agent(
     print("  ./init.sh           # Run the setup script")
     print("  # Or manually:")
     print("  npm install && npm run dev")
-    print("\n  Then open http://localhost:3000 (or check init.sh for the URL)")
+    print(f"\n  Then open http://localhost:{get_web_port()} (or check init.sh for the URL)")
     print("-" * 70)
 
     print("\nDone!")

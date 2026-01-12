@@ -25,12 +25,12 @@
       <styling>Tailwind CSS</styling>
       <state_management>React hooks and context</state_management>
       <routing>React Router for navigation</routing>
-      <port>3000</port>
+      <!-- Port dynamically assigned via $AUTOCODER_WEB_PORT environment variable -->
     </frontend>
     <backend>
       <runtime>Node.js with Express</runtime>
       <database>SQLite with better-sqlite3</database>
-      <port>3001</port>
+      <!-- Port dynamically assigned via $AUTOCODER_API_PORT environment variable -->
     </backend>
     <communication>
       <api>RESTful endpoints</api>

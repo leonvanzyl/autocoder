@@ -16,10 +16,10 @@ import { DebugLogViewer } from './components/DebugLogViewer'
 import { AgentThought } from './components/AgentThought'
 import { AssistantFAB } from './components/AssistantFAB'
 import { AssistantPanel } from './components/AssistantPanel'
-import { ModelSettingsPanel } from './components/ModelSettingsPanel'
-import { ParallelAgentsControl } from './components/ParallelAgentsControl'
 import { AgentStatusGrid } from './components/AgentStatusGrid'
-import { Plus, Loader2, Brain, Zap } from 'lucide-react'
+import { SettingsModal, type RunSettings } from './components/SettingsModal'
+import { SettingsPage } from './pages/SettingsPage'
+import { Plus, Loader2, FileText, Settings as SettingsIcon } from 'lucide-react'
 import type { Feature } from './lib/types'
 
 function App() {
@@ -37,8 +37,18 @@ function App() {
   const [debugOpen, setDebugOpen] = useState(false)
   const [debugPanelHeight, setDebugPanelHeight] = useState(288) // Default height
   const [assistantOpen, setAssistantOpen] = useState(false)
-  const [showModelSettings, setShowModelSettings] = useState(false)
-  const [showParallelControl, setShowParallelControl] = useState(false)
+  const [logsTab, setLogsTab] = useState<'live' | 'workers'>('live')
+  const [showSettings, setShowSettings] = useState(false)
+  const [route, setRoute] = useState<'main' | 'settings'>(() =>
+    window.location.hash.startsWith('#/settings') ? 'settings' : 'main'
+  )
+
+  const [yoloEnabled, setYoloEnabled] = useState(false)
+  const [runSettings, setRunSettings] = useState<RunSettings>({
+    mode: 'standard',
+    parallelCount: 3,
+    parallelPreset: 'balanced',
+  })
 
   const { data: projects, isLoading: projectsLoading } = useProjects()
   const { data: features } = useFeatures(selectedProject)
@@ -83,6 +93,7 @@ function App() {
       // D : Toggle debug window
       if (e.key === 'd' || e.key === 'D') {
         e.preventDefault()
+        setLogsTab('live')
         setDebugOpen(prev => !prev)
       }
 
@@ -98,18 +109,29 @@ function App() {
         setAssistantOpen(prev => !prev)
       }
 
-      // P : Toggle parallel control (when project selected)
+      // S : Open settings
+      if ((e.key === 's' || e.key === 'S') && selectedProject) {
+        e.preventDefault()
+        setShowSettings(true)
+      }
+
+      // P : Quick access to run settings (back-compat shortcut)
       if ((e.key === 'p' || e.key === 'P') && selectedProject) {
         e.preventDefault()
-        setShowParallelControl(prev => !prev)
+        setShowSettings(true)
+      }
+
+      // L : Toggle worker logs (when project selected)
+      if ((e.key === 'l' || e.key === 'L') && selectedProject) {
+        e.preventDefault()
+        setLogsTab('workers')
+        setDebugOpen(true)
       }
 
       // Escape : Close modals
       if (e.key === 'Escape') {
-        if (showModelSettings) {
-          setShowModelSettings(false)
-        } else if (showParallelControl) {
-          setShowParallelControl(false)
+        if (showSettings) {
+          setShowSettings(false)
         } else if (assistantOpen) {
           setAssistantOpen(false)
         } else if (showAddFeature) {
@@ -118,13 +140,58 @@ function App() {
           setSelectedFeature(null)
         } else if (debugOpen) {
           setDebugOpen(false)
+        } else if (route === 'settings') {
+          window.location.hash = ''
         }
       }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [selectedProject, showAddFeature, selectedFeature, debugOpen, assistantOpen, showModelSettings, showParallelControl])
+  }, [selectedProject, showAddFeature, selectedFeature, debugOpen, assistantOpen, showSettings, route])
+
+  // Hash-based routing (no router dependency)
+  useEffect(() => {
+    const onHash = () => {
+      setRoute(window.location.hash.startsWith('#/settings') ? 'settings' : 'main')
+    }
+    window.addEventListener('hashchange', onHash)
+    return () => window.removeEventListener('hashchange', onHash)
+  }, [])
+
+  // Persist run settings locally (best-effort)
+  useEffect(() => {
+    try {
+      localStorage.setItem('autocoder-yolo-enabled', yoloEnabled ? '1' : '0')
+      localStorage.setItem('autocoder-run-mode', runSettings.mode)
+      localStorage.setItem('autocoder-parallel-count', String(runSettings.parallelCount))
+      localStorage.setItem('autocoder-parallel-preset', runSettings.parallelPreset)
+    } catch {
+      // ignore
+    }
+  }, [yoloEnabled, runSettings])
+
+  // Load persisted run settings on first mount
+  useEffect(() => {
+    try {
+      const y = localStorage.getItem('autocoder-yolo-enabled')
+      const mode = localStorage.getItem('autocoder-run-mode') as RunSettings['mode'] | null
+      const countRaw = localStorage.getItem('autocoder-parallel-count')
+      const preset = localStorage.getItem('autocoder-parallel-preset') as RunSettings['parallelPreset'] | null
+
+      const count = countRaw ? Number(countRaw) : NaN
+
+      if (y === '1') setYoloEnabled(true)
+      setRunSettings((prev) => ({
+        mode: mode === 'parallel' || mode === 'standard' ? mode : prev.mode,
+        parallelCount: Number.isFinite(count) ? Math.max(1, Math.min(5, count)) : prev.parallelCount,
+        parallelPreset: preset ?? prev.parallelPreset,
+      }))
+    } catch {
+      // ignore
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Combine WebSocket progress with feature data
   const progress = wsState.progress.total > 0 ? wsState.progress : {
@@ -154,46 +221,66 @@ function App() {
 
             {/* Controls */}
             <div className="flex items-center gap-4">
-              <ProjectSelector
-                projects={projects ?? []}
-                selectedProject={selectedProject}
-                onSelectProject={handleSelectProject}
-                isLoading={projectsLoading}
-              />
+              {route === 'settings' ? (
+                <button
+                  onClick={() => {
+                    window.location.hash = ''
+                  }}
+                  className="neo-btn text-sm bg-white text-[var(--color-neo-text)] flex items-center gap-2"
+                  title="Back"
+                >
+                  <span className="hidden sm:inline">Back</span>
+                  <span className="font-mono text-xs">Esc</span>
+                </button>
+              ) : (
+                <ProjectSelector
+                  projects={projects ?? []}
+                  selectedProject={selectedProject}
+                  onSelectProject={handleSelectProject}
+                  isLoading={projectsLoading}
+                />
+              )}
 
-              {selectedProject && (
+              {selectedProject && route === 'main' && (
                 <>
                   <button
                     onClick={() => setShowAddFeature(true)}
-                    className="neo-btn neo-btn-primary text-sm"
+                    className="neo-btn neo-btn-primary text-sm flex items-center gap-2"
                     title="Press N"
+                    aria-label="Add feature"
                   >
                     <Plus size={18} />
-                    Add Feature
-                    <kbd className="ml-1.5 px-1.5 py-0.5 text-xs bg-black/20 rounded font-mono">
+                    <span className="hidden sm:inline">Add Feature</span>
+                    <kbd className="hidden md:inline ml-1.5 px-1.5 py-0.5 text-xs bg-black/20 rounded font-mono">
                       N
                     </kbd>
                   </button>
 
                   <button
-                    onClick={() => setShowParallelControl(true)}
-                    className="neo-btn text-sm bg-[var(--color-neo-progress)]"
-                    title="Parallel Agents"
+                    onClick={() => {
+                      setShowSettings(true)
+                    }}
+                    className="neo-btn text-sm bg-[var(--color-neo-accent)] text-white flex items-center gap-2"
+                    title="Settings (Press S)"
+                    aria-label="Settings"
                   >
-                    <Zap size={18} />
-                    Parallel
-                    <kbd className="ml-1.5 px-1.5 py-0.5 text-xs bg-black/20 rounded font-mono">
-                      P
+                    <SettingsIcon size={18} />
+                    <span className="hidden sm:inline">Settings</span>
+                    <kbd className="hidden md:inline ml-1.5 px-1.5 py-0.5 text-xs bg-black/20 rounded font-mono">
+                      S
                     </kbd>
                   </button>
 
                   <button
-                    onClick={() => setShowModelSettings(true)}
-                    className="neo-btn text-sm bg-[var(--color-neo-accent)] text-white"
-                    title="Model Settings"
+                    onClick={() => {
+                      setLogsTab('workers')
+                      setDebugOpen(true)
+                    }}
+                    className="neo-btn text-sm bg-[var(--color-neo-bg)] text-[var(--color-neo-text)] px-3"
+                    title="Worker Logs (Press L)"
                   >
-                    <Brain size={18} />
-                    Models
+                    <FileText size={18} />
+                    <span className="sr-only">Logs</span>
                   </button>
 
                   <AgentControl
@@ -203,6 +290,19 @@ function App() {
                     parallelMode={agentStatusData?.parallel_mode ?? false}
                     parallelCount={agentStatusData?.parallel_count ?? null}
                     modelPreset={agentStatusData?.model_preset ?? null}
+                    yoloEnabled={yoloEnabled}
+                    onToggleYolo={() => {
+                      setYoloEnabled((prev) => {
+                        const next = !prev
+                        if (next) {
+                          setRunSettings((s) => ({ ...s, mode: 'standard' }))
+                        }
+                        return next
+                      })
+                    }}
+                    runMode={runSettings.mode}
+                    parallelCountSetting={runSettings.parallelCount}
+                    parallelPresetSetting={runSettings.parallelPreset}
                   />
                 </>
               )}
@@ -216,7 +316,23 @@ function App() {
         className="max-w-7xl mx-auto px-4 py-8"
         style={{ paddingBottom: debugOpen ? debugPanelHeight + 32 : undefined }}
       >
-        {!selectedProject ? (
+        {route === 'settings' ? (
+          <div className="max-w-6xl mx-auto">
+            <SettingsPage
+              initialTab={
+                window.location.hash === '#/settings/advanced'
+                  ? 'advanced'
+                  : window.location.hash === '#/settings/models'
+                    ? 'models'
+                    : 'run'
+              }
+              yoloEnabled={yoloEnabled}
+              runSettings={runSettings}
+              onChangeRunSettings={(next) => setRunSettings(next)}
+              onClose={() => (window.location.hash = '')}
+            />
+          </div>
+        ) : !selectedProject ? (
           <div className="neo-empty-state mt-12">
             <h2 className="font-display text-2xl font-bold mb-2">
               Welcome to Autonomous Coder
@@ -236,11 +352,7 @@ function App() {
             />
 
             {/* Agent Status Grid - show when parallel agents are running */}
-            {selectedProject && projects && (
-              <AgentStatusGrid
-                projectPath={projects.find(p => p.name === selectedProject)?.path || ''}
-              />
-            )}
+            {selectedProject && <AgentStatusGrid projectName={selectedProject} />}
 
             {/* Agent Thought - shows latest agent narrative */}
             <AgentThought
@@ -291,17 +403,17 @@ function App() {
         />
       )}
 
-      {/* Model Settings Modal */}
-      {showModelSettings && (
-        <ModelSettingsPanel onClose={() => setShowModelSettings(false)} />
-      )}
-
-      {/* Parallel Agents Control Modal */}
-      {showParallelControl && selectedProject && projects && (
-        <ParallelAgentsControl
-          projectName={selectedProject}
-          projectPath={projects.find(p => p.name === selectedProject)?.path || ''}
-          onClose={() => setShowParallelControl(false)}
+      {/* Settings Modal */}
+      {showSettings && selectedProject && (
+        <SettingsModal
+          onClose={() => setShowSettings(false)}
+          yoloEnabled={yoloEnabled}
+          settings={runSettings}
+          onChange={(next) => setRunSettings(next)}
+          onOpenSettingsPage={() => {
+            setShowSettings(false)
+            window.location.hash = '#/settings'
+          }}
         />
       )}
 
@@ -313,6 +425,8 @@ function App() {
           onToggle={() => setDebugOpen(!debugOpen)}
           onClear={wsState.clearLogs}
           onHeightChange={setDebugPanelHeight}
+          projectName={selectedProject}
+          openTab={logsTab}
         />
       )}
 

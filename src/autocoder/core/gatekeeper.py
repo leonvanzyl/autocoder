@@ -19,6 +19,7 @@ Architecture Note:
 import os
 import subprocess
 import logging
+import contextlib
 from pathlib import Path
 from typing import Dict, Any, Optional
 from datetime import datetime
@@ -55,7 +56,13 @@ class Gatekeeper:
         self,
         branch_name: str,
         worktree_path: Optional[str] = None,
-        agent_id: Optional[str] = None
+        agent_id: Optional[str] = None,
+        *,
+        main_branch: Optional[str] = None,
+        fetch_remote: bool = False,
+        push_remote: bool = False,
+        allow_no_tests: bool = False,
+        delete_feature_branch: bool = True,
     ) -> Dict[str, Any]:
         """
         Verify a feature branch and merge to main if tests pass.
@@ -63,16 +70,21 @@ class Gatekeeper:
         Uses a TEMPORARY WORKTREE for verification to avoid dirty state in main directory.
 
         Workflow:
-        1. Fetch latest main
+        1. (Optional) Fetch remote main
         2. Create temporary worktree for verification
-        3. In temp worktree: checkout main, merge feature branch, run tests
-        4. If tests pass: commit merge in temp worktree, push to origin/main, delete temp worktree
-        5. If tests fail: just delete temp worktree (main directory untouched!)
+        3. In temp worktree: merge feature branch, run tests
+        4. If tests pass: commit merge, fast-forward local main to merge commit
+        5. (Optional) Push main to remote
 
         Args:
             branch_name: Name of the feature branch (e.g., "feat/user-auth-001")
             worktree_path: Optional path to agent's worktree
             agent_id: Optional agent identifier for logging
+            main_branch: Main branch name (default: auto-detect, usually "main")
+            fetch_remote: If True, fetch origin/<main_branch> first (if origin exists)
+            push_remote: If True, push updated main to origin (if origin exists)
+            allow_no_tests: If True, allow merge even when no test command is detected
+            delete_feature_branch: If True, delete feature branch after successful merge
 
         Returns:
             Dictionary with verification result:
@@ -86,35 +98,98 @@ class Gatekeeper:
         logger.info(f"🛡️ Gatekeeper: Verifying branch '{branch_name}'...")
 
         # Import for temp worktree management
-        import tempfile
         import shutil
 
         temp_worktree_path = None
+        verify_branch = None
+        approved = False
+        test_results: Dict[str, Any] | None = None
 
-        try:
-            # Step 1: Fetch latest main
+        def detect_main_branch() -> str:
+            if main_branch:
+                return main_branch
+            env_branch = os.environ.get("AUTOCODER_MAIN_BRANCH")
+            if env_branch:
+                return env_branch
+            # Prefer "main", fallback to "master", else current branch.
+            for candidate in ("main", "master"):
+                try:
+                    subprocess.run(
+                        ["git", "rev-parse", "--verify", candidate],
+                        cwd=self.project_dir,
+                        check=True,
+                        capture_output=True,
+                    )
+                    return candidate
+                except subprocess.CalledProcessError:
+                    continue
             try:
-                subprocess.run(
-                    ["git", "fetch", "origin", "main"],
+                result = subprocess.run(
+                    ["git", "rev-parse", "--abbrev-ref", "HEAD"],
                     cwd=self.project_dir,
                     check=True,
-                    capture_output=True
+                    capture_output=True,
+                    text=True,
                 )
-                logger.info("✓ Fetched latest main")
-            except subprocess.CalledProcessError as e:
+                return result.stdout.strip() or "main"
+            except subprocess.CalledProcessError:
+                return "main"
+
+        def origin_exists() -> bool:
+            try:
+                subprocess.run(
+                    ["git", "remote", "get-url", "origin"],
+                    cwd=self.project_dir,
+                    check=True,
+                    capture_output=True,
+                )
+                return True
+            except subprocess.CalledProcessError:
+                return False
+
+        try:
+            detected_main = detect_main_branch()
+            has_origin = origin_exists()
+
+            # Refuse to operate if main working tree is dirty (we need to checkout/ff main).
+            dirty = subprocess.run(
+                ["git", "status", "--porcelain"],
+                cwd=self.project_dir,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+            if dirty:
                 return {
                     "approved": False,
-                    "reason": "Failed to fetch main branch",
-                    "error": str(e)
+                    "reason": "Main working tree is dirty; refusing to merge",
+                    "details": dirty,
                 }
+
+            if fetch_remote and has_origin:
+                try:
+                    subprocess.run(
+                        ["git", "fetch", "origin", detected_main],
+                        cwd=self.project_dir,
+                        check=True,
+                        capture_output=True,
+                    )
+                    logger.info(f"✓ Fetched origin/{detected_main}")
+                except subprocess.CalledProcessError as e:
+                    return {
+                        "approved": False,
+                        "reason": f"Failed to fetch origin/{detected_main}",
+                        "error": str(e),
+                    }
 
             # Step 2: Create temporary worktree for verification
             temp_worktree_path = self.project_dir / f"verify_temp_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
             try:
-                # Create temp worktree on main branch
+                base_ref = f"origin/{detected_main}" if (fetch_remote and has_origin) else detected_main
+                verify_branch = f"verify/{branch_name.replace(' ', '-').replace('\\\\', '-').replace(':', '-')}"
+                # Create temp worktree on base ref
                 subprocess.run(
-                    ["git", "worktree", "add", "-b", f"verify_{branch_name}", str(temp_worktree_path), "origin/main"],
+                    ["git", "worktree", "add", "-b", verify_branch, str(temp_worktree_path), base_ref],
                     cwd=self.project_dir,
                     check=True,
                     capture_output=True
@@ -162,19 +237,36 @@ class Gatekeeper:
             test_results = self._run_tests_in_directory(str(temp_worktree_path))
 
             if not test_results["success"]:
-                return {
-                    "approved": False,
-                    "reason": "Test execution failed",
-                    "test_results": test_results
-                }
+                # Optionally allow merges when no tests are detected (configurable).
+                if allow_no_tests and "No test framework detected" in str(test_results.get("error", "")):
+                    test_results["passed"] = True
+                    test_results["note"] = "No tests detected; allowed by configuration"
+                else:
+                    return {
+                        "approved": False,
+                        "reason": "Test execution failed",
+                        "test_results": test_results,
+                    }
 
             if not test_results["passed"]:
-                logger.error(f"✗ Tests failed:\n{test_results['errors']}")
-                return {
-                    "approved": False,
-                    "reason": "Tests failed - fix and resubmit",
-                    "test_results": test_results
-                }
+                if allow_no_tests:
+                    exit_code = test_results.get("exit_code")
+                    command = str(test_results.get("command", "")).lower()
+                    combined = (
+                        str(test_results.get("output", "")) + str(test_results.get("errors", ""))
+                    ).lower()
+                    # Pytest exit code 5 commonly means "no tests collected".
+                    if ("pytest" in command and exit_code == 5) or ("collected 0 items" in combined):
+                        test_results["passed"] = True
+                        test_results["note"] = "No tests collected; allowed by configuration"
+
+                if not test_results["passed"]:
+                    logger.error(f"✗ Tests failed:\n{test_results.get('errors', '')}")
+                    return {
+                        "approved": False,
+                        "reason": "Tests failed - fix and resubmit",
+                        "test_results": test_results,
+                    }
 
             logger.info("✓ All tests passed!")
 
@@ -196,32 +288,72 @@ class Gatekeeper:
                     "test_results": test_results
                 }
 
-            # Step 6: Push to main FROM TEMP WORKTREE
+            merge_commit_hash = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                cwd=str(temp_worktree_path),
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+
+            # Step 6: Fast-forward local main to verified merge commit.
+            original_ref = subprocess.run(
+                ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+                cwd=self.project_dir,
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
             try:
-                push_result = subprocess.run(
-                    ["git", "push", "origin", f"verify_{branch_name}:main"],
-                    cwd=str(temp_worktree_path),
+                subprocess.run(
+                    ["git", "checkout", detected_main],
+                    cwd=self.project_dir,
                     check=True,
                     capture_output=True,
-                    text=True
                 )
-                logger.info("✓ Pushed to origin/main")
-            except subprocess.CalledProcessError as e:
-                return {
-                    "approved": False,
-                    "reason": "Failed to push to main",
-                    "error": str(e),
-                    "test_results": test_results,
-                    "merge_commit": "committed but not pushed"
-                }
+                subprocess.run(
+                    ["git", "merge", "--ff-only", merge_commit_hash],
+                    cwd=self.project_dir,
+                    check=True,
+                    capture_output=True,
+                )
+            finally:
+                # Restore original branch (best-effort).
+                with contextlib.suppress(Exception):
+                    if original_ref and original_ref != detected_main:
+                        subprocess.run(
+                            ["git", "checkout", original_ref],
+                            cwd=self.project_dir,
+                            check=True,
+                            capture_output=True,
+                        )
+
+            if push_remote and has_origin:
+                try:
+                    subprocess.run(
+                        ["git", "push", "origin", detected_main],
+                        cwd=self.project_dir,
+                        check=True,
+                        capture_output=True,
+                    )
+                    logger.info(f"✓ Pushed {detected_main} to origin")
+                except subprocess.CalledProcessError as e:
+                    return {
+                        "approved": False,
+                        "reason": f"Merged locally but failed to push origin/{detected_main}",
+                        "error": str(e),
+                        "test_results": test_results,
+                        "merge_commit": merge_commit_hash,
+                    }
 
             logger.info(f"✅ Gatekeeper: APPROVED '{branch_name}'")
+            approved = True
 
             return {
                 "approved": True,
                 "reason": "All tests passed - merged to main",
                 "test_results": test_results,
-                "merge_commit": "committed and pushed",
+                "merge_commit": merge_commit_hash,
                 "timestamp": datetime.now().isoformat()
             }
 
@@ -259,17 +391,23 @@ class Gatekeeper:
                     except Exception as e:
                         logger.warning(f"Failed to cleanup agent worktree: {e}")
 
-            # Step 7: Delete feature branch (only after successful merge)
-            if temp_worktree_path and (branch_name):
-                try:
+            # Delete verify branch (best-effort).
+            if verify_branch:
+                with contextlib.suppress(Exception):
+                    subprocess.run(
+                        ["git", "branch", "-D", verify_branch],
+                        cwd=self.project_dir,
+                        capture_output=True,
+                    )
+
+            # Delete feature branch only after successful merge (configurable).
+            if approved and delete_feature_branch:
+                with contextlib.suppress(Exception):
                     subprocess.run(
                         ["git", "branch", "-D", branch_name],
                         cwd=self.project_dir,
-                        capture_output=True
+                        capture_output=True,
                     )
-                    logger.info(f"✓ Deleted feature branch '{branch_name}'")
-                except subprocess.CalledProcessError:
-                    logger.warning(f"Could not delete branch '{branch_name}'")
 
     def _run_tests(self, timeout: int = 300) -> Dict[str, Any]:
         """

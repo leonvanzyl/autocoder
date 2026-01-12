@@ -19,6 +19,7 @@ from typing import AsyncGenerator, Optional
 
 from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
 
+from ...core.port_config import get_api_port, get_web_port
 from .assistant_database import (
     create_conversation,
     add_message,
@@ -29,16 +30,21 @@ from .assistant_database import (
 logger = logging.getLogger(__name__)
 
 # Root directory of the project
-ROOT_DIR = Path(__file__).parent.parent.parent
+# Add the repository's `src/` to PYTHONPATH for MCP subprocesses.
+# File is: src/autocoder/server/services/assistant_chat_session.py
+# parents[3] is: src/
+ROOT_DIR = Path(__file__).resolve().parents[3]
 
 # Feature MCP tools available to assistant
 ASSISTANT_FEATURE_MCP_TOOLS = [
     "mcp__features__feature_get_stats",
     "mcp__features__feature_get_next",
+    "mcp__features__feature_claim_next",
     "mcp__features__feature_get_all",  # Get all features
     "mcp__features__feature_get_by_id",  # Get specific feature
     "mcp__features__feature_get_for_regression",
     "mcp__features__feature_create_bulk",
+    "mcp__features__feature_clear_in_progress",
     "mcp__features__feature_update",  # Modify features
     "mcp__features__feature_delete",  # Remove features
 ]
@@ -131,6 +137,7 @@ You have access to these tools:
 - **Browser Tools**: Navigate to pages, take screenshots, click buttons, fill forms
 - **feature_get_stats**: Get feature completion progress
 - **feature_get_next**: See the next pending feature
+- **feature_claim_next**: Atomically claim the next pending feature
 - **feature_get_all**: Get ALL features with full details
 - **feature_get_by_id**: Get a specific feature's details
 - **feature_get_for_regression**: See passing features
@@ -291,11 +298,18 @@ class AssistantChatSession:
                     **os.environ,
                     "PROJECT_DIR": str(self.project_dir.resolve()),
                     "PYTHONPATH": str(ROOT_DIR.resolve()),
+                    "AUTOCODER_API_PORT": str(get_api_port()),
+                    "AUTOCODER_WEB_PORT": str(get_web_port()),
                 },
             },
             "playwright": {
                 "command": "npx",
                 "args": ["@playwright/mcp@latest", "--viewport-size", "1280x720"],
+                "env": {
+                    **os.environ,
+                    "AUTOCODER_API_PORT": str(get_api_port()),
+                    "AUTOCODER_WEB_PORT": str(get_web_port()),
+                },
             },
         }
 
