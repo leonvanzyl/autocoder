@@ -1,153 +1,199 @@
-import { useState, useEffect, useCallback } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
-import { useProjects, useFeatures, useAgentStatus } from './hooks/useProjects'
-import { useProjectWebSocket } from './hooks/useWebSocket'
-import { useFeatureSound } from './hooks/useFeatureSound'
-import { useCelebration } from './hooks/useCelebration'
+import { useState, useEffect, useCallback } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useProjects, useFeatures, useAgentStatus } from "./hooks/useProjects";
+import { useProjectWebSocket } from "./hooks/useWebSocket";
+import { useFeatureSound } from "./hooks/useFeatureSound";
+import { useCelebration } from "./hooks/useCelebration";
 
-const STORAGE_KEY = 'autocoder-selected-project'
-import { ProjectSelector } from './components/ProjectSelector'
-import { KanbanBoard } from './components/KanbanBoard'
-import { AgentControl } from './components/AgentControl'
-import { ProgressDashboard } from './components/ProgressDashboard'
-import { SetupWizard } from './components/SetupWizard'
-import { AddFeatureForm } from './components/AddFeatureForm'
-import { FeatureModal } from './components/FeatureModal'
-import { DebugLogViewer } from './components/DebugLogViewer'
-import { AgentThought } from './components/AgentThought'
-import { AssistantFAB } from './components/AssistantFAB'
-import { AssistantPanel } from './components/AssistantPanel'
-import { ExpandProjectModal } from './components/ExpandProjectModal'
-import { SettingsModal } from './components/SettingsModal'
-import { Loader2, Settings } from 'lucide-react'
-import type { Feature } from './lib/types'
+const STORAGE_KEY = "autocoder-selected-project";
+import { ProjectSelector } from "./components/ProjectSelector";
+import { KanbanBoard } from "./components/KanbanBoard";
+import { AgentControl } from "./components/AgentControl";
+import { ProgressDashboard } from "./components/ProgressDashboard";
+import { SetupWizard } from "./components/SetupWizard";
+import { AddFeatureForm } from "./components/AddFeatureForm";
+import { FeatureModal } from "./components/FeatureModal";
+import { DebugLogViewer } from "./components/DebugLogViewer";
+import { AgentThought } from "./components/AgentThought";
+import { AssistantFAB } from "./components/AssistantFAB";
+import { AssistantPanel } from "./components/AssistantPanel";
+import { ExpandProjectModal } from "./components/ExpandProjectModal";
+import { SettingsModal } from "./components/SettingsModal";
+import { KnowledgeFilesModal } from "./components/KnowledgeFilesModal";
+import { Loader2, Settings, BookOpen } from "lucide-react";
+import type { Feature } from "./lib/types";
 
 function App() {
   // Initialize selected project from localStorage
   const [selectedProject, setSelectedProject] = useState<string | null>(() => {
     try {
-      return localStorage.getItem(STORAGE_KEY)
+      return localStorage.getItem(STORAGE_KEY);
     } catch {
-      return null
+      return null;
     }
-  })
-  const [showAddFeature, setShowAddFeature] = useState(false)
-  const [showExpandProject, setShowExpandProject] = useState(false)
-  const [selectedFeature, setSelectedFeature] = useState<Feature | null>(null)
-  const [setupComplete, setSetupComplete] = useState(true) // Start optimistic
-  const [debugOpen, setDebugOpen] = useState(false)
-  const [debugPanelHeight, setDebugPanelHeight] = useState(288) // Default height
-  const [assistantOpen, setAssistantOpen] = useState(false)
-  const [showSettings, setShowSettings] = useState(false)
-  const [isSpecCreating, setIsSpecCreating] = useState(false)
+  });
+  const [showAddFeature, setShowAddFeature] = useState(false);
+  const [showExpandProject, setShowExpandProject] = useState(false);
+  const [selectedFeature, setSelectedFeature] = useState<Feature | null>(null);
+  const [setupComplete, setSetupComplete] = useState(true); // Start optimistic
+  const [debugOpen, setDebugOpen] = useState(false);
+  const [debugPanelHeight, setDebugPanelHeight] = useState(288); // Default height
+  const [assistantOpen, setAssistantOpen] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [showKnowledgeFiles, setShowKnowledgeFiles] = useState(false);
+  const [isSpecCreating, setIsSpecCreating] = useState(false);
 
-  const queryClient = useQueryClient()
-  const { data: projects, isLoading: projectsLoading } = useProjects()
-  const { data: features } = useFeatures(selectedProject)
-  useAgentStatus(selectedProject) // Keep polling for status updates
-  const wsState = useProjectWebSocket(selectedProject)
+  const queryClient = useQueryClient();
+  const { data: projects, isLoading: projectsLoading } = useProjects();
+  const { data: features } = useFeatures(selectedProject);
+  useAgentStatus(selectedProject); // Keep polling for status updates
+  const wsState = useProjectWebSocket(selectedProject);
 
   // Play sounds when features move between columns
-  useFeatureSound(features)
+  useFeatureSound(features);
 
   // Celebrate when all features are complete
-  useCelebration(features, selectedProject)
+  useCelebration(features, selectedProject);
 
   // Persist selected project to localStorage
   const handleSelectProject = useCallback((project: string | null) => {
-    setSelectedProject(project)
+    setSelectedProject(project);
     try {
       if (project) {
-        localStorage.setItem(STORAGE_KEY, project)
+        localStorage.setItem(STORAGE_KEY, project);
       } else {
-        localStorage.removeItem(STORAGE_KEY)
+        localStorage.removeItem(STORAGE_KEY);
       }
     } catch {
       // localStorage not available
     }
-  }, [])
+  }, []);
 
   // Validate stored project exists (clear if project was deleted)
   useEffect(() => {
-    if (selectedProject && projects && !projects.some(p => p.name === selectedProject)) {
-      handleSelectProject(null)
+    if (
+      selectedProject &&
+      projects &&
+      !projects.some((p) => p.name === selectedProject)
+    ) {
+      handleSelectProject(null);
     }
-  }, [selectedProject, projects, handleSelectProject])
+  }, [selectedProject, projects, handleSelectProject]);
 
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Ignore if user is typing in an input
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
-        return
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement
+      ) {
+        return;
       }
 
       // D : Toggle debug window
-      if (e.key === 'd' || e.key === 'D') {
-        e.preventDefault()
-        setDebugOpen(prev => !prev)
+      if (e.key === "d" || e.key === "D") {
+        e.preventDefault();
+        setDebugOpen((prev) => !prev);
       }
 
       // N : Add new feature (when project selected)
-      if ((e.key === 'n' || e.key === 'N') && selectedProject) {
-        e.preventDefault()
-        setShowAddFeature(true)
+      if ((e.key === "n" || e.key === "N") && selectedProject) {
+        e.preventDefault();
+        setShowAddFeature(true);
       }
 
       // E : Expand project with AI (when project selected and has features)
-      if ((e.key === 'e' || e.key === 'E') && selectedProject && features &&
-          (features.pending.length + features.in_progress.length + features.done.length) > 0) {
-        e.preventDefault()
-        setShowExpandProject(true)
+      if (
+        (e.key === "e" || e.key === "E") &&
+        selectedProject &&
+        features &&
+        features.pending.length +
+          features.in_progress.length +
+          features.done.length >
+          0
+      ) {
+        e.preventDefault();
+        setShowExpandProject(true);
       }
 
       // A : Toggle assistant panel (when project selected and not in spec creation)
-      if ((e.key === 'a' || e.key === 'A') && selectedProject && !isSpecCreating) {
-        e.preventDefault()
-        setAssistantOpen(prev => !prev)
+      if (
+        (e.key === "a" || e.key === "A") &&
+        selectedProject &&
+        !isSpecCreating
+      ) {
+        e.preventDefault();
+        setAssistantOpen((prev) => !prev);
       }
 
       // , : Open settings
-      if (e.key === ',') {
-        e.preventDefault()
-        setShowSettings(true)
+      if (e.key === ",") {
+        e.preventDefault();
+        setShowSettings(true);
+      }
+
+      // K : Open knowledge files (when project selected)
+      if ((e.key === "k" || e.key === "K") && selectedProject) {
+        e.preventDefault();
+        setShowKnowledgeFiles(true);
       }
 
       // Escape : Close modals
-      if (e.key === 'Escape') {
-        if (showExpandProject) {
-          setShowExpandProject(false)
+      if (e.key === "Escape") {
+        if (showKnowledgeFiles) {
+          setShowKnowledgeFiles(false);
+        } else if (showExpandProject) {
+          setShowExpandProject(false);
         } else if (showSettings) {
-          setShowSettings(false)
+          setShowSettings(false);
         } else if (assistantOpen) {
-          setAssistantOpen(false)
+          setAssistantOpen(false);
         } else if (showAddFeature) {
-          setShowAddFeature(false)
+          setShowAddFeature(false);
         } else if (selectedFeature) {
-          setSelectedFeature(null)
+          setSelectedFeature(null);
         } else if (debugOpen) {
-          setDebugOpen(false)
+          setDebugOpen(false);
         }
       }
-    }
+    };
 
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [selectedProject, showAddFeature, showExpandProject, selectedFeature, debugOpen, assistantOpen, features, showSettings, isSpecCreating])
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [
+    selectedProject,
+    showAddFeature,
+    showExpandProject,
+    selectedFeature,
+    debugOpen,
+    assistantOpen,
+    features,
+    showSettings,
+    showKnowledgeFiles,
+    isSpecCreating,
+  ]);
 
   // Combine WebSocket progress with feature data
-  const progress = wsState.progress.total > 0 ? wsState.progress : {
-    passing: features?.done.length ?? 0,
-    total: (features?.pending.length ?? 0) + (features?.in_progress.length ?? 0) + (features?.done.length ?? 0),
-    percentage: 0,
-  }
+  const progress =
+    wsState.progress.total > 0
+      ? wsState.progress
+      : {
+          passing: features?.done.length ?? 0,
+          total:
+            (features?.pending.length ?? 0) +
+            (features?.in_progress.length ?? 0) +
+            (features?.done.length ?? 0),
+          percentage: 0,
+        };
 
   if (progress.total > 0 && progress.percentage === 0) {
-    progress.percentage = Math.round((progress.passing / progress.total) * 100 * 10) / 10
+    progress.percentage =
+      Math.round((progress.passing / progress.total) * 100 * 10) / 10;
   }
 
   if (!setupComplete) {
-    return <SetupWizard onComplete={() => setSetupComplete(true)} />
+    return <SetupWizard onComplete={() => setSetupComplete(true)} />;
   }
 
   return (
@@ -179,6 +225,15 @@ function App() {
                   />
 
                   <button
+                    onClick={() => setShowKnowledgeFiles(true)}
+                    className="neo-btn text-sm py-2 px-3"
+                    title="Knowledge Files (K)"
+                    aria-label="Open Knowledge Files"
+                  >
+                    <BookOpen size={18} />
+                  </button>
+
+                  <button
                     onClick={() => setShowSettings(true)}
                     className="neo-btn text-sm py-2 px-3"
                     title="Settings (,)"
@@ -204,7 +259,8 @@ function App() {
               Welcome to AutoCoder
             </h2>
             <p className="text-[var(--color-neo-text-secondary)] mb-4">
-              Select a project from the dropdown above or create a new one to get started.
+              Select a project from the dropdown above or create a new one to
+              get started.
             </p>
           </div>
         ) : (
@@ -225,20 +281,24 @@ function App() {
 
             {/* Initializing Features State - show when agent is running but no features yet */}
             {features &&
-             features.pending.length === 0 &&
-             features.in_progress.length === 0 &&
-             features.done.length === 0 &&
-             wsState.agentStatus === 'running' && (
-              <div className="neo-card p-8 text-center">
-                <Loader2 size={32} className="animate-spin mx-auto mb-4 text-[var(--color-neo-progress)]" />
-                <h3 className="font-display font-bold text-xl mb-2">
-                  Initializing Features...
-                </h3>
-                <p className="text-[var(--color-neo-text-secondary)]">
-                  The agent is reading your spec and creating features. This may take a moment.
-                </p>
-              </div>
-            )}
+              features.pending.length === 0 &&
+              features.in_progress.length === 0 &&
+              features.done.length === 0 &&
+              wsState.agentStatus === "running" && (
+                <div className="neo-card p-8 text-center">
+                  <Loader2
+                    size={32}
+                    className="animate-spin mx-auto mb-4 text-[var(--color-neo-progress)]"
+                  />
+                  <h3 className="font-display font-bold text-xl mb-2">
+                    Initializing Features...
+                  </h3>
+                  <p className="text-[var(--color-neo-text-secondary)]">
+                    The agent is reading your spec and creating features. This
+                    may take a moment.
+                  </p>
+                </div>
+              )}
 
             {/* Kanban Board */}
             <KanbanBoard
@@ -276,7 +336,9 @@ function App() {
           onClose={() => setShowExpandProject(false)}
           onFeaturesAdded={() => {
             // Invalidate features query to refresh the kanban board
-            queryClient.invalidateQueries({ queryKey: ['features', selectedProject] })
+            queryClient.invalidateQueries({
+              queryKey: ["features", selectedProject],
+            });
           }}
         />
       )}
@@ -308,11 +370,17 @@ function App() {
       )}
 
       {/* Settings Modal */}
-      {showSettings && (
-        <SettingsModal onClose={() => setShowSettings(false)} />
+      {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
+
+      {/* Knowledge Files Modal */}
+      {showKnowledgeFiles && selectedProject && (
+        <KnowledgeFilesModal
+          projectName={selectedProject}
+          onClose={() => setShowKnowledgeFiles(false)}
+        />
       )}
     </div>
-  )
+  );
 }
 
-export default App
+export default App;
