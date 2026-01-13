@@ -1,228 +1,324 @@
 @import "tailwindcss";
 
 /* ============================================================================
-   Neobrutalism Design System
+   Modern Glass Design System
+   A sleek, contemporary UI with glass morphism and subtle depth
    ============================================================================ */
 
 @theme {
-  /* Colors */
-  --color-neo-bg: #fffef5;
-  --color-neo-card: #ffffff;
-  --color-neo-pending: #ffd60a;
-  --color-neo-progress: #00b4d8;
-  --color-neo-done: #70e000;
-  --color-neo-accent: #ff006e;
-  --color-neo-danger: #ff5400;
-  --color-neo-border: #1a1a1a;
-  --color-neo-text: #1a1a1a;
-  --color-neo-text-secondary: #4a4a4a;
+  /* Modern Color Palette */
+  --color-bg-primary: #0f0f14;
+  --color-bg-secondary: #16161d;
+  --color-bg-tertiary: #1e1e28;
+  --color-bg-elevated: #252530;
+
+  /* Accent Colors */
+  --color-accent-primary: #6366f1;
+  --color-accent-secondary: #8b5cf6;
+  --color-accent-gradient: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%);
+
+  /* Status Colors */
+  --color-pending: #f59e0b;
+  --color-progress: #3b82f6;
+  --color-done: #10b981;
+  --color-danger: #ef4444;
+  --color-warning: #f97316;
+
+  /* Text Colors */
+  --color-text-primary: #f8fafc;
+  --color-text-secondary: #94a3b8;
+  --color-text-tertiary: #64748b;
+  --color-text-muted: #475569;
+
+  /* Border & Surface */
+  --color-border: rgba(255, 255, 255, 0.08);
+  --color-border-hover: rgba(255, 255, 255, 0.15);
+  --color-glass: rgba(255, 255, 255, 0.03);
+  --color-glass-hover: rgba(255, 255, 255, 0.06);
 
   /* Fonts */
-  --font-neo-display: 'Space Grotesk', sans-serif;
-  --font-neo-sans: 'DM Sans', sans-serif;
-  --font-neo-mono: 'JetBrains Mono', monospace;
+  --font-display: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
 
   /* Shadows */
-  --shadow-neo-sm: 2px 2px 0px rgba(0, 0, 0, 1);
-  --shadow-neo-md: 4px 4px 0px rgba(0, 0, 0, 1);
-  --shadow-neo-lg: 6px 6px 0px rgba(0, 0, 0, 1);
-  --shadow-neo-xl: 8px 8px 0px rgba(0, 0, 0, 1);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --shadow-xl: 0 16px 48px rgba(0, 0, 0, 0.6);
+  --shadow-glow: 0 0 40px rgba(99, 102, 241, 0.15);
+  --shadow-glow-accent: 0 0 60px rgba(139, 92, 246, 0.2);
+
+  /* Blur */
+  --blur-sm: 8px;
+  --blur-md: 16px;
+  --blur-lg: 24px;
+
+  /* Border Radius */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius-full: 9999px;
 
   /* Transitions */
-  --transition-neo-fast: 0.15s cubic-bezier(0.34, 1.56, 0.64, 1);
-  --transition-neo-normal: 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  --transition-fast: 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-normal: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-bounce: 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 /* ============================================================================
-   Base Layer - Foundation styles
+   Base Layer
    ============================================================================ */
 
 @layer base {
-  /* Ensure CSS variables are available globally */
   :root {
-    --color-neo-bg: #fffef5;
-    --color-neo-card: #ffffff;
-    --color-neo-pending: #ffd60a;
-    --color-neo-progress: #00b4d8;
-    --color-neo-done: #70e000;
-    --color-neo-accent: #ff006e;
-    --color-neo-danger: #ff5400;
-    --color-neo-border: #1a1a1a;
-    --color-neo-text: #1a1a1a;
-    --color-neo-text-secondary: #4a4a4a;
-    --font-neo-display: 'Space Grotesk', sans-serif;
-    --font-neo-sans: 'DM Sans', sans-serif;
-    --font-neo-mono: 'JetBrains Mono', monospace;
-    --shadow-neo-sm: 2px 2px 0px rgba(0, 0, 0, 1);
-    --shadow-neo-md: 4px 4px 0px rgba(0, 0, 0, 1);
-    --shadow-neo-lg: 6px 6px 0px rgba(0, 0, 0, 1);
-    --shadow-neo-xl: 8px 8px 0px rgba(0, 0, 0, 1);
+    color-scheme: dark;
+
+    /* Map theme vars to CSS custom properties */
+    --color-neo-bg: var(--color-bg-primary);
+    --color-neo-card: var(--color-bg-secondary);
+    --color-neo-pending: var(--color-pending);
+    --color-neo-progress: var(--color-progress);
+    --color-neo-done: var(--color-done);
+    --color-neo-accent: var(--color-accent-primary);
+    --color-neo-danger: var(--color-danger);
+    --color-neo-border: var(--color-border);
+    --color-neo-text: var(--color-text-primary);
+    --color-neo-text-secondary: var(--color-text-secondary);
+  }
+
+  html {
+    background-color: var(--color-bg-primary);
   }
 
   body {
-    font-family: var(--font-neo-sans);
-    background-color: var(--color-neo-bg);
-    color: var(--color-neo-text);
+    font-family: var(--font-sans);
+    background-color: var(--color-bg-primary);
+    color: var(--color-text-primary);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
-  /* Force form elements to inherit colors properly */
-  button,
-  input,
-  textarea,
-  select {
+  /* Smooth gradient background */
+  body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background:
+      radial-gradient(ellipse 80% 50% at 50% -20%, rgba(99, 102, 241, 0.15), transparent),
+      radial-gradient(ellipse 60% 40% at 100% 0%, rgba(139, 92, 246, 0.1), transparent),
+      radial-gradient(ellipse 50% 30% at 0% 100%, rgba(59, 130, 246, 0.08), transparent);
+    pointer-events: none;
+    z-index: -1;
+  }
+
+  button, input, textarea, select {
     color: inherit;
     font-family: inherit;
+  }
+
+  ::selection {
+    background-color: rgba(99, 102, 241, 0.4);
+    color: white;
   }
 }
 
 /* ============================================================================
-   Component Layer - Reusable component styles
+   Component Layer
    ============================================================================ */
 
 @layer components {
-  /* Cards */
+  /* Glass Card */
   .neo-card {
-    background: var(--color-neo-card);
-    border: 3px solid var(--color-neo-border);
-    box-shadow: var(--shadow-neo-md);
-    transition: transform var(--transition-neo-fast), box-shadow var(--transition-neo-fast);
+    background: var(--color-glass);
+    backdrop-filter: blur(var(--blur-md));
+    -webkit-backdrop-filter: blur(var(--blur-md));
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-md);
+    transition:
+      transform var(--transition-normal),
+      box-shadow var(--transition-normal),
+      border-color var(--transition-normal),
+      background var(--transition-normal);
   }
 
   .neo-card:hover {
-    transform: translate(-2px, -2px);
-    box-shadow: var(--shadow-neo-lg);
+    background: var(--color-glass-hover);
+    border-color: var(--color-border-hover);
+    box-shadow: var(--shadow-lg), var(--shadow-glow);
+    transform: translateY(-2px);
   }
 
-  /* Buttons */
+  /* Modern Button */
   .neo-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
-    padding: 0.75rem 1.5rem;
-    font-family: var(--font-neo-display);
-    font-weight: 700;
+    padding: 0.625rem 1.25rem;
+    font-family: var(--font-sans);
+    font-weight: 500;
     font-size: 0.875rem;
-    text-transform: uppercase;
-    letter-spacing: 0.025em;
-    color: #1a1a1a;
-    background-color: #ffffff;
-    border: 3px solid #1a1a1a;
-    box-shadow: var(--shadow-neo-md);
-    transition: transform var(--transition-neo-fast), box-shadow var(--transition-neo-fast);
+    color: var(--color-text-primary);
+    background: var(--color-bg-tertiary);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
     cursor: pointer;
+    transition: all var(--transition-fast);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .neo-btn::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, transparent 0%, rgba(255, 255, 255, 0.05) 100%);
+    opacity: 0;
+    transition: opacity var(--transition-fast);
   }
 
   .neo-btn:hover {
-    transform: translate(-2px, -2px);
-    box-shadow: var(--shadow-neo-lg);
+    background: var(--color-bg-elevated);
+    border-color: var(--color-border-hover);
+    box-shadow: var(--shadow-md);
+    transform: translateY(-1px);
+  }
+
+  .neo-btn:hover::before {
+    opacity: 1;
   }
 
   .neo-btn:active {
-    transform: translate(2px, 2px);
-    box-shadow: var(--shadow-neo-sm);
+    transform: translateY(0);
+    box-shadow: var(--shadow-sm);
   }
 
   .neo-btn:disabled {
-    opacity: 0.5;
+    opacity: 0.4;
     cursor: not-allowed;
     transform: none;
-    box-shadow: var(--shadow-neo-sm);
   }
 
   .neo-btn-primary {
-    background-color: #ff006e;
-    color: #ffffff;
+    background: var(--color-accent-gradient);
+    border: none;
+    color: white;
+    box-shadow: var(--shadow-md), 0 0 20px rgba(99, 102, 241, 0.3);
+  }
+
+  .neo-btn-primary:hover {
+    box-shadow: var(--shadow-lg), 0 0 30px rgba(99, 102, 241, 0.4);
+    filter: brightness(1.1);
   }
 
   .neo-btn-success {
-    background-color: #70e000;
-    color: #1a1a1a;
+    background: linear-gradient(135deg, #059669 0%, #10b981 100%);
+    border: none;
+    color: white;
   }
 
   .neo-btn-warning {
-    background-color: #ffd60a;
-    color: #1a1a1a;
+    background: linear-gradient(135deg, #d97706 0%, #f59e0b 100%);
+    border: none;
+    color: white;
   }
 
   .neo-btn-danger {
-    background-color: #ff5400;
-    color: #ffffff;
+    background: linear-gradient(135deg, #dc2626 0%, #ef4444 100%);
+    border: none;
+    color: white;
   }
 
   .neo-btn-ghost {
-    background-color: transparent;
-    color: #1a1a1a;
+    background: transparent;
+    border-color: transparent;
     box-shadow: none;
   }
 
   .neo-btn-ghost:hover {
-    background-color: rgba(0, 0, 0, 0.05);
-    color: #1a1a1a;
+    background: var(--color-glass-hover);
+    border-color: transparent;
     box-shadow: none;
-    transform: none;
   }
 
-  /* Inputs */
+  /* Modern Input */
   .neo-input {
     width: 100%;
     padding: 0.75rem 1rem;
-    font-family: var(--font-neo-sans);
-    font-size: 1rem;
-    color: #1a1a1a;
-    background-color: #ffffff;
-    border: 3px solid #1a1a1a;
-    box-shadow: 3px 3px 0px rgba(0, 0, 0, 0.1);
-    transition: transform var(--transition-neo-fast), box-shadow var(--transition-neo-fast);
+    font-family: var(--font-sans);
+    font-size: 0.9375rem;
+    color: var(--color-text-primary);
+    background: var(--color-bg-tertiary);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
+    transition: all var(--transition-fast);
   }
 
   .neo-input::placeholder {
-    color: #4a4a4a;
-    opacity: 0.7;
+    color: var(--color-text-tertiary);
+  }
+
+  .neo-input:hover {
+    border-color: var(--color-border-hover);
   }
 
   .neo-input:focus {
     outline: none;
-    transform: translate(-1px, -1px);
-    box-shadow: var(--shadow-neo-md);
-    border-color: #ff006e;
+    border-color: var(--color-accent-primary);
+    box-shadow:
+      inset 0 1px 2px rgba(0, 0, 0, 0.2),
+      0 0 0 3px rgba(99, 102, 241, 0.15);
   }
 
   /* Badge */
   .neo-badge {
     display: inline-flex;
     align-items: center;
-    padding: 0.25rem 0.75rem;
-    font-family: var(--font-neo-display);
+    gap: 0.25rem;
+    padding: 0.25rem 0.625rem;
     font-size: 0.75rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    color: #1a1a1a;
-    border: 2px solid #1a1a1a;
+    font-weight: 500;
+    color: var(--color-text-secondary);
+    background: var(--color-bg-tertiary);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-full);
   }
 
   /* Progress Bar */
   .neo-progress {
     width: 100%;
-    height: 2rem;
-    background-color: #ffffff;
-    border: 3px solid #1a1a1a;
-    box-shadow: var(--shadow-neo-sm);
+    height: 0.5rem;
+    background: var(--color-bg-tertiary);
+    border-radius: var(--radius-full);
     overflow: hidden;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
   }
 
   .neo-progress-fill {
     height: 100%;
-    background-color: #70e000;
-    transition: width 0.5s ease-out;
+    background: var(--color-accent-gradient);
+    border-radius: var(--radius-full);
+    transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 0 10px rgba(99, 102, 241, 0.5);
   }
 
   /* Modal */
   .neo-modal-backdrop {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.4);
-    backdrop-filter: blur(2px);
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(var(--blur-sm));
+    -webkit-backdrop-filter: blur(var(--blur-sm));
     display: flex;
     align-items: center;
     justify-content: center;
@@ -230,10 +326,11 @@
   }
 
   .neo-modal {
-    background-color: #ffffff;
-    border: 4px solid #1a1a1a;
-    box-shadow: var(--shadow-neo-xl);
-    animation: popIn 0.3s var(--transition-neo-fast);
+    background: var(--color-bg-secondary);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-xl), var(--shadow-glow-accent);
+    animation: modalSlideIn 0.3s var(--transition-bounce);
     max-width: 90vw;
     max-height: 90vh;
     overflow: auto;
@@ -241,9 +338,13 @@
 
   /* Dropdown */
   .neo-dropdown {
-    background-color: #ffffff;
-    border: 3px solid #1a1a1a;
-    box-shadow: var(--shadow-neo-lg);
+    background: var(--color-bg-secondary);
+    backdrop-filter: blur(var(--blur-md));
+    -webkit-backdrop-filter: blur(var(--blur-md));
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    overflow: hidden;
   }
 
   .neo-dropdown-item {
@@ -251,37 +352,61 @@
     width: 100%;
     padding: 0.75rem 1rem;
     cursor: pointer;
-    color: #1a1a1a;
-    background-color: transparent;
+    color: var(--color-text-secondary);
+    background: transparent;
     text-align: left;
     border: none;
     font-size: 0.875rem;
-    transition: background-color var(--transition-neo-fast);
+    transition: all var(--transition-fast);
   }
 
   .neo-dropdown-item:hover {
-    background-color: #ffd60a;
-    color: #1a1a1a;
+    background: var(--color-glass-hover);
+    color: var(--color-text-primary);
   }
 
   /* Tooltip */
   .neo-tooltip {
-    background-color: #1a1a1a;
-    color: #ffffff;
+    background: var(--color-bg-elevated);
+    color: var(--color-text-primary);
     padding: 0.5rem 0.75rem;
     font-size: 0.75rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    border: 2px solid #1a1a1a;
-    box-shadow: var(--shadow-neo-sm);
+    font-weight: 500;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-md);
   }
 
   /* Empty State */
   .neo-empty-state {
-    background-color: var(--color-neo-bg);
-    border: 4px dashed #1a1a1a;
+    background: var(--color-glass);
+    border: 1px dashed var(--color-border-hover);
+    border-radius: var(--radius-lg);
     padding: 2rem;
     text-align: center;
+  }
+
+  /* Status Indicators */
+  .status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    animation: statusPulse 2s ease-in-out infinite;
+  }
+
+  .status-dot-pending {
+    background: var(--color-pending);
+    box-shadow: 0 0 8px var(--color-pending);
+  }
+
+  .status-dot-progress {
+    background: var(--color-progress);
+    box-shadow: 0 0 8px var(--color-progress);
+  }
+
+  .status-dot-done {
+    background: var(--color-done);
+    box-shadow: 0 0 8px var(--color-done);
   }
 }
 
@@ -289,21 +414,21 @@
    Animations
    ============================================================================ */
 
-@keyframes popIn {
+@keyframes modalSlideIn {
   from {
     opacity: 0;
-    transform: scale(0.9);
+    transform: scale(0.95) translateY(10px);
   }
   to {
     opacity: 1;
-    transform: scale(1);
+    transform: scale(1) translateY(0);
   }
 }
 
 @keyframes slideIn {
   from {
     opacity: 0;
-    transform: translateX(-20px);
+    transform: translateX(-10px);
   }
   to {
     opacity: 1;
@@ -311,47 +436,44 @@
   }
 }
 
-@keyframes neoPulse {
-  0%, 100% {
-    box-shadow: 6px 6px 0px rgba(0, 180, 216, 0.3);
-  }
-  50% {
-    box-shadow: 6px 6px 0px rgba(0, 180, 216, 0.8);
-  }
-}
-
-@keyframes completePop {
-  0% {
-    transform: scale(0.8);
-  }
-  60% {
-    transform: scale(1.15);
-  }
-  100% {
-    transform: scale(1);
-  }
-}
-
-@keyframes thoughtFade {
-  0% {
+@keyframes slideUp {
+  from {
     opacity: 0;
-    transform: translateY(-4px);
-    filter: blur(2px);
+    transform: translateY(10px);
   }
-  100% {
+  to {
     opacity: 1;
     transform: translateY(0);
-    filter: blur(0);
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes statusPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+@keyframes glow {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(99, 102, 241, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 40px rgba(99, 102, 241, 0.5);
   }
 }
 
 @keyframes shimmer {
-  0% {
-    background-position: 200% center;
-  }
-  100% {
-    background-position: -200% center;
-  }
+  0% { background-position: 200% center; }
+  100% { background-position: -200% center; }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
 }
 
 /* ============================================================================
@@ -363,30 +485,38 @@
     animation: slideIn 0.3s ease-out;
   }
 
+  .animate-slide-up {
+    animation: slideUp 0.3s ease-out;
+  }
+
+  .animate-fade-in {
+    animation: fadeIn 0.3s ease-out;
+  }
+
   .animate-pop-in {
-    animation: popIn 0.3s var(--transition-neo-fast);
+    animation: modalSlideIn 0.3s var(--transition-bounce);
   }
 
   .animate-pulse-neo {
-    animation: neoPulse 2s infinite;
+    animation: glow 2s ease-in-out infinite;
   }
 
   .animate-complete {
-    animation: completePop 0.5s var(--transition-neo-fast);
+    animation: modalSlideIn 0.4s var(--transition-bounce);
   }
 
   .animate-thought-fade {
-    animation: thoughtFade 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+    animation: slideUp 0.4s ease-out backwards;
   }
 
   .animate-shimmer {
     background: linear-gradient(
       90deg,
-      var(--color-neo-text) 0%,
-      var(--color-neo-text) 40%,
-      var(--color-neo-progress) 50%,
-      var(--color-neo-text) 60%,
-      var(--color-neo-text) 100%
+      var(--color-text-secondary) 0%,
+      var(--color-text-secondary) 40%,
+      var(--color-accent-primary) 50%,
+      var(--color-text-secondary) 60%,
+      var(--color-text-secondary) 100%
     );
     background-size: 200% 100%;
     background-clip: text;
@@ -395,38 +525,178 @@
     animation: shimmer 2s ease-in-out infinite;
   }
 
+  .animate-float {
+    animation: float 3s ease-in-out infinite;
+  }
+
   .font-display {
-    font-family: var(--font-neo-display);
+    font-family: var(--font-display);
   }
 
   .font-sans {
-    font-family: var(--font-neo-sans);
+    font-family: var(--font-sans);
   }
 
   .font-mono {
-    font-family: var(--font-neo-mono);
+    font-family: var(--font-mono);
+  }
+
+  /* Glass utilities */
+  .glass {
+    background: var(--color-glass);
+    backdrop-filter: blur(var(--blur-md));
+    -webkit-backdrop-filter: blur(var(--blur-md));
+  }
+
+  .glass-border {
+    border: 1px solid var(--color-border);
+  }
+
+  /* Gradient text */
+  .gradient-text {
+    background: var(--color-accent-gradient);
+    background-clip: text;
+    -webkit-background-clip: text;
+    color: transparent;
+  }
+
+  /* Glow effect */
+  .glow {
+    box-shadow: var(--shadow-glow);
+  }
+
+  .glow-accent {
+    box-shadow: var(--shadow-glow-accent);
   }
 }
 
 /* ============================================================================
-   Scrollbar Styling (outside layers for broad compatibility)
+   Scrollbar Styling
    ============================================================================ */
 
 ::-webkit-scrollbar {
-  width: 12px;
-  height: 12px;
+  width: 8px;
+  height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #fffef5;
-  border: 2px solid #1a1a1a;
+  background: var(--color-bg-tertiary);
+  border-radius: var(--radius-full);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #1a1a1a;
-  border: 2px solid #1a1a1a;
+  background: var(--color-text-tertiary);
+  border-radius: var(--radius-full);
+  transition: background var(--transition-fast);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #4a4a4a;
+  background: var(--color-text-secondary);
+}
+
+/* Firefox scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-text-tertiary) var(--color-bg-tertiary);
+}
+
+/* ============================================================================
+   Special Components
+   ============================================================================ */
+
+/* Kanban Column Headers */
+.kanban-header {
+  background: var(--color-glass);
+  backdrop-filter: blur(var(--blur-sm));
+  border-bottom: 1px solid var(--color-border);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+
+/* Feature Cards in Kanban */
+.feature-card {
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  transition: all var(--transition-normal);
+}
+
+.feature-card:hover {
+  border-color: var(--color-accent-primary);
+  box-shadow: var(--shadow-md), 0 0 20px rgba(99, 102, 241, 0.1);
+}
+
+/* Agent Status Indicator */
+.agent-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: var(--color-glass);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+}
+
+.agent-status.running {
+  border-color: var(--color-done);
+  box-shadow: 0 0 15px rgba(16, 185, 129, 0.2);
+}
+
+.agent-status.paused {
+  border-color: var(--color-pending);
+  box-shadow: 0 0 15px rgba(245, 158, 11, 0.2);
+}
+
+/* Project Card */
+.project-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.project-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--color-accent-gradient);
+  opacity: 0;
+  transition: opacity var(--transition-normal);
+}
+
+.project-card:hover::before {
+  opacity: 1;
+}
+
+/* Chat Message Styles */
+.chat-message {
+  padding: 1rem;
+  border-radius: var(--radius-lg);
+  max-width: 85%;
+}
+
+.chat-message.user {
+  background: var(--color-accent-gradient);
+  color: white;
+  margin-left: auto;
+  border-bottom-right-radius: var(--radius-sm);
+}
+
+.chat-message.assistant {
+  background: var(--color-bg-tertiary);
+  border: 1px solid var(--color-border);
+  border-bottom-left-radius: var(--radius-sm);
+}
+
+/* Loading Skeleton */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--color-bg-tertiary) 25%,
+    var(--color-bg-elevated) 50%,
+    var(--color-bg-tertiary) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  border-radius: var(--radius-md);
 }

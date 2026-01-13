@@ -84,14 +84,14 @@ const QUICK_ACTIONS: QuickAction[] = [
   },
   {
     id: 'dependencies',
-    label: 'Check Dependencies',
+    label: 'Dependencies',
     icon: <GitBranch size={14} />,
     message: 'Are there any blocked tasks due to dependencies?',
     variant: 'default',
   },
   {
     id: 'migration',
-    label: 'Check Migration',
+    label: 'Migration',
     icon: <ArrowUpCircle size={14} />,
     message: 'Check if this project needs to be migrated to the v2 schema.',
     variant: 'default',
@@ -113,13 +113,10 @@ export function AssistantQuickActions({
   // Filter actions based on agent status
   const availableActions = QUICK_ACTIONS.filter((action) => {
     if (agentStatus === 'running') {
-      // When running, show stop/pause but not start
       return action.id !== 'start-agent' && action.id !== 'yolo-mode'
     } else if (agentStatus === 'paused') {
-      // When paused, show start but not pause
       return action.id !== 'pause-agent' && action.id !== 'yolo-mode'
     } else {
-      // When stopped, show start but not stop/pause
       return action.id !== 'stop-agent' && action.id !== 'pause-agent'
     }
   })
@@ -127,24 +124,24 @@ export function AssistantQuickActions({
   const getVariantClasses = (variant: string = 'default') => {
     switch (variant) {
       case 'primary':
-        return 'bg-[var(--color-neo-accent)] text-white border-[var(--color-neo-accent)] hover:bg-[var(--color-neo-accent)]/90'
+        return 'bg-gradient-to-r from-indigo-500 to-purple-500 text-white border-transparent hover:from-indigo-400 hover:to-purple-400 shadow-lg shadow-indigo-500/20'
       case 'success':
-        return 'bg-[var(--color-neo-done)] text-black border-[var(--color-neo-done)] hover:bg-[var(--color-neo-done)]/90'
+        return 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white border-transparent hover:from-emerald-400 hover:to-teal-400 shadow-lg shadow-emerald-500/20'
       case 'warning':
-        return 'bg-[var(--color-neo-pending)] text-black border-[var(--color-neo-pending)] hover:bg-[var(--color-neo-pending)]/90'
+        return 'bg-gradient-to-r from-amber-500 to-orange-500 text-white border-transparent hover:from-amber-400 hover:to-orange-400 shadow-lg shadow-amber-500/20'
       default:
-        return 'bg-white text-[var(--color-neo-text)] border-[var(--color-neo-border)] hover:bg-[var(--color-neo-bg)]'
+        return 'bg-white/5 text-slate-300 border-white/10 hover:bg-white/10 hover:text-white hover:border-white/20'
     }
   }
 
   return (
-    <div className="px-4 py-3 border-b-2 border-[var(--color-neo-border)] bg-white">
-      <div className="flex items-center gap-2 mb-2">
-        <span className="text-xs font-bold text-[var(--color-neo-text-secondary)] uppercase tracking-wider">
+    <div className="px-4 py-3 border-b border-white/10 bg-[#16161d]">
+      <div className="flex items-center gap-2 mb-3">
+        <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">
           Quick Actions
         </span>
       </div>
-      <div className="flex flex-wrap gap-1.5">
+      <div className="flex flex-wrap gap-2">
         {availableActions.map((action) => (
           <button
             key={action.id}
@@ -152,15 +149,13 @@ export function AssistantQuickActions({
             disabled={disabled}
             className={`
               inline-flex items-center gap-1.5
-              px-2.5 py-1.5
+              px-3 py-1.5
               text-xs font-medium
-              border-2 rounded
-              shadow-[2px_2px_0px_rgba(0,0,0,1)]
-              transition-all duration-100
-              hover:shadow-[1px_1px_0px_rgba(0,0,0,1)]
-              hover:translate-x-[1px] hover:translate-y-[1px]
-              active:shadow-none active:translate-x-[2px] active:translate-y-[2px]
-              disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-[2px_2px_0px_rgba(0,0,0,1)] disabled:hover:translate-x-0 disabled:hover:translate-y-0
+              border rounded-lg
+              transition-all duration-200
+              hover:scale-[1.02]
+              active:scale-[0.98]
+              disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:scale-100
               ${getVariantClasses(action.variant)}
             `}
             title={action.message}

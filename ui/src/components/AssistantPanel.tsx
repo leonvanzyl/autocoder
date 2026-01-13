@@ -22,7 +22,7 @@ export function AssistantPanel({ projectName, isOpen, onClose, agentStatus = 'st
       {/* Backdrop - click to close */}
       {isOpen && (
         <div
-          className="fixed inset-0 bg-black/20 z-40 transition-opacity duration-300"
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 transition-opacity duration-300"
           onClick={onClose}
           aria-hidden="true"
         />
@@ -32,10 +32,10 @@ export function AssistantPanel({ projectName, isOpen, onClose, agentStatus = 'st
       <div
         className={`
           fixed right-0 top-0 bottom-0 z-50
-          w-[450px] max-w-[90vw]
-          bg-white
-          border-l-4 border-[var(--color-neo-border)]
-          shadow-[-8px_0_0px_rgba(0,0,0,1)]
+          w-[480px] max-w-[90vw]
+          bg-[#16161d]
+          border-l border-white/10
+          shadow-[-20px_0_60px_rgba(0,0,0,0.5)]
           transform transition-transform duration-300 ease-out
           flex flex-col
           ${isOpen ? 'translate-x-0' : 'translate-x-full'}
@@ -45,25 +45,19 @@ export function AssistantPanel({ projectName, isOpen, onClose, agentStatus = 'st
         aria-hidden={!isOpen}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b-3 border-[var(--color-neo-border)] bg-gradient-to-r from-[var(--color-neo-accent)] to-purple-600">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-white/10 bg-gradient-to-r from-[#6366f1] via-[#8b5cf6] to-[#a855f7]">
           <div className="flex items-center gap-3">
-            <div className="bg-white border-2 border-[var(--color-neo-border)] p-2 shadow-[2px_2px_0px_rgba(0,0,0,1)]">
-              <Cpu size={20} className="text-[var(--color-neo-accent)]" />
+            <div className="bg-white/15 backdrop-blur-sm rounded-xl p-2.5">
+              <Cpu size={22} className="text-white" />
             </div>
             <div>
-              <h2 className="font-display font-bold text-white text-lg">Architect Assistant</h2>
-              <p className="text-xs text-white/80 font-mono">{projectName}</p>
+              <h2 className="font-semibold text-white text-lg tracking-tight">Architect Assistant</h2>
+              <p className="text-xs text-white/70 font-mono">{projectName}</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="
-              neo-btn neo-btn-ghost
-              p-2
-              bg-white/20 border-white/40
-              hover:bg-white/30
-              text-white
-            "
+            className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors"
             title="Close Assistant (Press A)"
             aria-label="Close Assistant"
           >
@@ -72,7 +66,7 @@ export function AssistantPanel({ projectName, isOpen, onClose, agentStatus = 'st
         </div>
 
         {/* Chat area */}
-        <div className="flex-1 overflow-hidden">
+        <div className="flex-1 overflow-hidden bg-[#0f0f14]">
           {isOpen && <AssistantChat projectName={projectName} agentStatus={agentStatus} />}
         </div>
       </div>
