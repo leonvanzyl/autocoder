@@ -61,6 +61,27 @@ Otherwise, start servers manually and document the process.
 
 ### STEP 3: CHOOSE ONE FEATURE TO IMPLEMENT
 
+#### ALL FEATURES ARE MANDATORY REQUIREMENTS (CRITICAL)
+
+**Every feature in the database is a mandatory requirement.** This includes:
+- **Functional features** - New functionality to build
+- **Style features** - UI/UX requirements to implement
+- **Refactoring features** - Code improvements to complete
+
+**You MUST implement ALL features, regardless of category.** A refactoring feature is just as mandatory as a functional feature. Do not skip, deprioritize, or dismiss any feature because of its category.
+
+The `feature_get_next` tool returns the highest-priority pending feature. **Whatever it returns, you implement it.** No exceptions.
+
+#### REFACTORING FEATURES
+
+Some features involve **refactoring existing code** rather than building new functionality. These are just as valid and important as functional features. **NEVER skip refactoring features.**
+
+For refactoring features:
+1. **Review** the existing code that needs refactoring
+2. **Implement** the refactoring changes (rename, restructure, extract, consolidate, etc.)
+3. **Verify** with lint and type-check (in YOLO mode)
+4. **Mark as passing** when the refactoring is complete and verified
+
 Get the next feature to implement:
 
 ```
@@ -96,6 +117,9 @@ It's ok if you only complete one feature in this session, as there will be more 
 | "Component not built" | Skip | Build the component |
 | "No data to test with" | Skip | Create test data or build data entry flow |
 | "Feature X needs to be done first" | Skip | Build feature X as part of this feature |
+| "This is a refactoring feature" | Skip | Implement the refactoring, verify with lint/typecheck |
+| "Refactoring requirements are vague" | Skip | Interpret the intent, implement, verify code compiles |
+| "This is not a functional requirement" | Skip | ALL features are requirements - implement it |
 
 If a feature requires building other functionality first, **build that functionality**. You are the coding agent - your job is to make the feature work, not to defer it.
 
