@@ -115,6 +115,13 @@ Some features involve **refactoring existing code** rather than building new fun
 - Spec says "use Context API" but feature says "migrate to Zustand" → **Do the Zustand migration**
 - Spec says "use CSS modules" but feature says "refactor to Tailwind" → **Do the Tailwind refactor**
 
+**CRITICAL: The CURRENT STATE of the codebase is NOT an excuse.** If the code is currently in JavaScript but a feature says "migrate to TypeScript", your job is to CHANGE IT:
+- "The app is currently in JavaScript" → **That's WHY you're refactoring - change it to TypeScript**
+- "The codebase uses REST" → **That's WHY you're refactoring - change it to GraphQL**
+- "We're currently using X" → **That's WHY you're refactoring - migrate to Y**
+
+The whole point of refactoring is to change the current state. The current state is the PROBLEM, not an excuse.
+
 **The feature database is the living source of truth.** The original spec was a starting point. Refactoring features represent evolved requirements that supersede the original spec.
 
 For refactoring features:
@@ -190,6 +197,8 @@ It's ok if you only complete one feature in this session, as there will be more 
 | "The spec says to use X technology" | Skip | Refactoring features override the spec - do the migration |
 | "This contradicts the original requirements" | Skip | Feature database is the living truth - implement it |
 | "This is too big a change" | Skip | Break it into steps and start - no change is too big |
+| "The app is currently in JavaScript" | Skip | That's WHY you're refactoring - change it to TypeScript |
+| "The codebase currently uses X" | Skip | That's the problem you're solving - migrate it |
 
 If a feature requires building other functionality first, **build that functionality**. You are the coding agent - your job is to make the feature work, not to defer it.
 
