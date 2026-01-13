@@ -42,8 +42,14 @@ ALLOWED_COMMANDS = {
     "sleep",
     "kill",  # Kill by PID
     "pkill",  # For killing dev servers; validated separately
+    "pgrep",  # For checking running processes
+    # Directory navigation
+    "cd",  # Change directory (used in compound commands)
     # Network/API testing
     "curl",
+    "jq",  # JSON parsing
+    # Database
+    "sqlite3",  # SQLite database queries
     # File operations
     "mv",
     "rm",  # Use with caution
@@ -189,6 +195,9 @@ def validate_pkill_command(command_string: str) -> tuple[bool, str]:
         "npx",
         "vite",
         "next",
+        "playwright",
+        "chrome",
+        "chromium",
     }
 
     try:

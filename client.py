@@ -207,10 +207,17 @@ def create_client(project_dir: Path, model: str, yolo_mode: bool = False):
     }
     if not yolo_mode:
         # Include Playwright MCP server for browser automation (standard mode only)
-        # Headless mode is configurable via PLAYWRIGHT_HEADLESS environment variable
-        playwright_args = ["@playwright/mcp@latest", "--viewport-size", "1280x720"]
-        if get_playwright_headless():
-            playwright_args.append("--headless")
+        # Uses Playwright's bundled Chromium in headless mode for remote/server environments
+        chromium_path = os.path.expanduser("~/.cache/ms-playwright/chromium-1200/chrome-linux64/chrome")
+        playwright_args = [
+            "@playwright/mcp@latest",
+            "--viewport-size", "1280x720",
+            "--headless",  # Always headless for server environments
+            "--no-sandbox",  # Required for some Linux environments
+        ]
+        # Use Playwright's Chromium if available (works on headless servers)
+        if os.path.exists(chromium_path):
+            playwright_args.extend(["--executable-path", chromium_path])
         mcp_servers["playwright"] = {
             "command": "npx",
             "args": playwright_args,

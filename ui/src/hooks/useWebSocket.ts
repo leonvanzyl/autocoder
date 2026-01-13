@@ -36,6 +36,9 @@ export function useProjectWebSocket(projectName: string | null) {
   const wsRef = useRef<WebSocket | null>(null)
   const reconnectTimeoutRef = useRef<number | null>(null)
   const reconnectAttempts = useRef(0)
+  const isUnmountingRef = useRef(false)
+  const lastLogLineRef = useRef<string | null>(null)
+  const lastDevLogLineRef = useRef<string | null>(null)
 
   const connect = useCallback(() => {
     if (!projectName) return
@@ -79,6 +82,9 @@ export function useProjectWebSocket(projectName: string | null) {
               break
 
             case 'log':
+              // Skip duplicate consecutive lines
+              if (message.line === lastLogLineRef.current) break
+              lastLogLineRef.current = message.line
               setState(prev => ({
                 ...prev,
                 logs: [
@@ -93,6 +99,9 @@ export function useProjectWebSocket(projectName: string | null) {
               break
 
             case 'dev_log':
+              // Skip duplicate consecutive lines
+              if (message.line === lastDevLogLineRef.current) break
+              lastDevLogLineRef.current = message.line
               setState(prev => ({
                 ...prev,
                 devLogs: [
@@ -122,6 +131,9 @@ export function useProjectWebSocket(projectName: string | null) {
       ws.onclose = () => {
         setState(prev => ({ ...prev, isConnected: false }))
         wsRef.current = null
+
+        // Don't reconnect if component is unmounting
+        if (isUnmountingRef.current) return
 
         // Exponential backoff reconnection
         const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 30000)
@@ -159,6 +171,9 @@ export function useProjectWebSocket(projectName: string | null) {
       devServerUrl: null,
       devLogs: [],
     })
+    // Reset dedup refs
+    lastLogLineRef.current = null
+    lastDevLogLineRef.current = null
 
     if (!projectName) {
       // Disconnect if no project
@@ -169,12 +184,16 @@ export function useProjectWebSocket(projectName: string | null) {
       return
     }
 
+    // Reset unmounting flag when connecting
+    isUnmountingRef.current = false
     connect()
 
     // Ping every 30 seconds
     const pingInterval = setInterval(sendPing, 30000)
 
     return () => {
+      // Set flag to prevent reconnection attempts during cleanup
+      isUnmountingRef.current = true
       clearInterval(pingInterval)
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current)
@@ -189,11 +208,13 @@ export function useProjectWebSocket(projectName: string | null) {
   // Clear logs function
   const clearLogs = useCallback(() => {
     setState(prev => ({ ...prev, logs: [] }))
+    lastLogLineRef.current = null
   }, [])
 
   // Clear dev logs function
   const clearDevLogs = useCallback(() => {
     setState(prev => ({ ...prev, devLogs: [] }))
+    lastDevLogLineRef.current = null
   }, [])
 
   return {

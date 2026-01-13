@@ -14,8 +14,8 @@ import { listTerminals, createTerminal, renameTerminal, deleteTerminal } from '@
 import type { TerminalInfo } from '@/lib/types'
 
 const MIN_HEIGHT = 150
-const MAX_HEIGHT = 600
 const DEFAULT_HEIGHT = 288
+const HEADER_HEIGHT = 64 // Leave space for the app header
 const STORAGE_KEY = 'debug-panel-height'
 const TAB_STORAGE_KEY = 'debug-panel-tab'
 
@@ -56,7 +56,8 @@ export function DebugLogViewer({
   const [panelHeight, setPanelHeight] = useState(() => {
     // Load saved height from localStorage
     const saved = localStorage.getItem(STORAGE_KEY)
-    return saved ? Math.min(Math.max(parseInt(saved, 10), MIN_HEIGHT), MAX_HEIGHT) : DEFAULT_HEIGHT
+    const maxHeight = typeof window !== 'undefined' ? window.innerHeight - HEADER_HEIGHT : 600
+    return saved ? Math.min(Math.max(parseInt(saved, 10), MIN_HEIGHT), maxHeight) : DEFAULT_HEIGHT
   })
   const [internalActiveTab, setInternalActiveTab] = useState<TabType>(() => {
     // Load saved tab from localStorage
@@ -186,7 +187,8 @@ export function DebugLogViewer({
   // Handle mouse move during resize
   const handleMouseMove = useCallback((e: MouseEvent) => {
     const newHeight = window.innerHeight - e.clientY
-    const clampedHeight = Math.min(Math.max(newHeight, MIN_HEIGHT), MAX_HEIGHT)
+    const maxHeight = window.innerHeight - HEADER_HEIGHT
+    const clampedHeight = Math.min(Math.max(newHeight, MIN_HEIGHT), maxHeight)
     setPanelHeight(clampedHeight)
   }, [])
 

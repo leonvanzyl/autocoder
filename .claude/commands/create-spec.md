@@ -518,6 +518,25 @@ Write this JSON file:
 - The UI polls this file to detect completion and show the Continue button
 - If the user asks for additional changes after you've written this, you may update it again when the new changes are complete
 
+## 4. Register the Project (REQUIRED)
+
+**After writing the status file**, register the project so it appears in the AutoCoder UI.
+
+Run this command using Bash:
+
+```bash
+python /home/john/autocoder/register_project.py "<project_name>" "$ARGUMENTS"
+```
+
+Where `<project_name>` is derived from the project path (the last directory component, e.g., `my-app` from `~/projects/my-app`).
+
+**Example:**
+```bash
+python /home/john/autocoder/register_project.py "my-app" "/home/john/projects/my-app"
+```
+
+**Note:** If the project is already registered, this will succeed silently. This ensures projects created via `/create-spec` appear in the UI dropdown.
+
 ---
 
 # AFTER FILE GENERATION: NEXT STEPS

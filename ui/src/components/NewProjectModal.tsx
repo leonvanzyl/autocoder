@@ -212,10 +212,10 @@ export function NewProjectModal({
             <div className="flex items-center gap-3">
               <Folder size={24} className="text-[var(--color-neo-progress)]" />
               <div>
-                <h2 className="font-display font-bold text-xl text-[#1a1a1a]">
+                <h2 className="font-display font-bold text-xl text-[var(--color-neo-text)]">
                   Select Project Location
                 </h2>
-                <p className="text-sm text-[#4a4a4a]">
+                <p className="text-sm text-[var(--color-neo-text-secondary)]">
                   Select the folder to use for project <span className="font-bold font-mono">{projectName}</span>. Create a new folder or choose an existing one.
                 </p>
               </div>
@@ -248,7 +248,7 @@ export function NewProjectModal({
       >
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b-3 border-[var(--color-neo-border)]">
-          <h2 className="font-display font-bold text-xl text-[#1a1a1a]">
+          <h2 className="font-display font-bold text-xl text-[var(--color-neo-text)]">
             {step === 'name' && 'Create New Project'}
             {step === 'method' && 'Choose Setup Method'}
             {step === 'complete' && 'Project Created!'}
@@ -267,7 +267,7 @@ export function NewProjectModal({
           {step === 'name' && (
             <form onSubmit={handleNameSubmit}>
               <div className="mb-6">
-                <label className="block font-bold mb-2 text-[#1a1a1a]">
+                <label className="block font-bold mb-2 text-[var(--color-neo-text)]">
                   Project Name
                 </label>
                 <input
@@ -318,7 +318,7 @@ export function NewProjectModal({
                   className={`
                     w-full text-left p-4
                     border-3 border-[var(--color-neo-border)]
-                    bg-white
+                    bg-[var(--color-neo-card)]
                     shadow-[4px_4px_0px_rgba(0,0,0,1)]
                     hover:translate-x-[-2px] hover:translate-y-[-2px]
                     hover:shadow-[6px_6px_0px_rgba(0,0,0,1)]
@@ -332,7 +332,7 @@ export function NewProjectModal({
                     </div>
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
-                        <span className="font-bold text-lg text-[#1a1a1a]">Create with Claude</span>
+                        <span className="font-bold text-lg text-[var(--color-neo-text)]">Create with Claude</span>
                         <span className="neo-badge bg-[var(--color-neo-done)] text-xs">
                           Recommended
                         </span>
@@ -351,7 +351,7 @@ export function NewProjectModal({
                   className={`
                     w-full text-left p-4
                     border-3 border-[var(--color-neo-border)]
-                    bg-white
+                    bg-[var(--color-neo-card)]
                     shadow-[4px_4px_0px_rgba(0,0,0,1)]
                     hover:translate-x-[-2px] hover:translate-y-[-2px]
                     hover:shadow-[6px_6px_0px_rgba(0,0,0,1)]
@@ -364,7 +364,7 @@ export function NewProjectModal({
                       <FileEdit size={24} />
                     </div>
                     <div className="flex-1">
-                      <span className="font-bold text-lg text-[#1a1a1a]">Edit Templates Manually</span>
+                      <span className="font-bold text-lg text-[var(--color-neo-text)]">Edit Templates Manually</span>
                       <p className="text-sm text-[var(--color-neo-text-secondary)] mt-1">
                         Edit the template files directly. Best for developers who want full control.
                       </p>

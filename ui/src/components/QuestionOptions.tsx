@@ -93,7 +93,7 @@ export function QuestionOptions({
       {questions.map((q, questionIdx) => (
         <div
           key={questionIdx}
-          className="neo-card p-4 bg-white"
+          className="neo-card p-4 bg-[var(--color-neo-card)]"
         >
           {/* Question header */}
           <div className="flex items-center gap-3 mb-4">
@@ -127,7 +127,7 @@ export function QuestionOptions({
                     ${
                       isSelected
                         ? 'bg-[var(--color-neo-pending)] shadow-[2px_2px_0px_rgba(0,0,0,1)] translate-x-[1px] translate-y-[1px]'
-                        : 'bg-white shadow-[4px_4px_0px_rgba(0,0,0,1)] hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[5px_5px_0px_rgba(0,0,0,1)]'
+                        : 'bg-[var(--color-neo-card)] shadow-[4px_4px_0px_rgba(0,0,0,1)] hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[5px_5px_0px_rgba(0,0,0,1)]'
                     }
                     disabled:opacity-50 disabled:cursor-not-allowed
                   `}
@@ -140,7 +140,7 @@ export function QuestionOptions({
                         border-2 border-[var(--color-neo-border)]
                         flex items-center justify-center
                         ${q.multiSelect ? '' : 'rounded-full'}
-                        ${isSelected ? 'bg-[var(--color-neo-done)]' : 'bg-white'}
+                        ${isSelected ? 'bg-[var(--color-neo-done)]' : 'bg-[var(--color-neo-card)]'}
                       `}
                     >
                       {isSelected && <Check size={12} strokeWidth={3} />}
@@ -170,7 +170,7 @@ export function QuestionOptions({
                 ${
                   showCustomInput[String(questionIdx)]
                     ? 'bg-[var(--color-neo-pending)] shadow-[2px_2px_0px_rgba(0,0,0,1)] translate-x-[1px] translate-y-[1px]'
-                    : 'bg-white shadow-[4px_4px_0px_rgba(0,0,0,1)] hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[5px_5px_0px_rgba(0,0,0,1)]'
+                    : 'bg-[var(--color-neo-card)] shadow-[4px_4px_0px_rgba(0,0,0,1)] hover:translate-x-[-1px] hover:translate-y-[-1px] hover:shadow-[5px_5px_0px_rgba(0,0,0,1)]'
                 }
                 disabled:opacity-50 disabled:cursor-not-allowed
               `}
@@ -182,7 +182,7 @@ export function QuestionOptions({
                     border-2 border-[var(--color-neo-border)]
                     flex items-center justify-center
                     ${q.multiSelect ? '' : 'rounded-full'}
-                    ${showCustomInput[String(questionIdx)] ? 'bg-[var(--color-neo-done)]' : 'bg-white'}
+                    ${showCustomInput[String(questionIdx)] ? 'bg-[var(--color-neo-done)]' : 'bg-[var(--color-neo-card)]'}
                   `}
                 >
                   {showCustomInput[String(questionIdx)] && <Check size={12} strokeWidth={3} />}

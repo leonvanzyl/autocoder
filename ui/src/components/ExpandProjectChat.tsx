@@ -184,9 +184,9 @@ export function ExpandProjectChat({
   return (
     <div className="flex flex-col h-full bg-[var(--color-neo-bg)]">
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b-3 border-[var(--color-neo-border)] bg-white">
+      <div className="flex items-center justify-between p-4 border-b-3 border-[var(--color-neo-border)] bg-[var(--color-neo-card)]">
         <div className="flex items-center gap-3">
-          <h2 className="font-display font-bold text-lg text-[#1a1a1a]">
+          <h2 className="font-display font-bold text-lg text-[var(--color-neo-text)]">
             Expand Project: {projectName}
           </h2>
           <ConnectionIndicator />
@@ -223,7 +223,7 @@ export function ExpandProjectChat({
           <span className="flex-1 text-sm">{error}</span>
           <button
             onClick={() => setError(null)}
-            className="p-1 hover:bg-white/20 rounded"
+            className="p-1 hover:bg-[var(--color-neo-card)]/20 rounded"
           >
             <X size={14} />
           </button>
@@ -235,7 +235,7 @@ export function ExpandProjectChat({
         {messages.length === 0 && !isLoading && (
           <div className="flex flex-col items-center justify-center h-full text-center p-8">
             <div className="neo-card p-6 max-w-md">
-              <h3 className="font-display font-bold text-lg mb-2">
+              <h3 className="font-display font-bold text-lg mb-2 text-[var(--color-neo-text)]">
                 Starting Project Expansion
               </h3>
               <p className="text-sm text-[var(--color-neo-text-secondary)]">
@@ -268,7 +268,7 @@ export function ExpandProjectChat({
       {/* Input area */}
       {!isComplete && (
         <div
-          className="p-4 border-t-3 border-[var(--color-neo-border)] bg-white"
+          className="p-4 border-t-3 border-[var(--color-neo-border)] bg-[var(--color-neo-card)]"
           onDrop={handleDrop}
           onDragOver={handleDragOver}
         >
@@ -278,7 +278,7 @@ export function ExpandProjectChat({
               {pendingAttachments.map((attachment) => (
                 <div
                   key={attachment.id}
-                  className="relative group border-2 border-[var(--color-neo-border)] p-1 bg-white shadow-[2px_2px_0px_rgba(0,0,0,1)]"
+                  className="relative group border-2 border-[var(--color-neo-border)] p-1 bg-[var(--color-neo-card)] shadow-[2px_2px_0px_rgba(0,0,0,1)]"
                 >
                   <img
                     src={attachment.previewUrl}
@@ -369,7 +369,7 @@ export function ExpandProjectChat({
             </div>
             <button
               onClick={() => onComplete(featuresCreated)}
-              className="neo-btn bg-white"
+              className="neo-btn bg-[var(--color-neo-card)]"
             >
               Close
             </button>

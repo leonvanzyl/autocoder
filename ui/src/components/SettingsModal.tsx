@@ -1,9 +1,26 @@
-import { useEffect, useRef } from 'react'
-import { X, Loader2, AlertCircle } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { X, Loader2, AlertCircle, Moon, Sun } from 'lucide-react'
 import { useSettings, useUpdateSettings, useAvailableModels } from '../hooks/useProjects'
 
 interface SettingsModalProps {
   onClose: () => void
+}
+
+// Dark mode helper functions
+function getInitialDarkMode(): boolean {
+  if (typeof window === 'undefined') return false
+  const saved = localStorage.getItem('darkMode')
+  if (saved !== null) return saved === 'true'
+  return window.matchMedia('(prefers-color-scheme: dark)').matches
+}
+
+function applyDarkMode(isDark: boolean): void {
+  if (isDark) {
+    document.documentElement.classList.add('dark')
+  } else {
+    document.documentElement.classList.remove('dark')
+  }
+  localStorage.setItem('darkMode', String(isDark))
 }
 
 export function SettingsModal({ onClose }: SettingsModalProps) {
@@ -12,6 +29,18 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   const updateSettings = useUpdateSettings()
   const modalRef = useRef<HTMLDivElement>(null)
   const closeButtonRef = useRef<HTMLButtonElement>(null)
+  const [darkMode, setDarkMode] = useState(getInitialDarkMode)
+
+  // Apply dark mode on initial load
+  useEffect(() => {
+    applyDarkMode(darkMode)
+  }, [])
+
+  const handleDarkModeToggle = () => {
+    const newValue = !darkMode
+    setDarkMode(newValue)
+    applyDarkMode(newValue)
+  }
 
   // Focus trap - keep focus within modal
   useEffect(() => {
@@ -132,6 +161,42 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
         {/* Settings Content */}
         {settings && !isLoading && (
           <div className="space-y-6">
+            {/* Dark Mode Toggle */}
+            <div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <label
+                    id="darkmode-label"
+                    className="font-display font-bold text-base"
+                  >
+                    Dark Mode
+                  </label>
+                  <p className="text-sm text-[var(--color-neo-text-secondary)] mt-1">
+                    Switch to dark theme
+                  </p>
+                </div>
+                <button
+                  onClick={handleDarkModeToggle}
+                  className={`relative w-14 h-8 rounded-none border-3 border-[var(--color-neo-border)] transition-colors ${
+                    darkMode
+                      ? 'bg-[var(--color-neo-progress)]'
+                      : 'bg-[var(--color-neo-card)]'
+                  }`}
+                  role="switch"
+                  aria-checked={darkMode}
+                  aria-labelledby="darkmode-label"
+                >
+                  <span
+                    className={`absolute top-1 w-5 h-5 bg-[var(--color-neo-border)] transition-all flex items-center justify-center ${
+                      darkMode ? 'left-7' : 'left-1'
+                    }`}
+                  >
+                    {darkMode ? <Moon size={12} className="text-[var(--color-neo-bg)]" /> : <Sun size={12} className="text-[var(--color-neo-bg)]" />}
+                  </span>
+                </button>
+              </div>
+            </div>
+
             {/* YOLO Mode Toggle */}
             <div>
               <div className="flex items-center justify-between">
@@ -152,7 +217,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                   className={`relative w-14 h-8 rounded-none border-3 border-[var(--color-neo-border)] transition-colors ${
                     settings.yolo_mode
                       ? 'bg-[var(--color-neo-pending)]'
-                      : 'bg-white'
+                      : 'bg-[var(--color-neo-card)]'
                   } ${isSaving ? 'opacity-50 cursor-not-allowed' : ''}`}
                   role="switch"
                   aria-checked={settings.yolo_mode}
@@ -190,7 +255,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                     className={`flex-1 py-3 px-4 font-display font-bold text-sm transition-colors ${
                       settings.model === model.id
                         ? 'bg-[var(--color-neo-accent)] text-white'
-                        : 'bg-white text-[var(--color-neo-text)] hover:bg-gray-100'
+                        : 'bg-[var(--color-neo-card)] text-[var(--color-neo-text)] hover:bg-[var(--color-neo-bg)]'
                     } ${isSaving ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
                     {model.name}

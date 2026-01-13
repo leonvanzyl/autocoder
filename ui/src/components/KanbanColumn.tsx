@@ -42,7 +42,7 @@ export function KanbanColumn({
         <div className="flex items-center justify-between">
           <h2 className="font-display text-lg font-bold uppercase flex items-center gap-2 text-[var(--color-neo-text)]">
             {title}
-            <span className="neo-badge bg-white text-[var(--color-neo-text)]">{count}</span>
+            <span className="neo-badge bg-[var(--color-neo-card)] text-[var(--color-neo-text)]">{count}</span>
           </h2>
           {(onAddFeature || onExpandProject) && (
             <div className="flex items-center gap-2">
@@ -78,7 +78,7 @@ export function KanbanColumn({
         ) : (
           features.map((feature, index) => (
             <div
-              key={feature.id}
+              key={`${feature.id}-${index}`}
               className="animate-slide-in"
               style={{ animationDelay: `${index * 50}ms` }}
             >

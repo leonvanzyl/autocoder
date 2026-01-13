@@ -152,6 +152,7 @@ class ExpandChatSession:
                 "allow": [
                     "Read(./**)",
                     "Glob(./**)",
+                    "Bash(*)",  # Allow bash for sqlite3 queries
                 ],
             },
         }
@@ -177,6 +178,7 @@ class ExpandChatSession:
                     allowed_tools=[
                         "Read",
                         "Glob",
+                        "Bash",  # For sqlite3 queries
                     ],
                     permission_mode="acceptEdits",
                     max_turns=100,

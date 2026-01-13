@@ -65,7 +65,7 @@ export function ProjectSelector({
       {/* Dropdown Trigger */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="neo-btn bg-white text-[var(--color-neo-text)] min-w-[200px] justify-between"
+        className="neo-btn bg-[var(--color-neo-card)] text-[var(--color-neo-text)] min-w-[200px] justify-between"
         disabled={isLoading}
       >
         {isLoading ? (
@@ -108,7 +108,7 @@ export function ProjectSelector({
                     key={project.name}
                     className={`flex items-center ${
                       project.name === selectedProject
-                        ? 'bg-[var(--color-neo-pending)]'
+                        ? 'bg-[var(--color-neo-pending)] text-black'
                         : ''
                     }`}
                   >
@@ -117,7 +117,9 @@ export function ProjectSelector({
                         onSelectProject(project.name)
                         setIsOpen(false)
                       }}
-                      className="flex-1 neo-dropdown-item flex items-center justify-between"
+                      className={`flex-1 neo-dropdown-item flex items-center justify-between ${
+                        project.name === selectedProject ? 'text-black' : ''
+                      }`}
                     >
                       <span className="flex items-center gap-2">
                         <FolderOpen size={16} />

@@ -33,7 +33,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
     },
     assistant: {
       icon: Bot,
-      bgColor: 'bg-white',
+      bgColor: 'bg-[var(--color-neo-card)]',
       borderColor: 'border-[var(--color-neo-border)]',
       align: 'justify-start',
       bubbleAlign: 'items-start',
@@ -104,7 +104,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
           >
             {/* Parse content for basic markdown-like formatting */}
             {content && (
-              <div className="whitespace-pre-wrap text-sm leading-relaxed text-[#1a1a1a]">
+              <div className="whitespace-pre-wrap text-sm leading-relaxed text-[var(--color-neo-text)]">
                 {content.split('\n').map((line, i) => {
                   // Bold text
                   const boldRegex = /\*\*(.*?)\*\*/g
@@ -144,7 +144,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
                 {attachments.map((attachment) => (
                   <div
                     key={attachment.id}
-                    className="border-2 border-[var(--color-neo-border)] p-1 bg-white shadow-[2px_2px_0px_rgba(0,0,0,1)]"
+                    className="border-2 border-[var(--color-neo-border)] p-1 bg-[var(--color-neo-card)] shadow-[2px_2px_0px_rgba(0,0,0,1)]"
                   >
                     <img
                       src={attachment.previewUrl}

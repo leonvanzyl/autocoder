@@ -60,7 +60,7 @@ export function ConfirmDialog({
             >
               <AlertTriangle size={20} className="text-white" />
             </div>
-            <h2 className="font-display font-bold text-lg text-[#1a1a1a]">
+            <h2 className="font-display font-bold text-lg text-[var(--color-neo-text)]">
               {title}
             </h2>
           </div>

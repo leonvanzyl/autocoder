@@ -45,7 +45,7 @@ export function AssistantPanel({ projectName, isOpen, onClose }: AssistantPanelP
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b-3 border-[var(--color-neo-border)] bg-[var(--color-neo-progress)]">
           <div className="flex items-center gap-2">
-            <div className="bg-white border-2 border-[var(--color-neo-border)] p-1.5 shadow-[2px_2px_0px_rgba(0,0,0,1)]">
+            <div className="bg-[var(--color-neo-card)] border-2 border-[var(--color-neo-border)] p-1.5 shadow-[2px_2px_0px_rgba(0,0,0,1)]">
               <Bot size={18} />
             </div>
             <div>

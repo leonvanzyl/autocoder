@@ -23,6 +23,17 @@ import { DevServerControl } from './components/DevServerControl'
 import { Loader2, Settings } from 'lucide-react'
 import type { Feature } from './lib/types'
 
+// Apply dark mode on initial load (before React renders)
+function initDarkMode() {
+  const saved = localStorage.getItem('darkMode')
+  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
+  const isDark = saved !== null ? saved === 'true' : prefersDark
+  if (isDark) {
+    document.documentElement.classList.add('dark')
+  }
+}
+initDarkMode()
+
 function App() {
   // Initialize selected project from localStorage
   const [selectedProject, setSelectedProject] = useState<string | null>(() => {
@@ -58,6 +69,12 @@ function App() {
 
   // Persist selected project to localStorage
   const handleSelectProject = useCallback((project: string | null) => {
+    // Invalidate old project's cached data to prevent stale data showing
+    if (selectedProject && selectedProject !== project) {
+      queryClient.removeQueries({ queryKey: ['features', selectedProject] })
+      queryClient.removeQueries({ queryKey: ['agent-status', selectedProject] })
+    }
+
     setSelectedProject(project)
     try {
       if (project) {
@@ -68,7 +85,7 @@ function App() {
     } catch {
       // localStorage not available
     }
-  }, [])
+  }, [selectedProject, queryClient])
 
   // Validate stored project exists (clear if project was deleted)
   useEffect(() => {
@@ -172,7 +189,7 @@ function App() {
   return (
     <div className="min-h-screen bg-[var(--color-neo-bg)]">
       {/* Header */}
-      <header className="bg-[var(--color-neo-text)] text-white border-b-4 border-[var(--color-neo-border)]">
+      <header className="bg-[var(--color-neo-header)] text-white border-b-4 border-[var(--color-neo-border)]">
         <div className="max-w-7xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             {/* Logo and Title */}
