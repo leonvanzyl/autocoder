@@ -267,6 +267,7 @@ function App() {
             projectName={selectedProject}
             isOpen={assistantOpen}
             onClose={() => setAssistantOpen(false)}
+            agentStatus={wsState.agentStatus as 'running' | 'paused' | 'stopped' | undefined}
           />
         </>
       )}
