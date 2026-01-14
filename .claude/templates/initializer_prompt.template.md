@@ -21,6 +21,11 @@ This number was determined during spec creation and must be followed precisely. 
 
 ### CRITICAL FIRST TASK: Create Features
 
+**IMPORTANT: Feature tools are NATIVE MCP tools.** Call them directly as tool calls.
+- Do NOT use `mcp-cli` - it is not available in this environment
+- Do NOT write scripts to query the database - use the tools directly
+- Simply invoke the tool by name (e.g., call `feature_create_bulk` as a tool)
+
 Based on `app_spec.txt`, create features using the feature_create_bulk tool. The features are stored in a SQLite database,
 which is the single source of truth for what needs to be built.
 

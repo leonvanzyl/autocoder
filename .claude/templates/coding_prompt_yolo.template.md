@@ -196,6 +196,11 @@ Before context fills up:
 
 The feature tools exist to reduce token usage. **DO NOT make exploratory queries.**
 
+**IMPORTANT: These are NATIVE MCP tools.** Call them directly as tool calls.
+- Do NOT use `mcp-cli` - it is not available in this environment
+- Do NOT write scripts to query the database - use the tools
+- Simply invoke the tool by name (e.g., call `feature_get_stats` as a tool)
+
 ### ALLOWED Feature Tools (ONLY these):
 
 ```
