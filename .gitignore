@@ -137,6 +137,7 @@ Pipfile.lock
 *.temp
 .tmp/
 .temp/
+tmpclaude-*
 
 # Research and analysis directories
 to_check/

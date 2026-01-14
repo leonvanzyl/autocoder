@@ -209,6 +209,61 @@ export async function updateAdvancedSettings(settings: AdvancedSettings): Promis
 }
 
 // ============================================================================
+// Multi-Model Generate API
+// ============================================================================
+
+export interface GenerateArtifactRequest {
+  kind: 'spec' | 'plan'
+  prompt: string
+  agents?: string
+  synthesizer?: '' | 'none' | 'claude' | 'codex' | 'gemini'
+  no_synthesize?: boolean
+  timeout_s?: number
+  out?: string
+}
+
+export interface GenerateArtifactResponse {
+  output_path: string
+  drafts_dir: string
+}
+
+export async function generateArtifact(
+  projectName: string,
+  req: GenerateArtifactRequest
+): Promise<GenerateArtifactResponse> {
+  return fetchJSON(`/generate/${encodeURIComponent(projectName)}`, {
+    method: 'POST',
+    body: JSON.stringify(req),
+  })
+}
+
+// ============================================================================
+// Project Config (autocoder.yaml)
+// ============================================================================
+
+export interface AutocoderYamlResponse {
+  exists: boolean
+  path: string
+  content: string
+  inferred_preset?: string | null
+  resolved_commands?: string[]
+}
+
+export async function getAutocoderYaml(projectName: string): Promise<AutocoderYamlResponse> {
+  return fetchJSON(`/projects/${encodeURIComponent(projectName)}/config/autocoder`)
+}
+
+export async function updateAutocoderYaml(
+  projectName: string,
+  content: string
+): Promise<AutocoderYamlResponse> {
+  return fetchJSON(`/projects/${encodeURIComponent(projectName)}/config/autocoder`, {
+    method: 'PUT',
+    body: JSON.stringify({ content }),
+  })
+}
+
+// ============================================================================
 // Spec Creation API
 // ============================================================================
 

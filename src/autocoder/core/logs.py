@@ -133,3 +133,113 @@ def prune_worker_logs_from_env(project_dir: Path, *, dry_run: bool = False) -> P
         dry_run=dry_run,
     )
 
+
+def prune_gatekeeper_artifacts(
+    project_dir: Path,
+    *,
+    keep_days: int = 14,
+    keep_files: int = 500,
+    max_total_mb: int = 200,
+    dry_run: bool = False,
+) -> PruneResult:
+    """
+    Prune Gatekeeper artifact JSON files under `.autocoder/**/gatekeeper/*.json`.
+
+    Strategy matches `prune_worker_logs`: age → keep_files → max_total_mb (oldest first).
+    """
+    root = (project_dir / ".autocoder").resolve()
+    if not root.exists():
+        return PruneResult(deleted_files=0, deleted_bytes=0, kept_files=0, kept_bytes=0)
+
+    keep_days = max(0, keep_days)
+    keep_files = max(0, keep_files)
+    max_total_bytes = max(0, max_total_mb) * 1024 * 1024
+
+    now = time.time()
+    cutoff = now - (keep_days * 86400)
+
+    candidates: list[tuple[Path, float, int]] = []
+    for p in root.glob("gatekeeper/*.json"):
+        try:
+            st = p.stat()
+        except OSError:
+            continue
+        candidates.append((p, st.st_mtime, int(st.st_size)))
+
+    for p in root.glob("features/*/gatekeeper/*.json"):
+        try:
+            st = p.stat()
+        except OSError:
+            continue
+        candidates.append((p, st.st_mtime, int(st.st_size)))
+
+    candidates.sort(key=lambda x: x[1])  # oldest first
+
+    deleted_files = 0
+    deleted_bytes = 0
+
+    def delete_path(path: Path, size: int) -> None:
+        nonlocal deleted_files, deleted_bytes
+        if dry_run:
+            deleted_files += 1
+            deleted_bytes += size
+            return
+        try:
+            path.unlink()
+        except OSError:
+            return
+        deleted_files += 1
+        deleted_bytes += size
+
+    remaining: list[tuple[Path, float, int]] = []
+    for p, mtime, size in candidates:
+        if keep_days and mtime < cutoff:
+            delete_path(p, size)
+        else:
+            remaining.append((p, mtime, size))
+
+    if keep_files >= 0 and len(remaining) > keep_files:
+        to_delete = remaining[: len(remaining) - keep_files]
+        to_keep = remaining[len(remaining) - keep_files :]
+        for p, _, size in to_delete:
+            delete_path(p, size)
+        remaining = to_keep
+
+    total = sum(size for _, _, size in remaining)
+    if max_total_bytes > 0 and total > max_total_bytes:
+        for p, _, size in list(remaining):
+            if total <= max_total_bytes:
+                break
+            delete_path(p, size)
+            total -= size
+            remaining = [t for t in remaining if t[0] != p]
+
+    kept_files = len(remaining)
+    kept_bytes = sum(size for _, _, size in remaining)
+    return PruneResult(
+        deleted_files=deleted_files,
+        deleted_bytes=deleted_bytes,
+        kept_files=kept_files,
+        kept_bytes=kept_bytes,
+    )
+
+
+def prune_gatekeeper_artifacts_from_env(project_dir: Path, *, dry_run: bool = False) -> PruneResult:
+    """
+    Prune Gatekeeper artifacts using env configuration.
+
+    Env vars (fall back to the logs knobs if unset):
+    - AUTOCODER_ARTIFACTS_KEEP_DAYS (default: AUTOCODER_LOGS_KEEP_DAYS or 14)
+    - AUTOCODER_ARTIFACTS_KEEP_FILES (default: AUTOCODER_LOGS_KEEP_FILES or 500)
+    - AUTOCODER_ARTIFACTS_MAX_TOTAL_MB (default: AUTOCODER_LOGS_MAX_TOTAL_MB or 200)
+    """
+    keep_days = _env_int("AUTOCODER_ARTIFACTS_KEEP_DAYS", _env_int("AUTOCODER_LOGS_KEEP_DAYS", 14))
+    keep_files = _env_int("AUTOCODER_ARTIFACTS_KEEP_FILES", _env_int("AUTOCODER_LOGS_KEEP_FILES", 500))
+    max_mb = _env_int("AUTOCODER_ARTIFACTS_MAX_TOTAL_MB", _env_int("AUTOCODER_LOGS_MAX_TOTAL_MB", 200))
+    return prune_gatekeeper_artifacts(
+        project_dir,
+        keep_days=keep_days,
+        keep_files=keep_files,
+        max_total_mb=max_mb,
+        dry_run=dry_run,
+    )

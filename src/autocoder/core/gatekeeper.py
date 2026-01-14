@@ -20,6 +20,9 @@ import os
 import subprocess
 import logging
 import contextlib
+import json
+import shutil
+import sys
 from pathlib import Path
 from typing import Dict, Any, Optional
 from datetime import datetime
@@ -27,6 +30,9 @@ from datetime import datetime
 # Direct imports (system code = fast!)
 from .test_framework_detector import TestFrameworkDetector
 from .worktree_manager import WorktreeManager
+from .project_config import load_project_config, infer_preset, synthesize_commands_from_preset
+from autocoder.reviewers.base import ReviewConfig
+from autocoder.reviewers.factory import get_reviewer
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +44,68 @@ class Gatekeeper:
     Only the Gatekeeper can write to the main branch. This ensures
     quality and prevents broken code from being merged.
     """
+
+    @staticmethod
+    def _is_yolo_mode() -> bool:
+        raw = str(os.environ.get("AUTOCODER_YOLO_MODE", "")).strip().lower()
+        return raw not in {"", "0", "false", "no", "off"}
+
+    @staticmethod
+    def _apply_allow_no_tests(test_results: Dict[str, Any], *, allow_no_tests: bool) -> Dict[str, Any]:
+        """
+        YOLO-only escape hatch when a project has no test command/script.
+
+        This is intentionally conservative: it only flips to pass when we can clearly
+        detect a "no tests" situation.
+        """
+        if not allow_no_tests or not Gatekeeper._is_yolo_mode():
+            return test_results
+
+        out = dict(test_results)
+        if not out.get("success", False):
+            return out
+        if out.get("passed", False):
+            return out
+
+        exit_code = out.get("exit_code")
+        cmd = str(out.get("command", "")).lower()
+        combined = (str(out.get("output", "")) + str(out.get("errors", ""))).lower()
+
+        # npm: Missing script: "test"
+        if "npm" in cmd and "missing script" in combined and "\"test\"" in combined:
+            out["passed"] = True
+            out["note"] = "No test script detected; allowed by configuration (YOLO mode)"
+            return out
+
+        # Pytest exit code 5: no tests collected
+        if ("pytest" in cmd and exit_code == 5) or ("collected 0 items" in combined):
+            out["passed"] = True
+            out["note"] = "No tests collected; allowed by configuration (YOLO mode)"
+            return out
+
+        # Generic "no test framework detected" (from detector path)
+        if "no test framework detected" in str(out.get("error", "")).lower():
+            out["passed"] = True
+            out["note"] = "No tests detected; allowed by configuration (YOLO mode)"
+            return out
+
+        return out
+
+    @staticmethod
+    def _select_node_install_command(project_dir: Path) -> str | None:
+        project_dir = Path(project_dir)
+        if not (project_dir / "package.json").exists():
+            return None
+
+        if (project_dir / "pnpm-lock.yaml").exists() and shutil.which("pnpm"):
+            return "pnpm install --frozen-lockfile"
+        if (project_dir / "yarn.lock").exists() and shutil.which("yarn"):
+            return "yarn install --frozen-lockfile"
+        if (project_dir / "package-lock.json").exists() and shutil.which("npm"):
+            return "npm ci"
+        if shutil.which("npm"):
+            return "npm install"
+        return None
 
     def __init__(self, project_dir: str):
         """
@@ -58,6 +126,7 @@ class Gatekeeper:
         worktree_path: Optional[str] = None,
         agent_id: Optional[str] = None,
         *,
+        feature_id: int | None = None,
         main_branch: Optional[str] = None,
         fetch_remote: bool = False,
         push_remote: bool = False,
@@ -97,13 +166,12 @@ class Gatekeeper:
         """
         logger.info(f"🛡️ Gatekeeper: Verifying branch '{branch_name}'...")
 
-        # Import for temp worktree management
-        import shutil
-
         temp_worktree_path = None
         verify_branch = None
         approved = False
         test_results: Dict[str, Any] | None = None
+        verification: Dict[str, Any] = {}
+        review: Dict[str, Any] | None = None
 
         def detect_main_branch() -> str:
             if main_branch:
@@ -147,23 +215,130 @@ class Gatekeeper:
             except subprocess.CalledProcessError:
                 return False
 
-        try:
-            detected_main = detect_main_branch()
-            has_origin = origin_exists()
-
-            # Refuse to operate if main working tree is dirty (we need to checkout/ff main).
-            dirty = subprocess.run(
+        def _git_porcelain() -> list[str]:
+            raw = subprocess.run(
                 ["git", "status", "--porcelain"],
                 cwd=self.project_dir,
                 capture_output=True,
                 text=True,
-            ).stdout.strip()
-            if dirty:
+            ).stdout
+            lines = [ln for ln in raw.splitlines() if ln.strip()]
+            return lines
+
+        def _split_dirty(lines: list[str]) -> tuple[list[str], list[str]]:
+            # Ignore runtime/build artifacts that the orchestrator/UI creates in the main tree.
+            ignore_substrings = [
+                ".autocoder/",
+                "worktrees/",
+                "agent_system.db",
+                ".eslintrc.json",
+            ]
+            ignored: list[str] = []
+            remaining: list[str] = []
+            for ln in lines:
+                target = ln.replace("\\", "/")
+                if any(s in target for s in ignore_substrings):
+                    ignored.append(ln)
+                else:
+                    remaining.append(ln)
+            return ignored, remaining
+
+        def _write_artifact(result: Dict[str, Any]) -> None:
+            try:
+                if feature_id is not None:
+                    out_dir = self.project_dir / ".autocoder" / "features" / str(int(feature_id)) / "gatekeeper"
+                else:
+                    out_dir = self.project_dir / ".autocoder" / "gatekeeper"
+                out_dir.mkdir(parents=True, exist_ok=True)
+                stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+                path = out_dir / f"{stamp}.json"
+                path.write_text(json.dumps(result, indent=2, sort_keys=True), encoding="utf-8")
+                result.setdefault("artifact_path", str(path))
+            except Exception:
+                return
+
+        def _expand_placeholders(command: str, project_dir: Path) -> str:
+            py = sys.executable.replace("\\", "/")
+            if os.name == "nt":
+                venv_py = (project_dir / ".venv" / "Scripts" / "python.exe").resolve()
+            else:
+                venv_py = (project_dir / ".venv" / "bin" / "python").resolve()
+            venv_py_s = str(venv_py).replace("\\", "/")
+            return command.replace("{PY}", py).replace("{VENV_PY}", venv_py_s)
+
+        def _review_config_from_project(cfg: Any) -> ReviewConfig:
+            # cfg is a ResolvedProjectConfig; keep conversion robust in case of missing fields.
+            r = getattr(cfg, "review", None)
+            return ReviewConfig(
+                enabled=bool(getattr(r, "enabled", False)),
+                mode=str(getattr(r, "mode", "off") or "off").strip().lower(),  # type: ignore[arg-type]
+                reviewer_type=str(getattr(r, "reviewer_type", "none") or "none").strip().lower(),  # type: ignore[arg-type]
+                command=getattr(r, "command", None),
+                timeout_s=getattr(r, "timeout_s", None),
+                model=getattr(r, "model", None),
+                review_agents=getattr(r, "agents", None),
+                consensus=getattr(r, "consensus", None),
+                codex_model=getattr(r, "codex_model", None),
+                codex_reasoning_effort=getattr(r, "codex_reasoning_effort", None),
+                gemini_model=getattr(r, "gemini_model", None),
+            )
+
+        def _run_shell(command: str, *, cwd: Path, timeout_s: int | None = None) -> Dict[str, Any]:
+            try:
+                cmd = _expand_placeholders(command, cwd)
+                result = subprocess.run(
+                    cmd,
+                    shell=True,
+                    cwd=str(cwd),
+                    capture_output=True,
+                    text=True,
+                    timeout=int(timeout_s) if timeout_s else None,
+                )
+                return {
+                    "success": True,
+                    "passed": result.returncode == 0,
+                    "exit_code": result.returncode,
+                    "command": cmd,
+                    "output": result.stdout or "",
+                    "errors": result.stderr or "",
+                }
+            except subprocess.TimeoutExpired:
+                return {
+                    "success": False,
+                    "passed": False,
+                    "exit_code": None,
+                    "command": command,
+                    "output": "",
+                    "errors": f"Timed out after {timeout_s} seconds",
+                    "timeout": True,
+                }
+            except Exception as e:
+                return {
+                    "success": False,
+                    "passed": False,
+                    "exit_code": None,
+                    "command": command,
+                    "output": "",
+                    "errors": str(e),
+                }
+
+        try:
+            detected_main = detect_main_branch()
+            has_origin = origin_exists()
+
+            porcelain = _git_porcelain()
+            ignored_dirty, remaining_dirty = _split_dirty(porcelain)
+            can_update_ref_without_checkout = bool(ignored_dirty) and not remaining_dirty
+            if remaining_dirty:
                 return {
                     "approved": False,
-                    "reason": "Main working tree is dirty; refusing to merge",
-                    "details": dirty,
+                    "reason": "Main working tree has uncommitted changes; refusing to merge",
+                    "details": "\n".join(remaining_dirty),
                 }
+            if ignored_dirty:
+                logger.warning(
+                    "Main working tree has uncommitted runtime/artifact changes; proceeding anyway because Gatekeeper updates refs without checking out main."
+                )
 
             if fetch_remote and has_origin:
                 try:
@@ -233,42 +408,146 @@ class Gatekeeper:
                 }
 
             # Step 4: Run tests IN TEMP WORKTREE
-            logger.info("🧪 Running tests in temporary worktree...")
-            test_results = self._run_tests_in_directory(str(temp_worktree_path))
+            logger.info("🧪 Running verification in temporary worktree...")
+            temp_path = Path(str(temp_worktree_path))
+            cfg = load_project_config(temp_path)
+            if cfg.preset is None and not cfg.commands:
+                preset = infer_preset(temp_path)
+                if preset:
+                    # When no autocoder.yaml exists, synthesize minimal commands from preset.
+                    cmds = synthesize_commands_from_preset(preset, temp_path)
+                    cfg = type(cfg)(preset=preset, commands=cmds, review=cfg.review)
 
-            if not test_results["success"]:
-                # Optionally allow merges when no tests are detected (configurable).
-                if allow_no_tests and "No test framework detected" in str(test_results.get("error", "")):
-                    test_results["passed"] = True
-                    test_results["note"] = "No tests detected; allowed by configuration"
-                else:
-                    return {
+            command_specs = cfg.commands or {}
+            if command_specs:
+                setup = command_specs.get("setup")
+                if setup and setup.command:
+                    setup_cmd = setup.command
+                    if setup_cmd.strip() == "npm install":
+                        selected = Gatekeeper._select_node_install_command(temp_path)
+                        if selected:
+                            setup_cmd = selected
+                    verification["setup"] = _run_shell(setup_cmd, cwd=temp_path, timeout_s=setup.timeout_s)
+                    verification["setup"]["allow_fail"] = bool(getattr(setup, "allow_fail", False))
+                    if not verification["setup"]["passed"] and not verification["setup"]["allow_fail"]:
+                        result = {
+                            "approved": False,
+                            "reason": "Setup failed",
+                            "verification": verification,
+                            "timestamp": datetime.now().isoformat(),
+                        }
+                        _write_artifact(result)
+                        return result
+
+                # Run remaining commands; ensure "test" runs early.
+                ordered = ["test", "lint", "typecheck", "format", "build"]
+                seen = set(["setup"])
+                for name in ordered + sorted(k for k in command_specs.keys() if k not in ordered):
+                    if name in seen:
+                        continue
+                    spec = command_specs.get(name)
+                    if not spec or not getattr(spec, "command", None):
+                        continue
+                    seen.add(name)
+                    verification[name] = _run_shell(spec.command, cwd=temp_path, timeout_s=spec.timeout_s)
+                    verification[name]["allow_fail"] = bool(getattr(spec, "allow_fail", False))
+                    if name == "test":
+                        verification[name] = Gatekeeper._apply_allow_no_tests(
+                            verification[name], allow_no_tests=allow_no_tests
+                        )
+                    if not verification[name]["success"] and not verification[name]["allow_fail"]:
+                        result = {
+                            "approved": False,
+                            "reason": f"Verification command failed: {name}",
+                            "verification": verification,
+                            "timestamp": datetime.now().isoformat(),
+                        }
+                        _write_artifact(result)
+                        return result
+                    if not verification[name]["passed"] and not verification[name]["allow_fail"]:
+                        result = {
+                            "approved": False,
+                            "reason": f"Verification command failed: {name}",
+                            "verification": verification,
+                            "timestamp": datetime.now().isoformat(),
+                        }
+                        _write_artifact(result)
+                        return result
+
+                test_results = verification.get("test")
+            else:
+                test_results = self._run_tests_in_directory(str(temp_worktree_path))
+                test_results = Gatekeeper._apply_allow_no_tests(test_results, allow_no_tests=allow_no_tests)
+                verification["test"] = test_results
+                if not test_results.get("success", False):
+                    result = {
                         "approved": False,
                         "reason": "Test execution failed",
                         "test_results": test_results,
+                        "verification": verification,
+                        "timestamp": datetime.now().isoformat(),
                     }
-
-            if not test_results["passed"]:
-                if allow_no_tests:
-                    exit_code = test_results.get("exit_code")
-                    command = str(test_results.get("command", "")).lower()
-                    combined = (
-                        str(test_results.get("output", "")) + str(test_results.get("errors", ""))
-                    ).lower()
-                    # Pytest exit code 5 commonly means "no tests collected".
-                    if ("pytest" in command and exit_code == 5) or ("collected 0 items" in combined):
-                        test_results["passed"] = True
-                        test_results["note"] = "No tests collected; allowed by configuration"
-
-                if not test_results["passed"]:
-                    logger.error(f"✗ Tests failed:\n{test_results.get('errors', '')}")
-                    return {
+                    _write_artifact(result)
+                    return result
+                if not test_results.get("passed", False):
+                    result = {
                         "approved": False,
                         "reason": "Tests failed - fix and resubmit",
                         "test_results": test_results,
+                        "verification": verification,
+                        "timestamp": datetime.now().isoformat(),
+                    }
+                    _write_artifact(result)
+                    return result
+
+            # Optional review gate (Codex/Gemini/command/Claude) on the staged diff.
+            review_cfg = _review_config_from_project(cfg)
+            reviewer = get_reviewer(review_cfg)
+            if reviewer is not None:
+                try:
+                    rr = reviewer.review(
+                        workdir=str(temp_path),
+                        base_branch=detected_main,
+                        feature_branch=branch_name,
+                        agent_id=agent_id,
+                    )
+                    review = {
+                        "approved": bool(rr.approved),
+                        "skipped": bool(rr.skipped),
+                        "reason": rr.reason,
+                        "findings": [
+                            {"severity": f.severity, "message": f.message, "file": f.file} for f in (rr.findings or [])
+                        ],
+                        "stdout": rr.stdout,
+                        "stderr": rr.stderr,
+                        "mode": review_cfg.mode,
+                        "type": review_cfg.reviewer_type,
+                    }
+                except Exception as e:
+                    review = {
+                        "approved": False,
+                        "skipped": False,
+                        "reason": f"Reviewer error: {e}",
+                        "findings": [],
+                        "stdout": "",
+                        "stderr": "",
+                        "mode": review_cfg.mode,
+                        "type": review_cfg.reviewer_type,
                     }
 
-            logger.info("✓ All tests passed!")
+                if review_cfg.mode == "gate" and review and not review.get("approved") and not review.get("skipped"):
+                    result = {
+                        "approved": False,
+                        "reason": "Review failed",
+                        "verification": verification,
+                        "test_results": test_results,
+                        "review": review,
+                        "timestamp": datetime.now().isoformat(),
+                    }
+                    _write_artifact(result)
+                    return result
+
+            logger.info("✓ Verification passed!")
 
             # Step 5: Commit the merge IN TEMP WORKTREE
             try:
@@ -296,37 +575,48 @@ class Gatekeeper:
                 text=True,
             ).stdout.strip()
 
-            # Step 6: Fast-forward local main to verified merge commit.
-            original_ref = subprocess.run(
+            # Step 6: Update main to verified merge commit.
+            current_branch = subprocess.run(
                 ["git", "rev-parse", "--abbrev-ref", "HEAD"],
                 cwd=self.project_dir,
                 check=True,
                 capture_output=True,
                 text=True,
             ).stdout.strip()
-            try:
+            if can_update_ref_without_checkout and current_branch not in {detected_main, "HEAD"}:
                 subprocess.run(
-                    ["git", "checkout", detected_main],
+                    ["git", "update-ref", f"refs/heads/{detected_main}", merge_commit_hash],
                     cwd=self.project_dir,
                     check=True,
                     capture_output=True,
+                    text=True,
                 )
-                subprocess.run(
-                    ["git", "merge", "--ff-only", merge_commit_hash],
-                    cwd=self.project_dir,
-                    check=True,
-                    capture_output=True,
-                )
-            finally:
-                # Restore original branch (best-effort).
-                with contextlib.suppress(Exception):
-                    if original_ref and original_ref != detected_main:
-                        subprocess.run(
-                            ["git", "checkout", original_ref],
-                            cwd=self.project_dir,
-                            check=True,
-                            capture_output=True,
-                        )
+            else:
+                # Fast-forward local main to verified merge commit, updating working tree.
+                original_ref = current_branch
+                try:
+                    subprocess.run(
+                        ["git", "checkout", detected_main],
+                        cwd=self.project_dir,
+                        check=True,
+                        capture_output=True,
+                    )
+                    subprocess.run(
+                        ["git", "merge", "--ff-only", merge_commit_hash],
+                        cwd=self.project_dir,
+                        check=True,
+                        capture_output=True,
+                    )
+                finally:
+                    # Restore original branch (best-effort).
+                    with contextlib.suppress(Exception):
+                        if original_ref and original_ref != detected_main:
+                            subprocess.run(
+                                ["git", "checkout", original_ref],
+                                cwd=self.project_dir,
+                                check=True,
+                                capture_output=True,
+                            )
 
             if push_remote and has_origin:
                 try:
@@ -349,13 +639,17 @@ class Gatekeeper:
             logger.info(f"✅ Gatekeeper: APPROVED '{branch_name}'")
             approved = True
 
-            return {
+            result = {
                 "approved": True,
                 "reason": "All tests passed - merged to main",
                 "test_results": test_results,
+                "verification": verification,
+                "review": review,
                 "merge_commit": merge_commit_hash,
                 "timestamp": datetime.now().isoformat()
             }
+            _write_artifact(result)
+            return result
 
         finally:
             # CRITICAL: Always cleanup temp worktree, whether pass or fail!

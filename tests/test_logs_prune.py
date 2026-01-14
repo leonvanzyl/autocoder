@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from autocoder.core.logs import prune_worker_logs
+from autocoder.core.logs import prune_worker_logs, prune_gatekeeper_artifacts
 
 
 def test_prune_worker_logs_keeps_newest(tmp_path):
@@ -32,3 +32,24 @@ def test_prune_worker_logs_keeps_newest(tmp_path):
     assert remaining[0].name == "a3.log"
     assert remaining[1].name == "a4.log"
 
+
+def test_prune_gatekeeper_artifacts_keeps_newest(tmp_path: Path):
+    root = tmp_path / ".autocoder"
+    (root / "gatekeeper").mkdir(parents=True)
+    (root / "features" / "1" / "gatekeeper").mkdir(parents=True)
+
+    p1 = root / "gatekeeper" / "a.json"
+    p2 = root / "features" / "1" / "gatekeeper" / "b.json"
+    p1.write_text("{}", encoding="utf-8")
+    p2.write_text("{\"x\":1}", encoding="utf-8")
+
+    import os
+
+    os.utime(p1, (1000000000, 1000000000))
+    os.utime(p2, (1000000001, 1000000001))
+
+    result = prune_gatekeeper_artifacts(tmp_path, keep_days=9999, keep_files=1, max_total_mb=200)
+    assert result.deleted_files == 1
+    assert result.kept_files == 1
+    assert p1.exists() is False
+    assert p2.exists() is True

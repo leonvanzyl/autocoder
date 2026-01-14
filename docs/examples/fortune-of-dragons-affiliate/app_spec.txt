@@ -1,0 +1,59 @@
+<project_specification>
+Project: Single-game casino affiliate site
+Name: Fortune of Dragons Review Hub
+
+Goal
+- Build a fast, SEO-focused website that reviews ONE slot game (“Fortune of Dragons”) and promotes it across multiple casinos.
+- Homepage is the full game review page (not a generic landing page).
+
+Audience
+- Search users looking for “Fortune of Dragons review”, RTP/volatility, best casinos to play it, bonus terms, and strategy tips.
+
+Core Pages
+1) Home (Game Review)
+- Comprehensive review: gameplay overview, RTP, volatility, max win, paylines, bonus features, themes, pros/cons.
+- “Where to Play” casino table (sortable): bonus, min deposit, allowed countries, payment methods, rating, affiliate link.
+- FAQ section (with FAQ schema) and “How to play” steps.
+- Add JSON‑LD structured data for: Review + FAQ + Breadcrumb.
+
+2) Casinos
+- /casinos lists all casinos that offer the game.
+- /casinos/[casino-slug] is a casino review page (bonus terms, trust, KYC, payments, pros/cons, steps to play the game there).
+
+3) Blog (SEO Content)
+- /blog list with pagination + category/tag filtering.
+- /blog/[slug] article pages.
+- At least 5 starter articles focused on this game + casinos + responsible gambling + bonuses.
+- Include internal-linking blocks (“Related guides”) and an author box.
+
+4) SEO Tools (internal utilities)
+- /tools/meta-generator: generates title/description/OG/Twitter cards for a given page/topic.
+- /tools/schema-generator: generates JSON‑LD for Review / FAQ / Breadcrumb using form inputs.
+- /tools/serp-preview: live SERP snippet preview for title/description.
+- Tools must run locally (no external APIs required).
+
+SEO Requirements
+- Clean URLs, canonical tags, robots meta, and sitemap.xml + robots.txt.
+- OpenGraph + Twitter cards on all pages.
+- Strong internal linking between game review, casinos, and blog.
+- Performance: prioritize Core Web Vitals (avoid heavy client JS where possible).
+
+Data Model (local, simple)
+- Store casino and game data in local JSON/TS modules (no database required).
+- Casino fields: name, slug, rating, bonus_text, bonus_terms_url, min_deposit, countries_allowed, payments, affiliate_url.
+
+Compliance / Safety
+- Prominent Responsible Gambling disclaimer in footer + dedicated /responsible-gambling page.
+- “18+” indicator and clear affiliate disclosure.
+
+Tech Preferences (suggested, but flexible)
+- TypeScript + a modern SSR/SSG framework (e.g., Next.js) OR a lightweight SSG (e.g., Astro).
+- Minimal dependencies; include lint + typecheck; add at least one smoke test if feasible.
+
+Definition of Done
+- Site runs locally with a single command and renders all core pages.
+- SEO metadata and JSON‑LD present on relevant pages.
+- Casino table and blog content render correctly.
+- Tools pages work and produce copy/paste output.
+</project_specification>
+

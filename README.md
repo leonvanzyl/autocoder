@@ -133,7 +133,21 @@ When running multiple agents (or multiple Claude Agent SDK sessions), feature se
 
 In parallel mode, workers should not self-attest `passes=true`. Instead, `feature_mark_passing` submits the feature for Gatekeeper verification, and the orchestrator sets `passes=true` only after deterministic verification and merge.
 
-By default, Gatekeeper rejects features if no test framework is detected (or no tests run). Override with `AUTOCODER_ALLOW_NO_TESTS=1` if you want “merge without tests” for a project.
+By default, Gatekeeper rejects features when it cannot run a deterministic verification command (or when verification fails). For Node projects without a `test` script, Gatekeeper falls back to other available scripts like `build`/`typecheck`/`lint` when present. Override with `AUTOCODER_ALLOW_NO_TESTS=1` only if you explicitly want “merge without tests” for a project (YOLO-only).
+
+### Project Config (`autocoder.yaml`)
+
+For framework-agnostic verification, put an `autocoder.yaml` in the **target project** root to tell Gatekeeper exactly what to run:
+
+- `commands.setup` (optional): install deps / build
+- `commands.test` (required for non-YOLO merges)
+- `commands.lint`, `commands.typecheck`, etc. (optional; can be `allow_fail: true`)
+
+This is preferred over auto-detection for non-Python stacks and monorepos.
+
+Optional multi-model workflows (Codex/Gemini via local CLIs):
+- Review in Gatekeeper: `docs/multi_model_review.md`
+- Spec/plan drafting: `docs/multi_model_generate.md`
 
 ### Agent Guardrails
 
@@ -154,9 +168,11 @@ Logs are pruned automatically (defaults: keep 7 days, 200 files, 200MB total). O
 - `AUTOCODER_LOGS_KEEP_FILES`
 - `AUTOCODER_LOGS_MAX_TOTAL_MB`
 
+Gatekeeper writes verification artifacts under `.autocoder/**/gatekeeper/*.json`. To prune those periodically, set `AUTOCODER_LOGS_PRUNE_ARTIFACTS=1` (uses the same retention knobs by default, or set `AUTOCODER_ARTIFACTS_KEEP_*` separately).
+
 You can also prune manually:
 
-`autocoder logs --project-dir <path> --prune [--dry-run]`
+`autocoder logs --project-dir <path> --prune [--dry-run] [--include-artifacts]`
 
 In the Web UI, use **Logs** (press `L`) to view/tail, prune, or delete worker log files.
 
@@ -170,6 +186,15 @@ Transient Claude SDK errors (rate limits, timeouts, connection blips) use expone
 - `AUTOCODER_SDK_MAX_DELAY_S` (default `60`)
 - `AUTOCODER_SDK_EXPONENTIAL_BASE` (default `2`)
 - `AUTOCODER_SDK_JITTER` (default `true`)
+
+### QA Fix Mode (optional)
+
+When enabled, parallel workers will automatically switch to a “fix the last failure” prompt after a Gatekeeper rejection (using `features.last_error` / `features.last_artifact_path`).
+
+- Enable: `AUTOCODER_QA_FIX_ENABLED=1`
+- Limit: `AUTOCODER_QA_MAX_SESSIONS` (default `3`)
+
+In the Web UI: Settings → **Advanced → Automation → QA auto-fix**.
 
 ### UI Server Lock
 

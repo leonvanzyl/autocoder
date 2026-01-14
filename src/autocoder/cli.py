@@ -52,7 +52,7 @@ from autocoder.agent import (
 from autocoder.core import Orchestrator
 from autocoder.server import start_server
 from autocoder.core.port_config import get_ui_port
-from autocoder.core.logs import prune_worker_logs
+from autocoder.core.logs import prune_worker_logs, prune_gatekeeper_artifacts
 
 
 # Default configuration
@@ -668,6 +668,11 @@ Examples:
         help="Project directory containing .autocoder/logs/",
     )
     logs_parser.add_argument("--prune", action="store_true", help="Prune .autocoder/logs/*.log")
+    logs_parser.add_argument(
+        "--include-artifacts",
+        action="store_true",
+        help="Also prune Gatekeeper artifacts under .autocoder/**/gatekeeper/*.json",
+    )
     logs_parser.add_argument("--dry-run", action="store_true", help="Show what would be deleted")
     logs_parser.add_argument("--keep-days", type=int, default=7)
     logs_parser.add_argument("--keep-files", type=int, default=200)
@@ -683,17 +688,29 @@ Examples:
     elif args.mode == "logs":
         project_dir = resolve_project_dir(args.project_dir)
         if args.prune:
-            result = prune_worker_logs(
+            logs_result = prune_worker_logs(
                 project_dir,
                 keep_days=args.keep_days,
                 keep_files=args.keep_files,
                 max_total_mb=args.max_mb,
                 dry_run=args.dry_run,
             )
+            artifacts_result = None
+            if args.include_artifacts:
+                artifacts_result = prune_gatekeeper_artifacts(
+                    project_dir,
+                    keep_days=args.keep_days,
+                    keep_files=args.keep_files,
+                    max_total_mb=args.max_mb,
+                    dry_run=args.dry_run,
+                )
             verb = "Would delete" if args.dry_run else "Deleted"
+            deleted_files = logs_result.deleted_files + (artifacts_result.deleted_files if artifacts_result else 0)
+            deleted_bytes = logs_result.deleted_bytes + (artifacts_result.deleted_bytes if artifacts_result else 0)
+            kept_files = logs_result.kept_files + (artifacts_result.kept_files if artifacts_result else 0)
             print(
-                f"{verb} {result.deleted_files} log file(s) "
-                f"({result.deleted_bytes} bytes); kept {result.kept_files} file(s)."
+                f"{verb} {deleted_files} file(s) "
+                f"({deleted_bytes} bytes); kept {kept_files} file(s)."
             )
         else:
             print("No action specified. Try: autocoder logs --project-dir <path> --prune")

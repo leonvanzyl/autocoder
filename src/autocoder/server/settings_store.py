@@ -27,6 +27,33 @@ def _settings_path() -> Path:
 
 @dataclass
 class AdvancedSettings:
+    # Review (optional)
+    review_enabled: bool = False
+    review_mode: str = "off"  # off|advisory|gate
+    review_type: str = "none"  # none|command|claude|multi_cli
+    review_command: str = ""
+    review_timeout_s: int = 0
+    review_model: str = ""
+    review_agents: str = ""
+    review_consensus: str = ""
+    codex_model: str = ""
+    codex_reasoning_effort: str = ""
+    gemini_model: str = ""
+
+    # File locks / coordination
+    locks_enabled: bool = False
+
+    # Worker behavior
+    worker_verify: bool = True
+
+    # QA/controller sub-agents (optional)
+    qa_fix_enabled: bool = False
+    qa_model: str = ""
+    qa_max_sessions: int = 0
+    controller_enabled: bool = False
+    controller_model: str = ""
+    controller_max_sessions: int = 0
+
     # Log retention defaults (used by orchestrator periodic pruning)
     logs_keep_days: int = 7
     logs_keep_files: int = 200
@@ -53,6 +80,25 @@ class AdvancedSettings:
 
     def to_env(self) -> dict[str, str]:
         return {
+            "AUTOCODER_REVIEW_ENABLED": "1" if self.review_enabled else "0",
+            "AUTOCODER_REVIEW_MODE": str(self.review_mode or "off"),
+            "AUTOCODER_REVIEW_TYPE": str(self.review_type or "none"),
+            "AUTOCODER_REVIEW_COMMAND": str(self.review_command or ""),
+            "AUTOCODER_REVIEW_TIMEOUT_S": str(int(self.review_timeout_s or 0)),
+            "AUTOCODER_REVIEW_MODEL": str(self.review_model or ""),
+            "AUTOCODER_REVIEW_AGENTS": str(self.review_agents or ""),
+            "AUTOCODER_REVIEW_CONSENSUS": str(self.review_consensus or ""),
+            "AUTOCODER_CODEX_MODEL": str(self.codex_model or ""),
+            "AUTOCODER_CODEX_REASONING_EFFORT": str(self.codex_reasoning_effort or ""),
+            "AUTOCODER_GEMINI_MODEL": str(self.gemini_model or ""),
+            "AUTOCODER_LOCKS_ENABLED": "1" if self.locks_enabled else "0",
+            "AUTOCODER_WORKER_VERIFY": "1" if self.worker_verify else "0",
+            "AUTOCODER_QA_FIX_ENABLED": "1" if self.qa_fix_enabled else "0",
+            "AUTOCODER_QA_MODEL": str(self.qa_model or ""),
+            "AUTOCODER_QA_MAX_SESSIONS": str(int(self.qa_max_sessions or 0)),
+            "AUTOCODER_CONTROLLER_ENABLED": "1" if self.controller_enabled else "0",
+            "AUTOCODER_CONTROLLER_MODEL": str(self.controller_model or ""),
+            "AUTOCODER_CONTROLLER_MAX_SESSIONS": str(int(self.controller_max_sessions or 0)),
             "AUTOCODER_LOGS_KEEP_DAYS": str(self.logs_keep_days),
             "AUTOCODER_LOGS_KEEP_FILES": str(self.logs_keep_files),
             "AUTOCODER_LOGS_MAX_TOTAL_MB": str(self.logs_max_total_mb),

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { X, CheckCircle2, Circle, SkipForward, Trash2, Loader2, AlertCircle } from 'lucide-react'
 import { useSkipFeature, useDeleteFeature } from '../hooks/useProjects'
 import type { Feature } from '../lib/types'
@@ -12,6 +12,10 @@ interface FeatureModalProps {
 export function FeatureModal({ feature, projectName, onClose }: FeatureModalProps) {
   const [error, setError] = useState<string | null>(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+
+  const status = useMemo(() => (feature.status ?? (feature.in_progress ? 'IN_PROGRESS' : feature.passes ? 'DONE' : 'PENDING')).toUpperCase(), [feature])
+  const attempts = feature.attempts ?? 0
+  const dependsOn = feature.depends_on ?? []
 
   const skipFeature = useSkipFeature(projectName)
   const deleteFeature = useDeleteFeature(projectName)
@@ -78,7 +82,21 @@ export function FeatureModal({ feature, projectName, onClose }: FeatureModalProp
 
           {/* Status */}
           <div className="flex items-center gap-3 p-4 bg-[var(--color-neo-bg)] border-3 border-[var(--color-neo-border)]">
-            {feature.passes ? (
+            {status === 'BLOCKED' ? (
+              <>
+                <AlertCircle size={24} className="text-[var(--color-neo-danger)]" />
+                <span className="font-display font-bold text-[var(--color-neo-danger)]">
+                  BLOCKED
+                </span>
+              </>
+            ) : feature.in_progress ? (
+              <>
+                <Loader2 size={24} className="animate-spin text-[var(--color-neo-progress)]" />
+                <span className="font-display font-bold text-[var(--color-neo-progress)]">
+                  IN PROGRESS
+                </span>
+              </>
+            ) : feature.passes ? (
               <>
                 <CheckCircle2 size={24} className="text-[var(--color-neo-done)]" />
                 <span className="font-display font-bold text-[var(--color-neo-done)]">
@@ -94,9 +112,20 @@ export function FeatureModal({ feature, projectName, onClose }: FeatureModalProp
               </>
             )}
             <span className="ml-auto font-mono text-sm">
-              Priority: #{feature.priority}
+              Priority: #{feature.priority}{attempts > 0 ? ` • Attempts: ${attempts}` : ''}
             </span>
           </div>
+
+          {dependsOn.length > 0 && (
+            <div>
+              <h3 className="font-display font-bold mb-2 uppercase text-sm">
+                Depends On
+              </h3>
+              <div className="neo-card p-3 bg-[var(--color-neo-bg)] border-3 border-[var(--color-neo-border)] font-mono text-sm">
+                {dependsOn.join(', ')}
+              </div>
+            </div>
+          )}
 
           {/* Description */}
           <div>
@@ -107,6 +136,28 @@ export function FeatureModal({ feature, projectName, onClose }: FeatureModalProp
               {feature.description}
             </p>
           </div>
+
+          {feature.last_error && String(feature.last_error).trim().length > 0 && (
+            <div>
+              <h3 className="font-display font-bold mb-2 uppercase text-sm">
+                Last Error
+              </h3>
+              <pre className="neo-card p-3 bg-[var(--color-neo-bg)] border-3 border-[var(--color-neo-border)] text-[11px] font-mono whitespace-pre-wrap overflow-auto max-h-48">
+                {feature.last_error}
+              </pre>
+            </div>
+          )}
+
+          {feature.last_artifact_path && String(feature.last_artifact_path).trim().length > 0 && (
+            <div>
+              <h3 className="font-display font-bold mb-2 uppercase text-sm">
+                Artifact
+              </h3>
+              <div className="neo-card p-3 bg-[var(--color-neo-bg)] border-3 border-[var(--color-neo-border)] font-mono text-sm break-all">
+                {feature.last_artifact_path}
+              </div>
+            </div>
+          )}
 
           {/* Steps */}
           {feature.steps.length > 0 && (

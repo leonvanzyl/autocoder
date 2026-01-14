@@ -67,8 +67,13 @@ def _feature_to_response(row: dict) -> FeatureResponse:
         name=str(row.get("name") or ""),
         description=str(row.get("description") or ""),
         steps=_parse_steps(row.get("steps")),
+        status=status or "PENDING",
         passes=bool(row.get("passes")) or status == "DONE",
         in_progress=status == "IN_PROGRESS",
+        attempts=int(row.get("attempts") or 0),
+        last_error=(str(row.get("last_error")) if row.get("last_error") is not None else None),
+        last_artifact_path=(str(row.get("last_artifact_path")) if row.get("last_artifact_path") is not None else None),
+        depends_on=[int(x) for x in (row.get("depends_on") or [])],
     )
 
 

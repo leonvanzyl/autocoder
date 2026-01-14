@@ -66,6 +66,11 @@ export interface Feature {
   steps: string[]
   passes: boolean
   in_progress: boolean
+  status?: string
+  attempts?: number
+  last_error?: string | null
+  last_artifact_path?: string | null
+  depends_on?: number[]
 }
 
 export interface FeatureListResponse {
@@ -114,6 +119,8 @@ export interface SetupStatus {
   credentials: boolean
   node: boolean
   npm: boolean
+  codex_cli?: boolean
+  gemini_cli?: boolean
 }
 
 // Worker logs (parallel agents)
@@ -140,6 +147,7 @@ export interface PruneWorkerLogsRequest {
   keep_files: number
   max_mb: number
   dry_run: boolean
+  include_artifacts?: boolean
 }
 
 export interface PruneWorkerLogsResponse {
@@ -151,6 +159,29 @@ export interface PruneWorkerLogsResponse {
 
 // Advanced settings (UI server)
 export interface AdvancedSettings {
+  review_enabled: boolean
+  review_mode: string
+  review_type: string
+  review_command: string
+  review_timeout_s: number
+  review_model: string
+  review_agents: string
+  review_consensus: string
+  codex_model: string
+  codex_reasoning_effort: string
+  gemini_model: string
+
+  locks_enabled: boolean
+  worker_verify: boolean
+
+  qa_fix_enabled: boolean
+  qa_model: string
+  qa_max_sessions: number
+
+  controller_enabled: boolean
+  controller_model: string
+  controller_max_sessions: number
+
   logs_keep_days: number
   logs_keep_files: number
   logs_max_total_mb: number

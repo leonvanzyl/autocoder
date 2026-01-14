@@ -1,0 +1,14 @@
+{
+  "sandbox": {
+    "enabled": true
+  },
+  "permissions": {
+    "defaultMode": "reject",
+    "allow": [
+      "Read(./**)",
+      "Glob(./**)",
+      "Grep(./**)"
+    ]
+  }
+}
+

@@ -15,6 +15,8 @@ from .model_settings import router as model_settings_router
 from .logs import router as logs_router
 from .parallel import router as parallel_router
 from .settings import router as settings_router
+from .generate import router as generate_router
+from .project_config import router as project_config_router
 
 __all__ = [
     "projects_router",
@@ -27,4 +29,6 @@ __all__ = [
     "logs_router",
     "parallel_router",
     "settings_router",
+    "generate_router",
+    "project_config_router",
 ]

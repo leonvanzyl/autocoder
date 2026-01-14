@@ -30,6 +30,7 @@ export function WorkerLogsPanel({ projectName }: { projectName: string }) {
   const [keepFiles, setKeepFiles] = useState(200)
   const [maxMb, setMaxMb] = useState(200)
   const [dryRun, setDryRun] = useState(true)
+  const [includeArtifacts, setIncludeArtifacts] = useState(false)
 
   const logsQuery = useWorkerLogs(projectName)
   const tailQuery = useWorkerLogTail(projectName, selected, tail)
@@ -138,6 +139,7 @@ export function WorkerLogsPanel({ projectName }: { projectName: string }) {
                   keep_files: keepFiles,
                   max_mb: maxMb,
                   dry_run: dryRun,
+                  include_artifacts: includeArtifacts,
                 })
                 logsQuery.refetch()
               }}
@@ -189,6 +191,17 @@ export function WorkerLogsPanel({ projectName }: { projectName: string }) {
                 <input type="checkbox" checked={dryRun} onChange={(e) => setDryRun(e.target.checked)} className="w-4 h-4" />
               </label>
             </div>
+            <div className="flex items-end col-span-2 md:col-span-4">
+              <label className="neo-card p-2 w-full flex items-center justify-between cursor-pointer">
+                <span className="font-display font-bold text-xs">Include Gatekeeper artifacts</span>
+                <input
+                  type="checkbox"
+                  checked={includeArtifacts}
+                  onChange={(e) => setIncludeArtifacts(e.target.checked)}
+                  className="w-4 h-4"
+                />
+              </label>
+            </div>
           </div>
 
           {prune.data && (
@@ -201,4 +214,3 @@ export function WorkerLogsPanel({ projectName }: { projectName: string }) {
     </div>
   )
 }
-

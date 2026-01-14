@@ -15,7 +15,7 @@ from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
 from claude_agent_sdk.types import HookMatcher
 
 from .security import bash_security_hook
-from .hooks import ToolUsageGuardrails
+from .hooks import ToolUsageGuardrails, FileLockGuard
 from ..core.port_config import get_api_port, get_web_port
 
 
@@ -227,6 +227,14 @@ def create_client(
         }
 
     guardrails = ToolUsageGuardrails.from_env()
+    lock_guard = FileLockGuard.from_env()
+
+    pre_tool_use_matchers = [
+        HookMatcher(hooks=[guardrails.pre_tool_use]),
+        HookMatcher(matcher="Bash", hooks=[bash_security_hook]),
+    ]
+    if lock_guard is not None:
+        pre_tool_use_matchers.insert(1, HookMatcher(matcher="Write|Edit|MultiEdit", hooks=[lock_guard.pre_tool_use]))
 
     return ClaudeSDKClient(
         options=ClaudeAgentOptions(
@@ -237,12 +245,7 @@ def create_client(
             max_buffer_size=10 * 1024 * 1024,  # 10MB for large Playwright screenshots
             allowed_tools=allowed_tools,
             mcp_servers=mcp_servers,
-            hooks={
-                "PreToolUse": [
-                    HookMatcher(hooks=[guardrails.pre_tool_use]),
-                    HookMatcher(matcher="Bash", hooks=[bash_security_hook]),
-                ],
-            },
+            hooks={"PreToolUse": pre_tool_use_matchers},
             max_turns=1000,
             cwd=str(project_dir.resolve()),
             settings=str(settings_file.resolve()),  # Use absolute path

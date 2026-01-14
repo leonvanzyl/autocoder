@@ -90,6 +90,18 @@ function App() {
         return
       }
 
+      // Esc: leave Settings page
+      if (e.key === 'Escape' && route === 'settings') {
+        e.preventDefault()
+        window.location.hash = ''
+        return
+      }
+
+      // Shortcuts below only apply on the main view
+      if (route !== 'main') {
+        return
+      }
+
       // D : Toggle debug window
       if (e.key === 'd' || e.key === 'D') {
         e.preventDefault()
@@ -140,8 +152,6 @@ function App() {
           setSelectedFeature(null)
         } else if (debugOpen) {
           setDebugOpen(false)
-        } else if (route === 'settings') {
-          window.location.hash = ''
         }
       }
     }
@@ -318,19 +328,33 @@ function App() {
       >
         {route === 'settings' ? (
           <div className="max-w-6xl mx-auto">
-            <SettingsPage
-              initialTab={
-                window.location.hash === '#/settings/advanced'
-                  ? 'advanced'
-                  : window.location.hash === '#/settings/models'
-                    ? 'models'
-                    : 'run'
-              }
-              yoloEnabled={yoloEnabled}
-              runSettings={runSettings}
-              onChangeRunSettings={(next) => setRunSettings(next)}
-              onClose={() => (window.location.hash = '')}
-            />
+            {selectedProject ? (
+              <SettingsPage
+                initialTab={
+                  window.location.hash === '#/settings/advanced'
+                    ? 'advanced'
+                    : window.location.hash === '#/settings/models'
+                      ? 'models'
+                      : window.location.hash === '#/settings/generate'
+                        ? 'generate'
+                        : window.location.hash === '#/settings/config'
+                          ? 'config'
+                        : 'run'
+                }
+                projectName={selectedProject}
+                yoloEnabled={yoloEnabled}
+                runSettings={runSettings}
+                onChangeRunSettings={(next) => setRunSettings(next)}
+                onClose={() => (window.location.hash = '')}
+              />
+            ) : (
+              <div className="neo-card p-6">
+                <div className="font-display font-bold uppercase mb-2">Select a project</div>
+                <div className="text-sm text-[var(--color-neo-text-secondary)]">
+                  Settings are project-scoped. Go back and pick a project first.
+                </div>
+              </div>
+            )}
           </div>
         ) : !selectedProject ? (
           <div className="neo-empty-state mt-12">

@@ -17,6 +17,30 @@ router = APIRouter(prefix="/api/settings", tags=["settings"])
 
 
 class AdvancedSettingsModel(BaseModel):
+    # Review (optional)
+    review_enabled: bool = False
+    review_mode: str = Field(default="off", max_length=32)
+    review_type: str = Field(default="none", max_length=64)
+    review_command: str = Field(default="", max_length=2000)
+    review_timeout_s: int = Field(default=0, ge=0, le=3600)
+    review_model: str = Field(default="", max_length=128)
+    review_agents: str = Field(default="", max_length=256)
+    review_consensus: str = Field(default="", max_length=64)
+    codex_model: str = Field(default="", max_length=128)
+    codex_reasoning_effort: str = Field(default="", max_length=64)
+    gemini_model: str = Field(default="", max_length=128)
+
+    locks_enabled: bool = False
+    worker_verify: bool = True
+
+    qa_fix_enabled: bool = False
+    qa_model: str = Field(default="", max_length=128)
+    qa_max_sessions: int = Field(default=0, ge=0, le=50)
+
+    controller_enabled: bool = False
+    controller_model: str = Field(default="", max_length=128)
+    controller_max_sessions: int = Field(default=0, ge=0, le=50)
+
     logs_keep_days: int = Field(default=7, ge=0, le=3650)
     logs_keep_files: int = Field(default=200, ge=0, le=100000)
     logs_max_total_mb: int = Field(default=200, ge=0, le=100000)

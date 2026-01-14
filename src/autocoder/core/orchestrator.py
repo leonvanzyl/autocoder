@@ -38,7 +38,7 @@ from .model_settings import ModelSettings, ModelPreset, get_full_model_id
 from .worktree_manager import WorktreeManager
 from .database import Database, get_database
 from .gatekeeper import Gatekeeper
-from .logs import prune_worker_logs_from_env
+from .logs import prune_worker_logs_from_env, prune_gatekeeper_artifacts_from_env
 
 # Agent imports (for initializer)
 from autocoder.agent import run_autonomous_agent
@@ -523,6 +523,9 @@ class Orchestrator:
 
                 # Periodic log maintenance
                 self._prune_worker_logs_if_needed()
+                # Periodic deferred cleanup (Windows file locks)
+                with contextlib.suppress(Exception):
+                    self.worktree_manager.process_cleanup_queue()
 
                 # Get count of active agents
                 active_count = stats["agents"]["active"]
@@ -783,7 +786,8 @@ class Orchestrator:
             verification = self.gatekeeper.verify_and_merge(
                 branch_name=branch_name,
                 worktree_path=worktree_path,
-                agent_id=agent_id
+                agent_id=agent_id,
+                feature_id=int(feature_id),
             )
 
             if verification["approved"]:
@@ -799,7 +803,8 @@ class Orchestrator:
                 logger.warning(f"❌ Feature rejected: {verification['reason']}")
                 self.database.mark_feature_failed(
                     feature_id=feature_id,
-                    reason=verification["reason"]
+                    reason=str(verification.get("reason") or "Gatekeeper rejected feature"),
+                    artifact_path=verification.get("artifact_path"),
                 )
                 return {
                     "success": False,
@@ -1017,6 +1022,7 @@ class Orchestrator:
                             branch_name=branch_name,
                             worktree_path=worktree_path,
                             agent_id=agent_id,
+                            feature_id=int(feature_id),
                             fetch_remote=False,
                             push_remote=False,
                             allow_no_tests=allow_no_tests,
@@ -1033,7 +1039,12 @@ class Orchestrator:
                         else:
                             reason = verification.get("reason") or "Gatekeeper rejected feature"
                             logger.warning(f"❌ Gatekeeper rejected feature #{feature_id}: {reason}")
-                            self.database.mark_feature_failed(feature_id=feature_id, reason=reason)
+                            excerpt = self._format_gatekeeper_failure_excerpt(verification)
+                            self.database.mark_feature_failed(
+                                feature_id=feature_id,
+                                reason=excerpt,
+                                artifact_path=verification.get("artifact_path"),
+                            )
                     elif assigned_agent == agent_id and not passes and review_status == "READY_FOR_VERIFICATION":
                         # READY but missing branch_name is unrecoverable; requeue.
                         logger.warning(f"Feature #{feature_id} ready for verification but missing branch_name; requeuing")
@@ -1085,8 +1096,80 @@ class Orchestrator:
                 logger.info(
                     f"Pruned worker logs: deleted_files={result.deleted_files}, deleted_bytes={result.deleted_bytes}"
                 )
+            if str(os.environ.get("AUTOCODER_LOGS_PRUNE_ARTIFACTS", "")).strip().lower() in {"1", "true", "yes", "on"}:
+                a = prune_gatekeeper_artifacts_from_env(self.project_dir)
+                if a.deleted_files:
+                    logger.info(
+                        f"Pruned gatekeeper artifacts: deleted_files={a.deleted_files}, deleted_bytes={a.deleted_bytes}"
+                    )
         except Exception as e:
             logger.warning(f"Failed to prune worker logs: {e}")
+
+    @staticmethod
+    def _format_gatekeeper_failure_excerpt(verification: dict) -> str:
+        """
+        Build a concise, actionable error excerpt for retrying agents and UI display.
+        """
+        def _first_text(obj: object, limit: int) -> str:
+            s = str(obj or "")
+            s = s.replace("\r\n", "\n").strip()
+            if len(s) <= limit:
+                return s
+            return s[:limit].rstrip() + "\n…(truncated)…"
+
+        reason = str(verification.get("reason") or "Gatekeeper rejected feature").strip()
+        artifact_path = str(verification.get("artifact_path") or "").strip()
+
+        lines: list[str] = [f"Gatekeeper rejected: {reason}"]
+        if artifact_path:
+            lines.append(f"Artifact: {artifact_path}")
+
+        # Prefer deterministic verification command failures.
+        ver = verification.get("verification")
+        if isinstance(ver, dict):
+            # Choose first failed command.
+            for name, res in ver.items():
+                if not isinstance(res, dict):
+                    continue
+                passed = bool(res.get("passed", False))
+                allow_fail = bool(res.get("allow_fail", False))
+                if passed or allow_fail:
+                    continue
+                cmd = res.get("command")
+                exit_code = res.get("exit_code")
+                out = _first_text(res.get("output", ""), 800)
+                err = _first_text(res.get("errors", ""), 800)
+                lines.append(f"Command [{name}]: {cmd}")
+                if exit_code is not None:
+                    lines.append(f"Exit code: {exit_code}")
+                if err:
+                    lines.append("Errors:\n" + err)
+                elif out:
+                    lines.append("Output:\n" + out)
+                break
+
+        # Fallback: legacy test_results shape.
+        tr = verification.get("test_results")
+        if isinstance(tr, dict) and not any("Command [" in ln for ln in lines):
+            cmd = tr.get("command")
+            exit_code = tr.get("exit_code")
+            out = _first_text(tr.get("output", ""), 800)
+            err = _first_text(tr.get("errors", ""), 800)
+            if cmd:
+                lines.append(f"Command: {cmd}")
+            if exit_code is not None:
+                lines.append(f"Exit code: {exit_code}")
+            if err:
+                lines.append("Errors:\n" + err)
+            elif out:
+                lines.append("Output:\n" + out)
+
+        # Review gate context if present.
+        rv = verification.get("review")
+        if isinstance(rv, dict) and rv.get("approved") is False:
+            lines.append(f"Review: {rv.get('reason') or 'rejected'}")
+
+        return "\n".join([ln for ln in lines if ln.strip()])[:4000]
 
     def get_status(self) -> Dict[str, Any]:
         """Get current orchestrator status."""

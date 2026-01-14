@@ -14,9 +14,12 @@ This is the single source of truth for the orchestrator.
 import sqlite3
 import json
 import logging
+import os
+import random
+import re
 from pathlib import Path
 from typing import Dict, Any, List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from contextlib import contextmanager
 import time
 
@@ -101,6 +104,11 @@ class Database:
 
                     -- Attempts
                     attempts INTEGER DEFAULT 0,
+                    last_error TEXT,
+                    next_attempt_at TIMESTAMP,
+                    last_error_key TEXT,
+                    same_error_streak INTEGER DEFAULT 0,
+                    last_artifact_path TEXT,
 
                     -- Timestamps
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -114,6 +122,41 @@ class Database:
                 logger.info("Added steps column to existing features table")
             except sqlite3.OperationalError:
                 # Column already exists (or table just created with it)
+                pass
+
+            # Migration: Add last_error column if it doesn't exist (for existing databases)
+            try:
+                cursor.execute("ALTER TABLE features ADD COLUMN last_error TEXT")
+                logger.info("Added last_error column to existing features table")
+            except sqlite3.OperationalError:
+                pass
+
+            # Migration: Add next_attempt_at column if it doesn't exist (for existing databases)
+            try:
+                cursor.execute("ALTER TABLE features ADD COLUMN next_attempt_at TIMESTAMP")
+                logger.info("Added next_attempt_at column to existing features table")
+            except sqlite3.OperationalError:
+                pass
+
+            # Migration: Add last_error_key column if it doesn't exist (for existing databases)
+            try:
+                cursor.execute("ALTER TABLE features ADD COLUMN last_error_key TEXT")
+                logger.info("Added last_error_key column to existing features table")
+            except sqlite3.OperationalError:
+                pass
+
+            # Migration: Add same_error_streak column if it doesn't exist (for existing databases)
+            try:
+                cursor.execute("ALTER TABLE features ADD COLUMN same_error_streak INTEGER")
+                logger.info("Added same_error_streak column to existing features table")
+            except sqlite3.OperationalError:
+                pass
+
+            # Migration: Add last_artifact_path column if it doesn't exist (for existing databases)
+            try:
+                cursor.execute("ALTER TABLE features ADD COLUMN last_artifact_path TEXT")
+                logger.info("Added last_artifact_path column to existing features table")
+            except sqlite3.OperationalError:
                 pass
 
             # Migration: Add port columns to agent_heartbeats if they don't exist
@@ -169,6 +212,18 @@ class Database:
                 )
             """)
 
+            # Feature dependencies (DAG edges)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS feature_dependencies (
+                    feature_id INTEGER NOT NULL,
+                    depends_on_id INTEGER NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (feature_id, depends_on_id),
+                    FOREIGN KEY (feature_id) REFERENCES features(id) ON DELETE CASCADE,
+                    FOREIGN KEY (depends_on_id) REFERENCES features(id) ON DELETE CASCADE
+                )
+            """)
+
             # Branches table
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS branches (
@@ -218,6 +273,16 @@ class Database:
             """)
 
             cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_features_next_attempt_at
+                ON features(next_attempt_at)
+            """)
+
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_feature_dependencies_depends_on
+                ON feature_dependencies(depends_on_id)
+            """)
+
+            cursor.execute("""
                 CREATE INDEX IF NOT EXISTS idx_features_review_status
                 ON features(review_status)
             """)
@@ -234,6 +299,82 @@ class Database:
 
             conn.commit()
 
+    def _max_feature_attempts(self) -> int:
+        raw = os.environ.get("AUTOCODER_FEATURE_MAX_ATTEMPTS")
+        try:
+            v = int(raw) if raw is not None else 0
+        except Exception:
+            v = 0
+        return v if v > 0 else 10
+
+    def _max_same_error_streak(self) -> int:
+        raw = os.environ.get("AUTOCODER_FEATURE_MAX_SAME_ERROR_STREAK")
+        try:
+            v = int(raw) if raw is not None else 0
+        except Exception:
+            v = 0
+        return v if v > 0 else 3
+
+    def _error_key(self, reason: str) -> str:
+        """
+        Normalize an error reason into a stable key for no-progress detection.
+
+        Goals:
+        - Ignore volatile paths (gatekeeper artifact filenames).
+        - Ignore incidental whitespace/line wrapping.
+        """
+        s = (reason or "").replace("\r\n", "\n")
+        lines = []
+        for ln in s.splitlines():
+            if ln.strip().lower().startswith("artifact:"):
+                continue
+            lines.append(ln)
+        s = "\n".join(lines).strip()
+        s = re.sub(r"[ \t]+", " ", s)
+        # Collapse multiple blank lines.
+        s = re.sub(r"\n{3,}", "\n\n", s)
+        return s[:4000]
+
+    def _next_retry_delay_s(self, attempts: int) -> int:
+        """
+        Compute retry delay after `attempts` failures (attempts starts at 1).
+
+        Env knobs:
+        - AUTOCODER_FEATURE_RETRY_INITIAL_DELAY_S (default 10)
+        - AUTOCODER_FEATURE_RETRY_MAX_DELAY_S (default 600)
+        - AUTOCODER_FEATURE_RETRY_EXPONENTIAL_BASE (default 2)
+        - AUTOCODER_FEATURE_RETRY_JITTER (default true)
+        """
+        def _int_env(name: str, default: int) -> int:
+            try:
+                return int(os.environ.get(name, str(default)))
+            except Exception:
+                return default
+
+        initial = max(0, _int_env("AUTOCODER_FEATURE_RETRY_INITIAL_DELAY_S", 10))
+        max_delay = max(0, _int_env("AUTOCODER_FEATURE_RETRY_MAX_DELAY_S", 600))
+        base = max(1, _int_env("AUTOCODER_FEATURE_RETRY_EXPONENTIAL_BASE", 2))
+        jitter_raw = str(os.environ.get("AUTOCODER_FEATURE_RETRY_JITTER", "true")).strip().lower()
+        jitter = jitter_raw not in {"0", "false", "no", "off"}
+
+        if initial <= 0:
+            return 0
+        exp = max(0, attempts - 1)
+        delay = initial * (base**exp)
+        delay = min(delay, max_delay) if max_delay > 0 else delay
+
+        if jitter and delay > 1:
+            delay = int(max(0, round(delay * random.uniform(0.7, 1.3))))
+        return int(delay)
+
+    def _get_depends_on(self, conn: sqlite3.Connection, feature_id: int) -> List[int]:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT depends_on_id FROM feature_dependencies WHERE feature_id = ? ORDER BY depends_on_id ASC",
+            (feature_id,),
+        )
+        return [int(r[0]) for r in cursor.fetchall()]
+
     # ============================================================================
     # Feature Operations
     # ============================================================================
@@ -244,7 +385,9 @@ class Database:
         description: str,
         category: str,
         steps: Optional[str] = None,
-        priority: int = 0
+        priority: int = 0,
+        *,
+        depends_on: Optional[List[int]] = None,
     ) -> int:
         """Create a new feature and return its ID."""
         with self.get_connection() as conn:
@@ -253,8 +396,14 @@ class Database:
                 INSERT INTO features (name, description, category, steps, priority, status)
                 VALUES (?, ?, ?, ?, ?, 'PENDING')
             """, (name, description, category, steps, priority))
+            feature_id = int(cursor.lastrowid)
+            if depends_on:
+                cursor.executemany(
+                    "INSERT OR IGNORE INTO feature_dependencies (feature_id, depends_on_id) VALUES (?, ?)",
+                    [(feature_id, int(dep)) for dep in depends_on],
+                )
             conn.commit()
-            return cursor.lastrowid
+            return feature_id
 
     def create_features_bulk(
         self,
@@ -293,7 +442,11 @@ class Database:
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM features WHERE id = ?", (feature_id,))
             row = cursor.fetchone()
-            return dict(row) if row else None
+            if not row:
+                return None
+            out = dict(row)
+            out["depends_on"] = self._get_depends_on(conn, int(out["id"]))
+            return out
 
     def get_features_by_status(self, status: str) -> List[Dict[str, Any]]:
         """Get all features with a specific status."""
@@ -304,20 +457,36 @@ class Database:
                 "SELECT * FROM features WHERE status = ? ORDER BY priority DESC, id ASC",
                 (normalized,)
             )
-            return [dict(row) for row in cursor.fetchall()]
+            out: list[dict[str, Any]] = [dict(row) for row in cursor.fetchall()]
+            for r in out:
+                r["depends_on"] = self._get_depends_on(conn, int(r["id"]))
+            return out
 
     def get_next_pending_feature(self) -> Optional[Dict[str, Any]]:
         """Get the highest-priority pending feature."""
         with self.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("""
-                SELECT * FROM features
-                WHERE status = 'PENDING'
-                ORDER BY priority DESC, id ASC
+            cursor.execute(
+                """
+                SELECT f.* FROM features f
+                WHERE f.status = 'PENDING'
+                  AND (f.next_attempt_at IS NULL OR f.next_attempt_at <= CURRENT_TIMESTAMP)
+                  AND NOT EXISTS (
+                    SELECT 1
+                    FROM feature_dependencies d
+                    JOIN features dep ON dep.id = d.depends_on_id
+                    WHERE d.feature_id = f.id AND dep.status != 'DONE'
+                  )
+                ORDER BY f.priority DESC, f.id ASC
                 LIMIT 1
-            """)
+                """
+            )
             row = cursor.fetchone()
-            return dict(row) if row else None
+            if not row:
+                return None
+            out = dict(row)
+            out["depends_on"] = self._get_depends_on(conn, int(out["id"]))
+            return out
 
     def claim_next_pending_feature(
         self,
@@ -339,12 +508,21 @@ class Database:
             cursor = conn.cursor()
 
             for _ in range(max_attempts):
-                cursor.execute("""
-                    SELECT id FROM features
-                    WHERE status = 'PENDING'
-                    ORDER BY priority DESC, id ASC
+                cursor.execute(
+                    """
+                    SELECT f.id FROM features f
+                    WHERE f.status = 'PENDING'
+                      AND (f.next_attempt_at IS NULL OR f.next_attempt_at <= CURRENT_TIMESTAMP)
+                      AND NOT EXISTS (
+                        SELECT 1
+                        FROM feature_dependencies d
+                        JOIN features dep ON dep.id = d.depends_on_id
+                        WHERE d.feature_id = f.id AND dep.status != 'DONE'
+                      )
+                    ORDER BY f.priority DESC, f.id ASC
                     LIMIT 1
-                """)
+                    """
+                )
                 row = cursor.fetchone()
                 if not row:
                     return None
@@ -367,6 +545,33 @@ class Database:
                     return self.get_feature(feature_id)
 
             return None
+
+    def add_dependency_to_all_pending(self, depends_on_id: int, *, exclude_ids: Optional[List[int]] = None) -> int:
+        """
+        Add a dependency edge (depends_on_id) to all currently pending features.
+
+        Returns number of edges inserted (ignoring duplicates).
+        """
+        excludes = set(int(x) for x in (exclude_ids or []))
+        excludes.add(int(depends_on_id))
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            if excludes:
+                placeholders = ",".join(["?"] * len(excludes))
+                sql = (
+                    "INSERT OR IGNORE INTO feature_dependencies (feature_id, depends_on_id) "
+                    f"SELECT id, ? FROM features WHERE status = 'PENDING' AND id NOT IN ({placeholders})"
+                )
+                params = [int(depends_on_id), *sorted(excludes)]
+                cursor.execute(sql, params)
+            else:
+                cursor.execute(
+                    "INSERT OR IGNORE INTO feature_dependencies (feature_id, depends_on_id) "
+                    "SELECT id, ? FROM features WHERE status = 'PENDING'",
+                    (int(depends_on_id),),
+                )
+            conn.commit()
+            return int(cursor.rowcount if cursor.rowcount is not None else 0)
 
     def get_passing_features_for_regression(
         self,
@@ -534,24 +739,82 @@ class Database:
     def mark_feature_failed(
         self,
         feature_id: int,
-        reason: str
+        reason: str,
+        *,
+        artifact_path: str | None = None,
     ) -> bool:
         """Mark a feature as failed (reset for retry)."""
         with self.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("""
+            cursor.execute(
+                "SELECT attempts, last_error_key, same_error_streak FROM features WHERE id = ?",
+                (feature_id,),
+            )
+            row = cursor.fetchone()
+            if not row:
+                return False
+
+            prev_attempts = int(row[0] or 0)
+            prev_key = str(row[1] or "")
+            prev_streak = int(row[2] or 0)
+            new_attempts = prev_attempts + 1
+            max_attempts = self._max_feature_attempts()
+            max_streak = self._max_same_error_streak()
+
+            # Derive artifact path from the reason if not provided.
+            derived_artifact: str | None = None
+            if not artifact_path:
+                for ln in (reason or "").splitlines():
+                    if ln.strip().lower().startswith("artifact:"):
+                        derived_artifact = ln.split(":", 1)[1].strip() or None
+                        break
+            artifact_path = artifact_path or derived_artifact
+
+            new_key = self._error_key(reason)
+            if new_key and new_key == prev_key:
+                streak = prev_streak + 1
+            else:
+                streak = 1 if new_key else 0
+
+            blocked = (new_attempts >= max_attempts) or (streak >= max_streak and max_streak > 0)
+
+            next_attempt_at = None
+            if not blocked:
+                delay_s = self._next_retry_delay_s(new_attempts)
+                if delay_s > 0:
+                    now_utc = datetime.now(UTC).replace(tzinfo=None)
+                    next_attempt_at = (now_utc + timedelta(seconds=delay_s)).isoformat(sep=" ")
+
+            cursor.execute(
+                """
                 UPDATE features
-                SET status = 'PENDING',
+                SET status = ?,
                     assigned_agent_id = NULL,
                     assigned_at = NULL,
                     branch_name = NULL,
-                    review_status = NULL,
+                    review_status = 'PENDING',
                     passes = FALSE,
                     completed_at = NULL,
-                    attempts = attempts + 1,
+                    attempts = ?,
+                    last_error = ?,
+                    next_attempt_at = ?,
+                    last_error_key = ?,
+                    same_error_streak = ?,
+                    last_artifact_path = ?,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE id = ?
-            """, (feature_id,))
+                """,
+                (
+                    "BLOCKED" if blocked else "PENDING",
+                    new_attempts,
+                    reason,
+                    next_attempt_at,
+                    new_key,
+                    streak,
+                    artifact_path,
+                    feature_id,
+                ),
+            )
             conn.commit()
             return cursor.rowcount > 0
 

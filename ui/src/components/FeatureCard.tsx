@@ -1,4 +1,4 @@
-import { CheckCircle2, Circle, Loader2 } from 'lucide-react'
+import { CheckCircle2, Circle, Loader2, AlertCircle } from 'lucide-react'
 import type { Feature } from '../lib/types'
 
 interface FeatureCardProps {
@@ -29,6 +29,9 @@ function getCategoryColor(category: string): string {
 
 export function FeatureCard({ feature, onClick, isInProgress }: FeatureCardProps) {
   const categoryColor = getCategoryColor(feature.category)
+  const status = (feature.status ?? (isInProgress ? 'IN_PROGRESS' : feature.in_progress ? 'IN_PROGRESS' : feature.passes ? 'DONE' : 'PENDING')).toUpperCase()
+  const attempts = feature.attempts ?? 0
+  const isBlocked = status === 'BLOCKED'
 
   return (
     <button
@@ -64,7 +67,15 @@ export function FeatureCard({ feature, onClick, isInProgress }: FeatureCardProps
 
       {/* Status */}
       <div className="flex items-center gap-2 text-sm">
-        {isInProgress ? (
+        {isBlocked ? (
+          <>
+            <AlertCircle size={16} className="text-[var(--color-neo-danger)]" />
+            <span className="text-[var(--color-neo-danger)] font-bold">Blocked</span>
+            {attempts > 0 && (
+              <span className="font-mono text-xs text-[var(--color-neo-text-secondary)]">({attempts})</span>
+            )}
+          </>
+        ) : isInProgress ? (
           <>
             <Loader2 size={16} className="animate-spin text-[var(--color-neo-progress)]" />
             <span className="text-[var(--color-neo-progress)] font-bold">Processing...</span>
@@ -78,6 +89,9 @@ export function FeatureCard({ feature, onClick, isInProgress }: FeatureCardProps
           <>
             <Circle size={16} className="text-[var(--color-neo-text-secondary)]" />
             <span className="text-[var(--color-neo-text-secondary)]">Pending</span>
+            {attempts > 0 && (
+              <span className="font-mono text-xs text-[var(--color-neo-text-secondary)]">({attempts})</span>
+            )}
           </>
         )}
       </div>

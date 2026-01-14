@@ -20,6 +20,9 @@ Disk Space: Worktrees share the .git directory, so overhead is minimal
 import os
 import subprocess
 import shutil
+import json
+import stat
+import time
 from pathlib import Path
 from datetime import datetime
 from typing import Optional
@@ -56,6 +59,109 @@ class WorktreeManager:
 
         logger.info(f"WorktreeManager initialized: {self.project_dir}")
         logger.info(f"Worktrees base: {self.worktrees_base_dir}")
+
+    def _autocoder_dir(self) -> Path:
+        d = self.project_dir / ".autocoder"
+        d.mkdir(parents=True, exist_ok=True)
+        return d
+
+    def _cleanup_queue_path(self) -> Path:
+        return self._autocoder_dir() / "cleanup_queue.json"
+
+    def _load_cleanup_queue(self) -> list[dict]:
+        path = self._cleanup_queue_path()
+        if not path.exists():
+            return []
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            return []
+        return data if isinstance(data, list) else []
+
+    def _save_cleanup_queue(self, items: list[dict]) -> None:
+        path = self._cleanup_queue_path()
+        path.write_text(json.dumps(items, indent=2), encoding="utf-8")
+
+    def _enqueue_cleanup(self, path: Path, *, reason: str) -> None:
+        items = self._load_cleanup_queue()
+        p = str(path)
+        now = time.time()
+        for item in items:
+            if item.get("path") == p:
+                item["reason"] = reason
+                return self._save_cleanup_queue(items)
+        items.append(
+            {
+                "path": p,
+                "attempts": 0,
+                "next_try_at": now,
+                "added_at": now,
+                "reason": reason,
+            }
+        )
+        self._save_cleanup_queue(items)
+
+    @staticmethod
+    def _rmtree_force(path: Path) -> None:
+        def onerror(func, p, excinfo):  # type: ignore[no-untyped-def]
+            try:
+                os.chmod(p, stat.S_IWRITE)
+            except Exception:
+                pass
+            try:
+                func(p)
+            except Exception:
+                pass
+
+        shutil.rmtree(path, onerror=onerror)
+
+    def process_cleanup_queue(self, *, max_items: int = 2) -> int:
+        """
+        Best-effort deletion of deferred-cleanup directories.
+
+        This mitigates Windows file locking (e.g. native `.node` modules) by retrying later.
+        """
+        items = self._load_cleanup_queue()
+        if not items:
+            return 0
+        now = time.time()
+        processed = 0
+        remaining: list[dict] = []
+
+        def backoff_s(attempts: int) -> float:
+            # 5s, 10s, 20s, ... up to 10 minutes
+            return float(min(600, 5 * (2 ** max(0, attempts))))
+
+        for item in items:
+            if processed >= max_items:
+                remaining.append(item)
+                continue
+            try:
+                next_try_at = float(item.get("next_try_at", 0.0))
+            except Exception:
+                next_try_at = 0.0
+            if next_try_at and next_try_at > now:
+                remaining.append(item)
+                continue
+
+            p = Path(str(item.get("path") or ""))
+            if not p.exists():
+                processed += 1
+                continue
+            try:
+                self._rmtree_force(p)
+                processed += 1
+                continue
+            except Exception as e:
+                attempts = int(item.get("attempts") or 0) + 1
+                item["attempts"] = attempts
+                item["last_error"] = str(e)
+                item["next_try_at"] = now + backoff_s(attempts)
+                remaining.append(item)
+                processed += 1
+
+        self._save_cleanup_queue(remaining)
+        return processed
 
     def create_worktree(
         self,
@@ -190,7 +296,8 @@ class WorktreeManager:
                     "git",
                     "worktree",
                     "remove",
-                    str(worktree_path)
+                    *(["-f"] if force else []),
+                    str(worktree_path),
                 ],
                 cwd=self.project_dir,
                 check=True,
@@ -202,7 +309,12 @@ class WorktreeManager:
             if worktree_path.exists():
                 if force:
                     logger.warning(f"Force deleting directory: {worktree_path}")
-                    shutil.rmtree(worktree_path)
+                    try:
+                        self._rmtree_force(worktree_path)
+                    except Exception as e:
+                        logger.warning(f"Deferred cleanup for locked worktree: {e}")
+                        self._enqueue_cleanup(worktree_path, reason="force-delete failed after git worktree remove")
+                        return True
                 else:
                     logger.error(f"Directory still exists after git worktree remove")
                     return False
@@ -226,11 +338,18 @@ class WorktreeManager:
                     )
                     # Delete directory
                     if worktree_path.exists():
-                        shutil.rmtree(worktree_path)
+                        try:
+                            self._rmtree_force(worktree_path)
+                        except Exception as cleanup_error:
+                            logger.warning(f"Deferred cleanup for locked worktree: {cleanup_error}")
+                            self._enqueue_cleanup(worktree_path, reason="force-cleanup failed after prune")
+                            return True
                     logger.info("✅ Force cleanup successful")
                     return True
                 except Exception as cleanup_error:
                     logger.error(f"Force cleanup failed: {cleanup_error}")
+                    if worktree_path.exists():
+                        self._enqueue_cleanup(worktree_path, reason="force-cleanup failed")
                     return False
 
             return False

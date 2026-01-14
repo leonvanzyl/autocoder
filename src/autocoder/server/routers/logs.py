@@ -17,7 +17,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from autocoder.core.logs import prune_worker_logs
+from autocoder.core.logs import prune_worker_logs, prune_gatekeeper_artifacts
 
 
 router = APIRouter(prefix="/api/projects/{project_name}/logs", tags=["logs"])
@@ -173,6 +173,7 @@ class PruneWorkerLogsRequest(BaseModel):
     keep_files: int = Field(default=200, ge=0, le=100000)
     max_mb: int = Field(default=200, ge=0, le=100000)
     dry_run: bool = False
+    include_artifacts: bool = False
 
 
 class PruneWorkerLogsResponse(BaseModel):
@@ -192,18 +193,27 @@ async def prune_worker_logs_endpoint(project_name: str, req: PruneWorkerLogsRequ
     if req.keep_files == 0 and req.keep_days == 0 and req.max_mb == 0 and not req.dry_run:
         raise HTTPException(status_code=400, detail="Refusing to delete all logs without dry_run")
 
-    result = prune_worker_logs(
+    logs_result = prune_worker_logs(
         project_dir,
         keep_days=req.keep_days,
         keep_files=req.keep_files,
         max_total_mb=req.max_mb,
         dry_run=req.dry_run,
     )
+    artifacts_result = None
+    if req.include_artifacts:
+        artifacts_result = prune_gatekeeper_artifacts(
+            project_dir,
+            keep_days=req.keep_days,
+            keep_files=req.keep_files,
+            max_total_mb=req.max_mb,
+            dry_run=req.dry_run,
+        )
     return PruneWorkerLogsResponse(
-        deleted_files=result.deleted_files,
-        deleted_bytes=result.deleted_bytes,
-        kept_files=result.kept_files,
-        kept_bytes=result.kept_bytes,
+        deleted_files=logs_result.deleted_files + (artifacts_result.deleted_files if artifacts_result else 0),
+        deleted_bytes=logs_result.deleted_bytes + (artifacts_result.deleted_bytes if artifacts_result else 0),
+        kept_files=logs_result.kept_files + (artifacts_result.kept_files if artifacts_result else 0),
+        kept_bytes=logs_result.kept_bytes + (artifacts_result.kept_bytes if artifacts_result else 0),
     )
 
 

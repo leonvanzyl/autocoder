@@ -82,8 +82,13 @@ class FeatureResponse(FeatureBase):
     """Response schema for a feature."""
     id: int
     priority: int
+    status: str = "PENDING"
     passes: bool
     in_progress: bool
+    attempts: int = 0
+    last_error: str | None = None
+    last_artifact_path: str | None = None
+    depends_on: list[int] = []
 
     class Config:
         from_attributes = True
@@ -136,6 +141,8 @@ class SetupStatus(BaseModel):
     credentials: bool
     node: bool
     npm: bool
+    codex_cli: bool = False
+    gemini_cli: bool = False
 
 
 # ============================================================================

@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import os
 import random
+import time
 from dataclasses import dataclass
 from typing import Awaitable, Callable, Optional, TypeVar
 
@@ -107,6 +108,38 @@ async def execute_with_retry(
             delay = _compute_delay(config, attempt_index=attempt - 1, error_type=error_type)
             if delay:
                 await asyncio.sleep(delay)
+    assert last is not None
+    raise last
+
+
+def execute_with_retry_sync(
+    func: Callable[[], T],
+    *,
+    config: RetryConfig,
+    is_retryable: Callable[[Exception], bool] | None = None,
+) -> T:
+    """
+    Synchronous retry/backoff helper for non-async operations.
+
+    Used for subprocess/CLI calls where transient failures (timeouts, rate limits, connection errors)
+    should be retried with the same policy as the async SDK retry.
+    """
+    last: Exception | None = None
+    for attempt in range(1, config.max_attempts + 1):
+        try:
+            return func()
+        except Exception as e:
+            last = e
+            if is_retryable is not None and not is_retryable(e):
+                raise
+            error_type = classify_transient_error(e)
+            if error_type is None:
+                raise
+            if attempt >= config.max_attempts:
+                raise
+            delay = _compute_delay(config, attempt_index=attempt - 1, error_type=error_type)
+            if delay:
+                time.sleep(delay)
     assert last is not None
     raise last
 

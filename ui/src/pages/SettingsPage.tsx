@@ -6,21 +6,25 @@
  */
 
 import { useState } from 'react'
-import { Settings as SettingsIcon, SlidersHorizontal, Brain } from 'lucide-react'
+import { Settings as SettingsIcon, SlidersHorizontal, Brain, Sparkles, FileText } from 'lucide-react'
 import { ModelSettingsContent } from '../components/ModelSettingsContent'
 import { AdvancedSettingsContent } from '../components/AdvancedSettingsContent'
+import { MultiModelGeneratePanel } from '../components/MultiModelGeneratePanel'
+import { ProjectConfigEditor } from '../components/ProjectConfigEditor'
 import type { RunSettings } from '../components/SettingsModal'
 
-type SettingsPageTab = 'run' | 'models' | 'advanced'
+type SettingsPageTab = 'run' | 'models' | 'generate' | 'config' | 'advanced'
 
 export function SettingsPage({
   initialTab = 'run',
+  projectName,
   yoloEnabled,
   runSettings,
   onChangeRunSettings,
   onClose,
 }: {
   initialTab?: SettingsPageTab
+  projectName: string
   yoloEnabled: boolean
   runSettings: RunSettings
   onChangeRunSettings: (next: RunSettings) => void
@@ -60,6 +64,20 @@ export function SettingsPage({
           >
             <Brain size={18} />
             Models
+          </button>
+          <button
+            className={`neo-btn text-sm ${tab === 'generate' ? 'bg-[var(--color-neo-accent)] text-white' : 'neo-btn-secondary'}`}
+            onClick={() => setTab('generate')}
+          >
+            <Sparkles size={18} />
+            Generate
+          </button>
+          <button
+            className={`neo-btn text-sm ${tab === 'config' ? 'bg-[var(--color-neo-accent)] text-white' : 'neo-btn-secondary'}`}
+            onClick={() => setTab('config')}
+          >
+            <FileText size={18} />
+            Config
           </button>
           <button
             className={`neo-btn text-sm ${tab === 'advanced' ? 'bg-[var(--color-neo-accent)] text-white' : 'neo-btn-secondary'}`}
@@ -134,6 +152,10 @@ export function SettingsPage({
             })
           }
         />
+      ) : tab === 'generate' ? (
+        <MultiModelGeneratePanel projectName={projectName} />
+      ) : tab === 'config' ? (
+        <ProjectConfigEditor projectName={projectName} />
       ) : (
         <AdvancedSettingsContent />
       )}

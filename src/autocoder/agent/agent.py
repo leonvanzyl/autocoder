@@ -38,6 +38,7 @@ from .prompts import (
     has_project_prompts,
 )
 from .retry import execute_with_retry, retry_config_from_env
+from ..core.database import get_database
 
 
 # Configuration
@@ -271,12 +272,50 @@ async def run_autonomous_agent(
                 prompt = get_coding_prompt(project_dir)
 
         if assigned_feature_id is not None:
+            qa_enabled = os.environ.get("AUTOCODER_QA_FIX_ENABLED", "").strip().lower() in {"1", "true", "yes", "on"}
+            qa_max = 0
+            try:
+                qa_max = int(os.environ.get("AUTOCODER_QA_MAX_SESSIONS", "3"))
+            except Exception:
+                qa_max = 3
+            qa_max = max(0, qa_max)
+
+            last_error_text = ""
+            artifact_path = ""
+            attempts = 0
+            if qa_enabled:
+                try:
+                    db = get_database(str(features_state_dir))
+                    row = db.get_feature(int(assigned_feature_id)) or {}
+                    last_error_text = str(row.get("last_error") or "").strip()
+                    artifact_path = str(row.get("last_artifact_path") or "").strip()
+                    attempts = int(row.get("attempts") or 0)
+                except Exception:
+                    last_error_text = ""
+                    artifact_path = ""
+                    attempts = 0
+
             prompt = (
                 "IMPORTANT: You are running as a parallel worker with an explicit assignment.\n"
                 f"- Work ONLY on feature_id={assigned_feature_id}.\n"
                 "- Do NOT call `feature_get_next`.\n"
                 "- Call `feature_get_by_id` for the assigned feature, then proceed as usual.\n\n"
                 "- When finished, call `feature_mark_passing` to submit for Gatekeeper verification (it may not immediately set passes=true).\n\n"
+                + (
+                    (
+                        "QA FIX MODE (enabled):\n"
+                        "- Your job is to fix the last Gatekeeper/verification failure for this feature.\n"
+                        "- Focus on tests/lint/typecheck failures first. Do NOT expand scope.\n"
+                        "- After making fixes, run the failing command(s) locally in the worktree and commit.\n"
+                        "- Then submit again with `feature_mark_passing`.\n"
+                        + (f"\nAttempts so far: {attempts} (QA max sessions: {qa_max})\n" if qa_max else "\n")
+                        + (f"\nLast error:\n{last_error_text}\n" if last_error_text else "")
+                        + (f"\nLast artifact path:\n{artifact_path}\n" if artifact_path else "")
+                        + "\n---\n\n"
+                    )
+                    if qa_enabled and qa_max > 0 and attempts > 0 and attempts <= qa_max and (last_error_text or artifact_path)
+                    else ""
+                )
                 + prompt
             )
 
