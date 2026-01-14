@@ -2,13 +2,108 @@
 description: Expand an existing project with new features
 ---
 
-# PROJECT DIRECTORY
+# PROJECT SELECTION
 
-This command **requires** the project directory as an argument via `$ARGUMENTS`.
+This command helps expand an existing Autocoder project. It supports two modes:
 
-**Example:** `/expand-project generations/my-app`
+1. **Registry Mode** (recommended): Select from registered projects
+2. **Path Mode**: Provide a direct path via `$ARGUMENTS`
 
-If `$ARGUMENTS` is empty, inform the user they must provide a project path and exit.
+---
+
+## Step 1: Check for Direct Path Argument
+
+If `$ARGUMENTS` is provided and non-empty, skip to **Step 4** using that path.
+
+If `$ARGUMENTS` is empty, proceed to **Step 2** (Registry Lookup).
+
+---
+
+## Step 2: Registry Lookup
+
+Query the Autocoder registry for available projects.
+
+**Note:** This requires the Autocoder virtual environment to be active. Run from the Autocoder project directory:
+
+```bash
+source venv/bin/activate && python -c "
+from registry import list_registered_projects
+projects = list_registered_projects()
+if projects:
+    for name, info in projects.items():
+        print(f'{name}|{info[\"path\"]}')
+else:
+    print('NO_PROJECTS_FOUND')
+"
+```
+
+**Parse the output** to build a list of registered projects (format: `name|path` per line).
+
+---
+
+## Step 3: Project Selection
+
+**Use the AskUserQuestion tool** to let the user choose:
+
+- **If projects were found:** Present each project as an option with format:
+  - Label: `{project_name}`
+  - Description: `Path: {project_path}`
+
+- **Always include "Other" option:**
+  - Label: `Other (manual path)`
+  - Description: `Enter a custom project path`
+
+**Question:** "Which project would you like to expand?"
+
+**Wait for the user's response before proceeding.**
+
+---
+
+## Step 3b: Handle "Other" Selection
+
+If the user selected "Other (manual path)", explain the path requirements:
+
+> "Please provide the **absolute path** to your project directory.
+>
+> **Requirements:**
+> - Must be an absolute path (starting with `/`)
+> - Directory must contain `prompts/app_spec.txt`
+> - Example: `/home/simon/projects/my-app`
+>
+> Enter the project path:"
+
+**Wait for the user to provide the path, then proceed to Step 4.**
+
+---
+
+## Step 4: Validate Project Path
+
+Using the selected or provided path, verify the project exists:
+
+```bash
+if [ -f "{PROJECT_PATH}/prompts/app_spec.txt" ]; then
+    echo "VALID_PROJECT"
+    echo "Spec found at: {PROJECT_PATH}/prompts/app_spec.txt"
+else
+    echo "INVALID_PROJECT"
+    echo "Missing: {PROJECT_PATH}/prompts/app_spec.txt"
+fi
+```
+
+**If INVALID_PROJECT:**
+> "The selected path doesn't contain a valid Autocoder project.
+>
+> Missing: `prompts/app_spec.txt`
+>
+> **Options:**
+> 1. Run `/gsd:to-autocoder-spec` in that project first
+> 2. Choose a different project
+>
+> Would you like to select a different project?"
+
+If yes, go back to **Step 3**.
+
+**If VALID_PROJECT:** Proceed to the main workflow below.
 
 ---
 
@@ -42,7 +137,7 @@ You are the **Project Expansion Assistant** - an expert at understanding existin
 # FIRST: Read and Understand Existing Project
 
 **Step 1:** Read the existing specification:
-- Read `$ARGUMENTS/prompts/app_spec.txt`
+- Read `{PROJECT_PATH}/prompts/app_spec.txt`
 
 **Step 2:** Present a summary to the user:
 
@@ -238,4 +333,4 @@ If they want to add more, go back to Phase 1.
 
 # BEGIN
 
-Start by reading the app specification file at `$ARGUMENTS/prompts/app_spec.txt`, then greet the user with a summary of their existing project and ask what they want to add.
+Start by executing **Step 1** (check for `$ARGUMENTS`). If empty, proceed with the Registry Lookup and Project Selection flow. Once a valid project is selected, read its app specification and greet the user with a summary.
