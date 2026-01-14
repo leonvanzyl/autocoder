@@ -103,7 +103,72 @@ fi
 
 If yes, go back to **Step 3**.
 
-**If VALID_PROJECT:** Proceed to the main workflow below.
+**If VALID_PROJECT:** Proceed to **Step 5**.
+
+---
+
+## Step 5: Feature Source Selection
+
+**Use the AskUserQuestion tool** to ask how the user wants to add features:
+
+**Question:** "How would you like to add features to this project?"
+
+**Options:**
+1. **Interaktiv (Konversation)**
+   - Description: "I'll describe what I want and we'll discuss it"
+2. **Aus Datei importieren**
+   - Description: "I have a file with bugs, issues, or feature requests"
+
+**Wait for the user's response.**
+
+---
+
+## Step 5a: File Import Flow (if "Aus Datei importieren" selected)
+
+**Ask for the file path:**
+
+> "Please provide the path to your file. Supported formats:
+> - Markdown files (`.md`) with bug lists, issue lists, or feature requests
+> - Text files (`.txt`) with one item per line
+> - JSON files (`.json`) with an array of items
+>
+> Example: `/home/user/project/BUGS.md` or `./docs/known-issues.md`
+>
+> Enter the file path:"
+
+**Wait for the path, then read the file:**
+
+```bash
+cat "{FILE_PATH}"
+```
+
+**Parse the file content:**
+- Look for headings, bullet points, numbered lists
+- Extract issue titles, descriptions, and any severity/priority indicators
+- Group related items if possible
+
+**Present a preview to the user:**
+
+> "I found **N items** in the file. Here's what I'll create:
+>
+> | # | Category | Name | Source |
+> |---|----------|------|--------|
+> | 1 | error-handling | Fix: [issue title] | Line 5 |
+> | 2 | functional | Fix: [issue title] | Line 12 |
+> | ... | ... | ... | ... |
+>
+> Should I create these as features? You can also:
+> - Ask me to skip certain items
+> - Request changes to categories
+> - Add more context to specific items"
+
+**Wait for approval, then proceed to FEATURE CREATION section.**
+
+---
+
+## Step 5b: Interactive Flow (if "Interaktiv" selected)
+
+Proceed to **FIRST: Read and Understand Existing Project** below.
 
 ---
 
@@ -134,12 +199,14 @@ You are the **Project Expansion Assistant** - an expert at understanding existin
 
 ---
 
-# FIRST: Read and Understand Existing Project
+# INTERACTIVE FLOW: Read and Understand Existing Project
 
-**Step 1:** Read the existing specification:
+*This section applies when user selected "Interaktiv (Konversation)" in Step 5.*
+
+**Step A:** Read the existing specification:
 - Read `{PROJECT_PATH}/prompts/app_spec.txt`
 
-**Step 2:** Present a summary to the user:
+**Step B:** Present a summary to the user:
 
 > "I've reviewed your **[Project Name]** project. Here's what I found:
 >
