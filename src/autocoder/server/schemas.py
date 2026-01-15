@@ -78,6 +78,29 @@ class FeatureCreate(FeatureBase):
     priority: int | None = None
 
 
+class FeatureUpdate(BaseModel):
+    """Request schema for updating an existing feature (pending/in-progress only)."""
+
+    category: str | None = Field(default=None, min_length=1, max_length=200)
+    name: str | None = Field(default=None, min_length=1, max_length=500)
+    description: str | None = Field(default=None, min_length=1, max_length=20_000)
+    steps: list[str] | None = None
+    priority: int | None = Field(default=None, ge=1, le=1_000_000)
+
+    @field_validator("steps")
+    @classmethod
+    def validate_steps(cls, v: list[str] | None) -> list[str] | None:
+        if v is None:
+            return None
+        if not isinstance(v, list):
+            raise ValueError("steps must be a list of strings")
+        cleaned: list[str] = []
+        for item in v:
+            s = str(item).strip()
+            if s:
+                cleaned.append(s)
+        return cleaned
+
 class FeatureResponse(FeatureBase):
     """Response schema for a feature."""
     id: int

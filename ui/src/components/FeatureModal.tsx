@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
-import { X, CheckCircle2, Circle, SkipForward, Trash2, Loader2, AlertCircle } from 'lucide-react'
+import { X, CheckCircle2, Circle, SkipForward, Trash2, Loader2, AlertCircle, Pencil } from 'lucide-react'
 import { useSkipFeature, useDeleteFeature } from '../hooks/useProjects'
 import type { Feature } from '../lib/types'
+import { EditFeatureForm } from './EditFeatureForm'
 
 interface FeatureModalProps {
   feature: Feature
@@ -12,6 +13,7 @@ interface FeatureModalProps {
 export function FeatureModal({ feature, projectName, onClose }: FeatureModalProps) {
   const [error, setError] = useState<string | null>(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [isEditing, setIsEditing] = useState(false)
 
   const status = useMemo(() => (feature.status ?? (feature.in_progress ? 'IN_PROGRESS' : feature.passes ? 'DONE' : 'PENDING')).toUpperCase(), [feature])
   const attempts = feature.attempts ?? 0
@@ -40,6 +42,20 @@ export function FeatureModal({ feature, projectName, onClose }: FeatureModalProp
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete feature')
     }
+  }
+
+  if (isEditing) {
+    return (
+      <EditFeatureForm
+        feature={feature}
+        projectName={projectName}
+        onClose={() => setIsEditing(false)}
+        onSaved={() => {
+          setIsEditing(false)
+          onClose()
+        }}
+      />
+    )
   }
 
   return (
@@ -227,6 +243,14 @@ export function FeatureModal({ feature, projectName, onClose }: FeatureModalProp
               </div>
             ) : (
               <div className="flex gap-3">
+                <button
+                  onClick={() => setIsEditing(true)}
+                  disabled={skipFeature.isPending || status === 'DONE'}
+                  className="neo-btn neo-btn-secondary"
+                  title="Edit feature details"
+                >
+                  <Pencil size={18} />
+                </button>
                 <button
                   onClick={handleSkip}
                   disabled={skipFeature.isPending}

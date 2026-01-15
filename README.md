@@ -238,6 +238,12 @@ When enabled, the orchestrator will spawn a short-lived QA worker immediately af
 
 In the Web UI: Settings -> Advanced -> Automation -> QA sub-agent.
 
+### Editing features (pending/in-progress)
+
+You can edit feature details (category/name/description/steps/priority) for non-completed features to help unblock the agent.
+
+- Web UI: open a feature → click the pencil icon → edit and save.
+
 ### Controller Preflight (optional)
 
 When enabled, the orchestrator runs deterministic verification commands in the agent worktree before Gatekeeper merge verification.

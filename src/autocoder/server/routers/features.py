@@ -18,7 +18,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 
 from autocoder.core.database import get_database
-from ..schemas import FeatureCreate, FeatureListResponse, FeatureResponse
+from ..schemas import FeatureCreate, FeatureListResponse, FeatureResponse, FeatureUpdate
 
 
 logger = logging.getLogger(__name__)
@@ -213,6 +213,56 @@ async def get_feature(project_name: str, feature_id: int):
     except Exception:
         logger.exception("Database error in get_feature")
         raise HTTPException(status_code=500, detail="Database error occurred")
+
+
+@router.patch("/{feature_id}", response_model=FeatureResponse)
+async def update_feature(project_name: str, feature_id: int, update: FeatureUpdate):
+    """
+    Update a feature's details.
+
+    Only non-completed features can be edited (PENDING/IN_PROGRESS/BLOCKED).
+    This is useful when the agent is stuck or instructions need correction.
+    """
+    project_name = validate_project_name(project_name)
+    project_dir = _get_project_path(project_name).resolve()
+
+    if not project_dir.exists():
+        raise HTTPException(status_code=404, detail="Project directory not found")
+
+    db = get_database(str(project_dir))
+
+    try:
+        row = db.get_feature(int(feature_id))
+        if not row:
+            raise HTTPException(status_code=404, detail=f"Feature {feature_id} not found")
+
+        status = str(row.get("status") or "").upper()
+        if bool(row.get("passes")) or status == "DONE":
+            raise HTTPException(status_code=400, detail="Cannot edit a completed feature")
+
+        payload = update.model_dump(exclude_none=True)
+        if not payload:
+            raise HTTPException(status_code=400, detail="No updates provided")
+
+        steps = payload.get("steps")
+        steps_json = json.dumps(steps) if steps is not None else None
+
+        updated = db.update_feature_details(
+            int(feature_id),
+            category=payload.get("category"),
+            name=payload.get("name"),
+            description=payload.get("description"),
+            steps=steps_json,
+            priority=payload.get("priority"),
+        )
+        if not updated:
+            raise HTTPException(status_code=404, detail=f"Feature {feature_id} not found")
+        return _feature_to_response(updated)
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Failed to update feature")
+        raise HTTPException(status_code=500, detail="Failed to update feature")
 
 
 @router.delete("/{feature_id}")

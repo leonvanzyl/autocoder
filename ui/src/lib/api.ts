@@ -117,6 +117,17 @@ export async function skipFeature(projectName: string, featureId: number): Promi
   })
 }
 
+export async function updateFeature(
+  projectName: string,
+  featureId: number,
+  update: Partial<FeatureCreate>
+): Promise<Feature> {
+  return fetchJSON(`/projects/${encodeURIComponent(projectName)}/features/${featureId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(update),
+  })
+}
+
 // ============================================================================
 // Agent API
 // ============================================================================

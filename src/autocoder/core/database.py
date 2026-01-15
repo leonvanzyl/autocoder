@@ -496,6 +496,66 @@ class Database:
                 r["depends_on"] = self._get_depends_on(conn, int(r["id"]))
             return out
 
+    def update_feature_details(
+        self,
+        feature_id: int,
+        *,
+        category: Optional[str] = None,
+        name: Optional[str] = None,
+        description: Optional[str] = None,
+        steps: Optional[str] = None,
+        priority: Optional[int] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Update editable fields for a feature (pending/in-progress only).
+
+        Returns the updated row (including depends_on) or None if the feature does not exist.
+        """
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM features WHERE id = ?", (int(feature_id),))
+            row = cursor.fetchone()
+            if not row:
+                return None
+
+            status = str(row["status"] or "").upper()
+            if bool(row["passes"]) or status == "DONE":
+                raise ValueError("Cannot edit a completed feature")
+
+            updates: list[str] = []
+            params: list[object] = []
+            if category is not None:
+                updates.append("category = ?")
+                params.append(category)
+            if name is not None:
+                updates.append("name = ?")
+                params.append(name)
+            if description is not None:
+                updates.append("description = ?")
+                params.append(description)
+            if steps is not None:
+                updates.append("steps = ?")
+                params.append(steps)
+            if priority is not None:
+                updates.append("priority = ?")
+                params.append(int(priority))
+
+            if not updates:
+                return dict(row)
+
+            updates.append("updated_at = ?")
+            params.append(datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S"))
+            params.append(int(feature_id))
+
+            cursor.execute(
+                f"UPDATE features SET {', '.join(updates)} WHERE id = ?",
+                tuple(params),
+            )
+            conn.commit()
+
+            out = self.get_feature(int(feature_id))
+            return out
+
     def get_dependency_statuses(self, feature_ids: list[int]) -> dict[int, list[dict[str, Any]]]:
         """
         Batch-load dependency feature status info for a set of features.

@@ -94,6 +94,18 @@ export function useSkipFeature(projectName: string) {
   })
 }
 
+export function useUpdateFeature(projectName: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ featureId, update }: { featureId: number; update: Partial<FeatureCreate> }) =>
+      api.updateFeature(projectName, featureId, update),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['features', projectName] })
+    },
+  })
+}
+
 // ============================================================================
 // Agent
 // ============================================================================
