@@ -293,7 +293,7 @@ class AssistantChatSession:
         mcp_servers = {
             "features": {
                 "command": sys.executable,
-                "args": ["-m", "mcp_server.feature_mcp"],
+                "args": ["-m", "autocoder.tools.feature_mcp"],
                 "env": {
                     **os.environ,
                     "PROJECT_DIR": str(self.project_dir.resolve()),
