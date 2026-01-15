@@ -109,6 +109,11 @@ class Database:
                     last_error_key TEXT,
                     same_error_streak INTEGER DEFAULT 0,
                     last_artifact_path TEXT,
+                    last_diff_fingerprint TEXT,
+                    same_diff_streak INTEGER DEFAULT 0,
+
+                    -- QA sub-agent tracking
+                    qa_attempts INTEGER DEFAULT 0,
 
                     -- Timestamps
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -156,6 +161,27 @@ class Database:
             try:
                 cursor.execute("ALTER TABLE features ADD COLUMN last_artifact_path TEXT")
                 logger.info("Added last_artifact_path column to existing features table")
+            except sqlite3.OperationalError:
+                pass
+
+            # Migration: Add last_diff_fingerprint column if it doesn't exist (for existing databases)
+            try:
+                cursor.execute("ALTER TABLE features ADD COLUMN last_diff_fingerprint TEXT")
+                logger.info("Added last_diff_fingerprint column to existing features table")
+            except sqlite3.OperationalError:
+                pass
+
+            # Migration: Add same_diff_streak column if it doesn't exist (for existing databases)
+            try:
+                cursor.execute("ALTER TABLE features ADD COLUMN same_diff_streak INTEGER")
+                logger.info("Added same_diff_streak column to existing features table")
+            except sqlite3.OperationalError:
+                pass
+
+            # Migration: Add qa_attempts column if it doesn't exist (for existing databases)
+            try:
+                cursor.execute("ALTER TABLE features ADD COLUMN qa_attempts INTEGER")
+                logger.info("Added qa_attempts column to existing features table")
             except sqlite3.OperationalError:
                 pass
 
@@ -315,6 +341,14 @@ class Database:
             v = 0
         return v if v > 0 else 3
 
+    def _max_same_diff_streak(self) -> int:
+        raw = os.environ.get("AUTOCODER_FEATURE_MAX_SAME_DIFF_STREAK")
+        try:
+            v = int(raw) if raw is not None else 0
+        except Exception:
+            v = 0
+        return v if v > 0 else 3
+
     def _error_key(self, reason: str) -> str:
         """
         Normalize an error reason into a stable key for no-progress detection.
@@ -462,12 +496,191 @@ class Database:
                 r["depends_on"] = self._get_depends_on(conn, int(r["id"]))
             return out
 
-    def get_next_pending_feature(self) -> Optional[Dict[str, Any]]:
-        """Get the highest-priority pending feature."""
+    def get_dependency_statuses(self, feature_ids: list[int]) -> dict[int, list[dict[str, Any]]]:
+        """
+        Batch-load dependency feature status info for a set of features.
+
+        Returns:
+            Mapping: feature_id -> list[{id,name,status,passes}]
+        """
+        ids = [int(x) for x in feature_ids if int(x) > 0]
+        if not ids:
+            return {}
         with self.get_connection() as conn:
             cursor = conn.cursor()
+            placeholders = ",".join(["?"] * len(ids))
+            cursor.execute(
+                f"""
+                SELECT
+                    d.feature_id AS feature_id,
+                    dep.id AS depends_on_id,
+                    dep.name AS depends_on_name,
+                    dep.status AS depends_on_status,
+                    dep.passes AS depends_on_passes
+                FROM feature_dependencies d
+                JOIN features dep ON dep.id = d.depends_on_id
+                WHERE d.feature_id IN ({placeholders})
+                ORDER BY d.feature_id ASC, dep.id ASC
+                """,
+                ids,
+            )
+            out: dict[int, list[dict[str, Any]]] = {}
+            for row in cursor.fetchall():
+                fid = int(row["feature_id"])
+                out.setdefault(fid, []).append(
+                    {
+                        "id": int(row["depends_on_id"]),
+                        "name": str(row["depends_on_name"] or ""),
+                        "status": str(row["depends_on_status"] or "").upper(),
+                        "passes": bool(row["depends_on_passes"]),
+                    }
+                )
+            return out
+
+    def block_feature(self, feature_id: int, reason: str, *, preserve_branch: bool = True) -> bool:
+        """
+        Mark a feature as BLOCKED without incrementing attempts.
+
+        This is used for unrecoverable states (e.g. dependency cycles or blocked prerequisites).
+        """
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT branch_name FROM features WHERE id = ?", (int(feature_id),))
+            row = cursor.fetchone()
+            if not row:
+                return False
+            branch_name = str(row[0] or "") or None
             cursor.execute(
                 """
+                UPDATE features
+                SET status = 'BLOCKED',
+                    assigned_agent_id = NULL,
+                    assigned_at = NULL,
+                    branch_name = ?,
+                    review_status = 'PENDING',
+                    passes = FALSE,
+                    completed_at = NULL,
+                    next_attempt_at = NULL,
+                    last_error = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ? AND status = 'PENDING'
+                """,
+                (branch_name if preserve_branch else None, str(reason or ""), int(feature_id)),
+            )
+            conn.commit()
+            return cursor.rowcount > 0
+
+    def block_unresolvable_dependencies(self) -> int:
+        """
+        Block pending features that can never become runnable due to dependencies.
+
+        Currently blocks:
+        - depends_on points to a BLOCKED feature
+        - dependency cycles among PENDING features
+        """
+        blocked = 0
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+
+            # 1) Pending features that depend on a BLOCKED feature.
+            cursor.execute(
+                """
+                SELECT f.id AS feature_id, dep.id AS dep_id, dep.name AS dep_name
+                FROM features f
+                JOIN feature_dependencies d ON d.feature_id = f.id
+                JOIN features dep ON dep.id = d.depends_on_id
+                WHERE f.status = 'PENDING' AND dep.status = 'BLOCKED'
+                ORDER BY f.id ASC, dep.id ASC
+                """
+            )
+            rows = cursor.fetchall()
+            by_feature: dict[int, list[dict[str, Any]]] = {}
+            for r in rows:
+                fid = int(r["feature_id"])
+                by_feature.setdefault(fid, []).append({"id": int(r["dep_id"]), "name": str(r["dep_name"] or "")})
+
+            for fid, deps in by_feature.items():
+                dep_list = ", ".join(f"#{d['id']} {d['name']}".strip() for d in deps[:5])
+                reason = f"Blocked: dependency is BLOCKED ({dep_list})"
+                if self.block_feature(fid, reason, preserve_branch=True):
+                    blocked += 1
+
+            # 2) Dependency cycles among PENDING features (best-effort).
+            cursor.execute(
+                """
+                SELECT d.feature_id AS feature_id, d.depends_on_id AS depends_on_id
+                FROM feature_dependencies d
+                JOIN features f ON f.id = d.feature_id
+                JOIN features dep ON dep.id = d.depends_on_id
+                WHERE f.status = 'PENDING' AND dep.status = 'PENDING'
+                """
+            )
+            edges: dict[int, list[int]] = {}
+            for r in cursor.fetchall():
+                fid = int(r["feature_id"])
+                edges.setdefault(fid, []).append(int(r["depends_on_id"]))
+
+        # Cycle detection outside transaction (no DB writes).
+        cycles: list[list[int]] = []
+        visiting: set[int] = set()
+        visited: set[int] = set()
+        stack: list[int] = []
+        stack_pos: dict[int, int] = {}
+
+        def dfs(n: int) -> None:
+            if n in visited:
+                return
+            if n in visiting:
+                # Found a back-edge; extract cycle.
+                start = stack_pos.get(n, 0)
+                cycle = stack[start:] + [n]
+                cycles.append(cycle)
+                return
+            visiting.add(n)
+            stack_pos[n] = len(stack)
+            stack.append(n)
+            for nxt in edges.get(n, []):
+                dfs(nxt)
+            stack.pop()
+            stack_pos.pop(n, None)
+            visiting.remove(n)
+            visited.add(n)
+
+        for node in list(edges.keys()):
+            dfs(node)
+
+        # Block each feature in any detected cycle.
+        cycle_nodes: set[int] = set()
+        for c in cycles:
+            for n in c:
+                cycle_nodes.add(int(n))
+
+        for fid in sorted(cycle_nodes):
+            reason = "Blocked: dependency cycle detected among pending features"
+            if self.block_feature(fid, reason, preserve_branch=True):
+                blocked += 1
+
+        return blocked
+
+    def get_next_pending_feature(self, *, prioritize_blockers: bool = False) -> Optional[Dict[str, Any]]:
+        """Get the highest-priority pending feature.
+
+        Args:
+            prioritize_blockers: When True, prefer features that unblock the most other pending/in-progress work.
+        """
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            order_by = "f.priority DESC, f.id ASC"
+            if prioritize_blockers:
+                order_by = (
+                    "f.priority DESC, "
+                    "(SELECT COUNT(1) FROM feature_dependencies dd "
+                    " JOIN features fx ON fx.id = dd.feature_id "
+                    " WHERE dd.depends_on_id = f.id AND fx.status IN ('PENDING','IN_PROGRESS')) DESC, "
+                    "f.id ASC"
+                )
+            cursor.execute(
+                f"""
                 SELECT f.* FROM features f
                 WHERE f.status = 'PENDING'
                   AND (f.next_attempt_at IS NULL OR f.next_attempt_at <= CURRENT_TIMESTAMP)
@@ -477,7 +690,7 @@ class Database:
                     JOIN features dep ON dep.id = d.depends_on_id
                     WHERE d.feature_id = f.id AND dep.status != 'DONE'
                   )
-                ORDER BY f.priority DESC, f.id ASC
+                ORDER BY {order_by}
                 LIMIT 1
                 """
             )
@@ -494,6 +707,7 @@ class Database:
         *,
         branch_prefix: str = "feat",
         max_attempts: int = 10,
+        prioritize_blockers: bool = False,
     ) -> Optional[Dict[str, Any]]:
         """
         Atomically claim the next pending feature.
@@ -507,10 +721,20 @@ class Database:
         with self.get_connection() as conn:
             cursor = conn.cursor()
 
+            order_by = "f.priority DESC, f.id ASC"
+            if prioritize_blockers:
+                order_by = (
+                    "f.priority DESC, "
+                    "(SELECT COUNT(1) FROM feature_dependencies dd "
+                    " JOIN features fx ON fx.id = dd.feature_id "
+                    " WHERE dd.depends_on_id = f.id AND fx.status IN ('PENDING','IN_PROGRESS')) DESC, "
+                    "f.id ASC"
+                )
+
             for _ in range(max_attempts):
                 cursor.execute(
-                    """
-                    SELECT f.id FROM features f
+                    f"""
+                    SELECT f.id, f.branch_name FROM features f
                     WHERE f.status = 'PENDING'
                       AND (f.next_attempt_at IS NULL OR f.next_attempt_at <= CURRENT_TIMESTAMP)
                       AND NOT EXISTS (
@@ -519,7 +743,7 @@ class Database:
                         JOIN features dep ON dep.id = d.depends_on_id
                         WHERE d.feature_id = f.id AND dep.status != 'DONE'
                       )
-                    ORDER BY f.priority DESC, f.id ASC
+                    ORDER BY {order_by}
                     LIMIT 1
                     """
                 )
@@ -528,14 +752,15 @@ class Database:
                     return None
 
                 feature_id = int(row[0])
-                branch_name = f"{branch_prefix}/{feature_id}-{int(time.time())}"
+                existing_branch = str(row[1] or "").strip()
+                branch_name = existing_branch or f"{branch_prefix}/{feature_id}-{int(time.time())}"
 
                 cursor.execute("""
                     UPDATE features
                     SET status = 'IN_PROGRESS',
                         assigned_agent_id = ?,
                         assigned_at = CURRENT_TIMESTAMP,
-                        branch_name = ?,
+                        branch_name = COALESCE(branch_name, ?),
                         updated_at = CURRENT_TIMESTAMP
                     WHERE id = ? AND status = 'PENDING'
                 """, (agent_id, branch_name, feature_id))
@@ -545,6 +770,117 @@ class Database:
                     return self.get_feature(feature_id)
 
             return None
+
+    def get_pending_queue_state(self) -> Dict[str, Any]:
+        """
+        Summarize why pending features may not be claimable right now.
+
+        Used by the orchestrator to avoid tight polling loops when there are pending
+        features but none are currently eligible due to dependency/backoff constraints.
+        """
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+
+            cursor.execute("SELECT COUNT(1) FROM features WHERE status = 'PENDING'")
+            pending_total = int(cursor.fetchone()[0] or 0)
+
+            cursor.execute(
+                """
+                SELECT COUNT(1) FROM features f
+                WHERE f.status = 'PENDING'
+                  AND (f.next_attempt_at IS NULL OR f.next_attempt_at <= CURRENT_TIMESTAMP)
+                  AND NOT EXISTS (
+                    SELECT 1
+                    FROM feature_dependencies d
+                    JOIN features dep ON dep.id = d.depends_on_id
+                    WHERE d.feature_id = f.id AND dep.status != 'DONE'
+                  )
+                """
+            )
+            claimable_now = int(cursor.fetchone()[0] or 0)
+
+            cursor.execute(
+                """
+                SELECT COUNT(1) FROM features f
+                WHERE f.status = 'PENDING'
+                  AND f.next_attempt_at IS NOT NULL
+                  AND f.next_attempt_at > CURRENT_TIMESTAMP
+                """
+            )
+            waiting_backoff = int(cursor.fetchone()[0] or 0)
+
+            cursor.execute(
+                """
+                SELECT COUNT(DISTINCT f.id)
+                FROM features f
+                JOIN feature_dependencies d ON d.feature_id = f.id
+                JOIN features dep ON dep.id = d.depends_on_id
+                WHERE f.status = 'PENDING'
+                  AND dep.status != 'DONE'
+                """
+            )
+            waiting_deps = int(cursor.fetchone()[0] or 0)
+
+            cursor.execute(
+                """
+                SELECT MIN(f.next_attempt_at)
+                FROM features f
+                WHERE f.status = 'PENDING'
+                  AND f.next_attempt_at IS NOT NULL
+                  AND f.next_attempt_at > CURRENT_TIMESTAMP
+                """
+            )
+            next_attempt_at = cursor.fetchone()[0]
+
+            cursor.execute(
+                """
+                SELECT f.id, f.name, f.next_attempt_at
+                FROM features f
+                WHERE f.status = 'PENDING'
+                  AND f.next_attempt_at IS NOT NULL
+                  AND f.next_attempt_at > CURRENT_TIMESTAMP
+                ORDER BY f.next_attempt_at ASC
+                LIMIT 1
+                """
+            )
+            next_retry = cursor.fetchone()
+
+            cursor.execute(
+                """
+                SELECT f.id, f.name
+                FROM features f
+                WHERE f.status = 'PENDING'
+                  AND EXISTS (
+                    SELECT 1
+                    FROM feature_dependencies d
+                    JOIN features dep ON dep.id = d.depends_on_id
+                    WHERE d.feature_id = f.id AND dep.status != 'DONE'
+                  )
+                ORDER BY f.priority DESC, f.id ASC
+                LIMIT 1
+                """
+            )
+            dep_blocked = cursor.fetchone()
+
+            return {
+                "pending_total": pending_total,
+                "claimable_now": claimable_now,
+                "waiting_backoff": waiting_backoff,
+                "waiting_deps": waiting_deps,
+                "earliest_next_attempt_at": next_attempt_at,
+                "earliest_retry_feature": (
+                    {
+                        "id": int(next_retry[0]),
+                        "name": str(next_retry[1] or ""),
+                        "next_attempt_at": str(next_retry[2] or ""),
+                    }
+                    if next_retry
+                    else None
+                ),
+                "example_dep_blocked_feature": (
+                    {"id": int(dep_blocked[0]), "name": str(dep_blocked[1] or "")} if dep_blocked else None
+                ),
+            }
 
     def add_dependency_to_all_pending(self, depends_on_id: int, *, exclude_ids: Optional[List[int]] = None) -> int:
         """
@@ -742,12 +1078,15 @@ class Database:
         reason: str,
         *,
         artifact_path: str | None = None,
+        diff_fingerprint: str | None = None,
+        preserve_branch: bool = False,
+        next_status: str | None = None,
     ) -> bool:
         """Mark a feature as failed (reset for retry)."""
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT attempts, last_error_key, same_error_streak FROM features WHERE id = ?",
+                "SELECT attempts, last_error_key, same_error_streak, last_diff_fingerprint, same_diff_streak, branch_name FROM features WHERE id = ?",
                 (feature_id,),
             )
             row = cursor.fetchone()
@@ -757,9 +1096,13 @@ class Database:
             prev_attempts = int(row[0] or 0)
             prev_key = str(row[1] or "")
             prev_streak = int(row[2] or 0)
+            prev_diff = str(row[3] or "")
+            prev_diff_streak = int(row[4] or 0)
+            prev_branch = str(row[5] or "") or None
             new_attempts = prev_attempts + 1
             max_attempts = self._max_feature_attempts()
             max_streak = self._max_same_error_streak()
+            max_diff_streak = self._max_same_diff_streak()
 
             # Derive artifact path from the reason if not provided.
             derived_artifact: str | None = None
@@ -776,7 +1119,31 @@ class Database:
             else:
                 streak = 1 if new_key else 0
 
-            blocked = (new_attempts >= max_attempts) or (streak >= max_streak and max_streak > 0)
+            new_diff = (diff_fingerprint or "").strip()
+            if new_diff and new_diff == prev_diff:
+                diff_streak = prev_diff_streak + 1
+            else:
+                diff_streak = 1 if new_diff else 0
+
+            blocked_by_attempts = new_attempts >= max_attempts
+            blocked_by_error = streak >= max_streak and max_streak > 0
+            blocked_by_diff = diff_streak >= max_diff_streak and max_diff_streak > 0
+            blocked = blocked_by_attempts or blocked_by_error or blocked_by_diff
+
+            normalized_next_status = (next_status or "").strip().upper() or None
+            final_status = "BLOCKED" if blocked else (normalized_next_status or "PENDING")
+
+            stored_reason = reason
+            if blocked_by_diff and not blocked_by_attempts:
+                stored_reason = (
+                    (reason or "").rstrip()
+                    + "\n\nBlocked: no code progress detected (same diff fingerprint repeated)."
+                )
+            elif blocked_by_error and not blocked_by_attempts:
+                stored_reason = (
+                    (reason or "").rstrip()
+                    + "\n\nBlocked: same Gatekeeper failure repeated."
+                )
 
             next_attempt_at = None
             if not blocked:
@@ -791,7 +1158,7 @@ class Database:
                 SET status = ?,
                     assigned_agent_id = NULL,
                     assigned_at = NULL,
-                    branch_name = NULL,
+                    branch_name = ?,
                     review_status = 'PENDING',
                     passes = FALSE,
                     completed_at = NULL,
@@ -801,19 +1168,60 @@ class Database:
                     last_error_key = ?,
                     same_error_streak = ?,
                     last_artifact_path = ?,
+                    last_diff_fingerprint = ?,
+                    same_diff_streak = ?,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE id = ?
                 """,
                 (
-                    "BLOCKED" if blocked else "PENDING",
+                    final_status,
+                    (prev_branch if preserve_branch else None),
                     new_attempts,
-                    reason,
+                    stored_reason,
                     next_attempt_at,
                     new_key,
                     streak,
                     artifact_path,
+                    new_diff or None,
+                    diff_streak,
                     feature_id,
                 ),
+            )
+            conn.commit()
+            return cursor.rowcount > 0
+
+    def increment_qa_attempts(self, feature_id: int) -> int | None:
+        """Increment QA sub-agent attempts and return the new value."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT qa_attempts FROM features WHERE id = ?", (int(feature_id),))
+            row = cursor.fetchone()
+            if not row:
+                return None
+            prev = int(row[0] or 0)
+            new = prev + 1
+            cursor.execute(
+                "UPDATE features SET qa_attempts = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                (new, int(feature_id)),
+            )
+            conn.commit()
+            return new
+
+    def assign_feature_to_agent(self, feature_id: int, agent_id: str) -> bool:
+        """Assign a feature to an agent and mark it in-progress without changing branch_name."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                UPDATE features
+                SET status = 'IN_PROGRESS',
+                    assigned_agent_id = ?,
+                    assigned_at = CURRENT_TIMESTAMP,
+                    review_status = 'PENDING',
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (agent_id, int(feature_id)),
             )
             conn.commit()
             return cursor.rowcount > 0
@@ -834,6 +1242,38 @@ class Database:
                     updated_at = CURRENT_TIMESTAMP
                 WHERE id = ? AND status = 'IN_PROGRESS'
             """, (feature_id,))
+            conn.commit()
+            return cursor.rowcount > 0
+
+    def requeue_feature(self, feature_id: int, *, preserve_branch: bool = True) -> bool:
+        """
+        Requeue a feature back to PENDING without incrementing attempts.
+
+        Used when an agent process couldn't be spawned (ports/worktree issues).
+        """
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT branch_name FROM features WHERE id = ?", (int(feature_id),))
+            row = cursor.fetchone()
+            if not row:
+                return False
+            branch_name = row[0]
+            cursor.execute(
+                """
+                UPDATE features
+                SET status = 'PENDING',
+                    assigned_agent_id = NULL,
+                    assigned_at = NULL,
+                    branch_name = ?,
+                    review_status = 'PENDING',
+                    passes = FALSE,
+                    completed_at = NULL,
+                    next_attempt_at = NULL,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (branch_name if preserve_branch else None, int(feature_id)),
+            )
             conn.commit()
             return cursor.rowcount > 0
 

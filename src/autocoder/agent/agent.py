@@ -239,8 +239,35 @@ async def run_autonomous_agent(
     # Main loop
     iteration = 0
 
+    def _assigned_feature_done() -> bool:
+        """
+        Parallel workers should exit once they have submitted their feature for Gatekeeper verification.
+
+        We treat `review_status=READY_FOR_VERIFICATION` as "done for this worker" because the Gatekeeper
+        (orchestrator) owns deterministic verification + merging.
+        """
+        if assigned_feature_id is None:
+            return False
+        try:
+            db = get_database(str(features_state_dir))
+            row = db.get_feature(int(assigned_feature_id)) or {}
+            status = str(row.get("status") or "").upper()
+            review_status = str(row.get("review_status") or "").upper()
+            if status in {"DONE", "BLOCKED"}:
+                return True
+            if review_status in {"READY_FOR_VERIFICATION", "VERIFIED"}:
+                return True
+        except Exception:
+            return False
+        return False
+
     while True:
         iteration += 1
+
+        # If we're a parallel worker and the feature was already submitted/merged, exit early.
+        if _assigned_feature_done():
+            print("\nAssigned feature already submitted for verification; exiting worker.")
+            break
 
         # Check max iterations
         if max_iterations and iteration > max_iterations:
@@ -283,6 +310,7 @@ async def run_autonomous_agent(
             last_error_text = ""
             artifact_path = ""
             attempts = 0
+            qa_attempts = 0
             if qa_enabled:
                 try:
                     db = get_database(str(features_state_dir))
@@ -290,10 +318,24 @@ async def run_autonomous_agent(
                     last_error_text = str(row.get("last_error") or "").strip()
                     artifact_path = str(row.get("last_artifact_path") or "").strip()
                     attempts = int(row.get("attempts") or 0)
+                    qa_attempts = int(row.get("qa_attempts") or 0)
                 except Exception:
                     last_error_text = ""
                     artifact_path = ""
                     attempts = 0
+                    qa_attempts = 0
+
+            plan_text = ""
+            plan_path = str(os.environ.get("AUTOCODER_FEATURE_PLAN_PATH", "")).strip()
+            if plan_path:
+                try:
+                    p = Path(plan_path)
+                    if p.exists() and p.is_file():
+                        plan_text = p.read_text(encoding="utf-8", errors="replace").strip()
+                        if len(plan_text) > 6000:
+                            plan_text = plan_text[:6000].rstrip() + "\n.(truncated)."
+                except Exception:
+                    plan_text = ""
 
             prompt = (
                 "IMPORTANT: You are running as a parallel worker with an explicit assignment.\n"
@@ -301,6 +343,7 @@ async def run_autonomous_agent(
                 "- Do NOT call `feature_get_next`.\n"
                 "- Call `feature_get_by_id` for the assigned feature, then proceed as usual.\n\n"
                 "- When finished, call `feature_mark_passing` to submit for Gatekeeper verification (it may not immediately set passes=true).\n\n"
+                + (f"FEATURE PLAN (generated):\n{plan_text}\n\n---\n\n" if plan_text else "")
                 + (
                     (
                         "QA FIX MODE (enabled):\n"
@@ -308,12 +351,16 @@ async def run_autonomous_agent(
                         "- Focus on tests/lint/typecheck failures first. Do NOT expand scope.\n"
                         "- After making fixes, run the failing command(s) locally in the worktree and commit.\n"
                         "- Then submit again with `feature_mark_passing`.\n"
-                        + (f"\nAttempts so far: {attempts} (QA max sessions: {qa_max})\n" if qa_max else "\n")
+                        + (
+                            f"\nAttempts so far: {attempts} (QA attempts: {qa_attempts}, QA max sessions: {qa_max})\n"
+                            if qa_max
+                            else "\n"
+                        )
                         + (f"\nLast error:\n{last_error_text}\n" if last_error_text else "")
                         + (f"\nLast artifact path:\n{artifact_path}\n" if artifact_path else "")
                         + "\n---\n\n"
                     )
-                    if qa_enabled and qa_max > 0 and attempts > 0 and attempts <= qa_max and (last_error_text or artifact_path)
+                    if qa_enabled and qa_max > 0 and qa_attempts > 0 and qa_attempts <= qa_max and (last_error_text or artifact_path)
                     else ""
                 )
                 + prompt
@@ -322,6 +369,12 @@ async def run_autonomous_agent(
         # Run session with async context manager
         async with client:
             status, response = await run_agent_session(client, prompt, project_dir)
+
+        # After each session, if the assigned feature has been submitted for Gatekeeper verification,
+        # stop this worker (the orchestrator will run Gatekeeper and handle retries if needed).
+        if _assigned_feature_done():
+            print("\nAssigned feature submitted for verification; exiting worker.")
+            break
 
         # Handle status
         if status == "continue":

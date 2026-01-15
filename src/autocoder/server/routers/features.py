@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from datetime import datetime
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
@@ -58,8 +59,39 @@ def _parse_steps(raw: object) -> list[str]:
     return []
 
 
-def _feature_to_response(row: dict) -> FeatureResponse:
+def _is_retry_eligible(next_attempt_at: object) -> bool:
+    if not next_attempt_at:
+        return True
+    s = str(next_attempt_at).strip()
+    if not s:
+        return True
+    # SQLite timestamps are typically `YYYY-MM-DD HH:MM:SS` or ISO-ish.
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M:%S.%f"):
+        try:
+            dt = datetime.strptime(s, fmt)
+            return dt <= datetime.now()
+        except Exception:
+            continue
+    try:
+        dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+        # Naive compare fallback
+        if dt.tzinfo is not None:
+            dt = dt.replace(tzinfo=None)
+        return dt <= datetime.now()
+    except Exception:
+        # If unparseable, be conservative.
+        return False
+
+
+def _feature_to_response(row: dict, *, deps: list[dict[str, object]] | None = None) -> FeatureResponse:
     status = (row.get("status") or "").upper()
+    dep_rows = deps or []
+    waiting_on = [int(d["id"]) for d in dep_rows if str(d.get("status") or "").upper() != "DONE" and d.get("id")]
+    ready = bool(
+        status == "PENDING"
+        and not waiting_on
+        and _is_retry_eligible(row.get("next_attempt_at"))
+    )
     return FeatureResponse(
         id=int(row["id"]),
         priority=int(row.get("priority") or 0),
@@ -74,6 +106,8 @@ def _feature_to_response(row: dict) -> FeatureResponse:
         last_error=(str(row.get("last_error")) if row.get("last_error") is not None else None),
         last_artifact_path=(str(row.get("last_artifact_path")) if row.get("last_artifact_path") is not None else None),
         depends_on=[int(x) for x in (row.get("depends_on") or [])],
+        ready=ready,
+        waiting_on=waiting_on,
     )
 
 
@@ -92,7 +126,7 @@ async def list_features(project_name: str):
     List all features for a project organized by status.
 
     Returns features in three lists:
-    - pending: status=PENDING
+    - pending: status=PENDING (and BLOCKED)
     - in_progress: status=IN_PROGRESS
     - done: status=DONE (passes=true)
     """
@@ -106,11 +140,17 @@ async def list_features(project_name: str):
 
     try:
         pending_rows = db.get_features_by_status("PENDING")
+        blocked_rows = db.get_features_by_status("BLOCKED")
         in_progress_rows = db.get_features_by_status("IN_PROGRESS")
         done_rows = db.get_features_by_status("DONE")
 
+        dep_map = db.get_dependency_statuses([int(r["id"]) for r in pending_rows])
+
         return FeatureListResponse(
-            pending=[_feature_to_response(r) for r in pending_rows],
+            pending=[
+                _feature_to_response(r, deps=dep_map.get(int(r["id"]), [])) for r in pending_rows
+            ]
+            + [_feature_to_response(r) for r in blocked_rows],
             in_progress=[_feature_to_response(r) for r in in_progress_rows],
             done=[_feature_to_response(r) for r in done_rows],
         )

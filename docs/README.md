@@ -34,6 +34,13 @@ This directory contains detailed documentation for the autonomous coding system.
   - Gatekeeper verification
   - Complete workflow examples
 
+- **[RELIABILITY_PIPELINE.md](RELIABILITY_PIPELINE.md)** - Reliability mechanisms in parallel mode
+  - Retry/backoff + loop breaker (`BLOCKED`)
+  - Evidence-first Gatekeeper artifacts
+  - Windows worktree cleanup queue
+  - Log/artifact retention
+  - Web UI diagnostics fixtures
+
 ### Component Documentation
 
 - **[TEST_DETECTION_IMPROVEMENTS.md](TEST_DETECTION_IMPROVEMENTS.md)** - Test framework detection

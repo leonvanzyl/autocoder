@@ -33,6 +33,8 @@ from .routers import (
     settings_router,
     generate_router,
     project_config_router,
+    diagnostics_router,
+    worktrees_router,
 )
 from .websocket import project_websocket
 from .services.process_manager import cleanup_all_managers
@@ -127,6 +129,8 @@ app.include_router(parallel_router)
 app.include_router(settings_router)
 app.include_router(generate_router)
 app.include_router(project_config_router)
+app.include_router(diagnostics_router)
+app.include_router(worktrees_router)
 
 
 # ============================================================================

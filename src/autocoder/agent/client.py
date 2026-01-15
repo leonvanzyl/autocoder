@@ -33,6 +33,13 @@ FEATURE_MCP_TOOLS = [
     "mcp__features__feature_create_bulk",
 ]
 
+# File lock MCP tools (optional)
+LOCK_MCP_TOOLS = [
+    "mcp__locks__lock_acquire",
+    "mcp__locks__lock_release",
+    "mcp__locks__lock_list",
+]
+
 # Playwright MCP tools for browser automation
 PLAYWRIGHT_TOOLS = [
     # Core navigation & screenshots
@@ -214,6 +221,20 @@ def create_client(
             },
         },
     }
+
+    # Optional file locks MCP server (only when enabled).
+    if os.environ.get("AUTOCODER_LOCKS_ENABLED", "").strip().lower() in {"1", "true", "yes", "on"}:
+        lock_dir = os.environ.get("AUTOCODER_LOCK_DIR") or str(features_state_dir / ".autocoder" / "locks")
+        mcp_servers["locks"] = {
+            "command": sys.executable,
+            "args": ["-m", "autocoder.tools.lock_mcp"],
+            "env": {
+                **os.environ,
+                "PROJECT_DIR": str(features_state_dir),
+                "AUTOCODER_LOCK_DIR": str(Path(lock_dir).resolve()),
+                "PYTHONPATH": str(pythonpath),
+            },
+        }
     if not yolo_mode:
         # Include Playwright MCP server for browser automation (standard mode only)
         mcp_servers["playwright"] = {
@@ -243,7 +264,7 @@ def create_client(
             system_prompt="You are an expert full-stack developer building a production-quality web application.",
             setting_sources=["project"],  # Enable skills, commands, and CLAUDE.md from project dir
             max_buffer_size=10 * 1024 * 1024,  # 10MB for large Playwright screenshots
-            allowed_tools=allowed_tools,
+            allowed_tools=allowed_tools + (LOCK_MCP_TOOLS if "locks" in mcp_servers else []),
             mcp_servers=mcp_servers,
             hooks={"PreToolUse": pre_tool_use_matchers},
             max_turns=1000,

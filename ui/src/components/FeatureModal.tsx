@@ -16,6 +16,8 @@ export function FeatureModal({ feature, projectName, onClose }: FeatureModalProp
   const status = useMemo(() => (feature.status ?? (feature.in_progress ? 'IN_PROGRESS' : feature.passes ? 'DONE' : 'PENDING')).toUpperCase(), [feature])
   const attempts = feature.attempts ?? 0
   const dependsOn = feature.depends_on ?? []
+  const waitingOn = feature.waiting_on ?? []
+  const ready = !!feature.ready
 
   const skipFeature = useSkipFeature(projectName)
   const deleteFeature = useDeleteFeature(projectName)
@@ -112,9 +114,24 @@ export function FeatureModal({ feature, projectName, onClose }: FeatureModalProp
               </>
             )}
             <span className="ml-auto font-mono text-sm">
-              Priority: #{feature.priority}{attempts > 0 ? ` • Attempts: ${attempts}` : ''}
+              Priority: #{feature.priority}{attempts > 0 ? ` | Attempts: ${attempts}` : ''}
             </span>
           </div>
+
+          {status === 'PENDING' && dependsOn.length > 0 && (
+            <div className="neo-card p-3 bg-[var(--color-neo-bg)] border-3 border-[var(--color-neo-border)]">
+              <div className="text-xs font-mono text-[var(--color-neo-text-secondary)] mb-1">Dependency status</div>
+              <div className="font-mono text-sm">
+                {ready ? (
+                  <span className="text-green-700">READY</span>
+                ) : waitingOn.length > 0 ? (
+                  <span className="text-[var(--color-neo-text-secondary)]">Waiting on: {waitingOn.join(', ')}</span>
+                ) : (
+                  <span className="text-[var(--color-neo-text-secondary)]">Not ready yet (retry backoff)</span>
+                )}
+              </div>
+            </div>
+          )}
 
           {dependsOn.length > 0 && (
             <div>

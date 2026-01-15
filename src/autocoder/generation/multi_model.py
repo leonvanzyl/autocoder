@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Literal
+from concurrent.futures import ThreadPoolExecutor
 
 from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
 from autocoder.agent.retry import execute_with_retry_sync, retry_config_from_env
@@ -91,6 +92,9 @@ def _cli_argv(name: str) -> list[str]:
     resolved = (shutil.which(name) or "").lower()
     if resolved.endswith((".exe",)):
         return [name]
+    if resolved.endswith(".ps1"):
+        shell = "pwsh" if shutil.which("pwsh") else "powershell"
+        return [shell, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", shutil.which(name) or name]
     # `.cmd`/`.bat` shims or extensionless launchers -> `cmd.exe /c`.
     return ["cmd.exe", "/c", name]
 
@@ -301,14 +305,20 @@ async def _claude_synthesize(prompt: str, model: str, workdir: Path, timeout_s: 
         )
     )
     try:
+        # Timebox the entire synthesis (query + streaming response) to avoid blocking orchestrator flows.
         await asyncio.wait_for(client.query(prompt), timeout=timeout_s)
-        text = ""
-        async for msg in client.receive_response():
-            if type(msg).__name__ == "AssistantMessage" and hasattr(msg, "content"):
-                for block in msg.content:
-                    if type(block).__name__ == "TextBlock" and hasattr(block, "text"):
-                        text += block.text
-        return True, text.strip(), ""
+
+        async def _collect() -> str:
+            text = ""
+            async for msg in client.receive_response():
+                if type(msg).__name__ == "AssistantMessage" and hasattr(msg, "content"):
+                    for block in msg.content:
+                        if type(block).__name__ == "TextBlock" and hasattr(block, "text"):
+                            text += block.text
+            return text.strip()
+
+        text = await asyncio.wait_for(_collect(), timeout=timeout_s)
+        return True, text, ""
     except Exception as e:
         return False, "", str(e)
 
@@ -340,7 +350,6 @@ def generate_multi_model_artifact(
     synthesize: bool = True,
 ) -> dict[str, str]:
     project_dir = Path(project_dir).resolve()
-    (project_dir / "prompts").mkdir(parents=True, exist_ok=True)
 
     output = Path(output_path) if output_path else default_output_path(project_dir, kind)
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -391,7 +400,26 @@ def generate_multi_model_artifact(
     else:
         # Claude Agent SDK synthesis (optional). If it fails, fall back to combined drafts.
         model = cfg.claude_model or os.environ.get("AUTOCODER_REVIEW_MODEL") or "sonnet"
-        ok, out, err = asyncio.run(_claude_synthesize(_synth_prompt(kind, user_prompt, drafts), model, drafts_root, cfg.timeout_s))
+        async_coro = _claude_synthesize(
+            _synth_prompt(kind, user_prompt, drafts),
+            model,
+            drafts_root,
+            cfg.timeout_s,
+        )
+        try:
+            asyncio.get_running_loop()
+            in_loop = True
+        except RuntimeError:
+            in_loop = False
+
+        if not in_loop:
+            ok, out, err = asyncio.run(async_coro)
+        else:
+            # We are already inside an event loop (e.g. orchestrator). Run synthesis in a
+            # dedicated thread with its own event loop to avoid `asyncio.run()` failures.
+            with ThreadPoolExecutor(max_workers=1) as ex:
+                fut = ex.submit(lambda: asyncio.run(async_coro))
+                ok, out, err = fut.result()
         if ok and out.strip():
             final_text = out.strip()
         else:

@@ -24,6 +24,7 @@ from pathlib import Path
 
 from autocoder.agent import run_autonomous_agent
 from autocoder.core.database import get_database
+from autocoder.core.file_locks import cleanup_agent_locks
 
 
 logging.basicConfig(
@@ -70,6 +71,9 @@ async def heartbeat_loop(database, agent_id: str, interval_seconds: int) -> None
 async def main() -> int:
     args = parse_args()
 
+    # Identify this agent for hooks/tools (locks, etc.).
+    os.environ["AUTOCODER_AGENT_ID"] = str(args.agent_id)
+
     # Set environment variables for port configuration
     os.environ["AUTOCODER_API_PORT"] = str(args.api_port)
     os.environ["AUTOCODER_WEB_PORT"] = str(args.web_port)
@@ -83,6 +87,9 @@ async def main() -> int:
 
     project_dir = Path(args.project_dir).resolve()
     worktree_path = Path(args.worktree_path).resolve()
+
+    # Default lock dir to the shared project state directory (not the worktree).
+    os.environ.setdefault("AUTOCODER_LOCK_DIR", str((project_dir / ".autocoder" / "locks").resolve()))
 
     if not project_dir.exists():
         logger.error(f"Project directory does not exist: {project_dir}")
@@ -150,11 +157,20 @@ async def main() -> int:
 
     finally:
         heartbeat_task.cancel()
-        with contextlib.suppress(Exception):
+        # asyncio.CancelledError inherits from BaseException in Python 3.11+ (incl. 3.12),
+        # so it is not caught by suppress(Exception).
+        with contextlib.suppress(asyncio.CancelledError):
             await heartbeat_task
 
         with contextlib.suppress(Exception):
             database.mark_agent_completed(args.agent_id)
+
+        # Best-effort lock cleanup to avoid stale locks blocking future work.
+        if os.environ.get("AUTOCODER_LOCKS_ENABLED", "").strip().lower() in {"1", "true", "yes", "on"}:
+            lock_dir_raw = str(os.environ.get("AUTOCODER_LOCK_DIR", "")).strip()
+            if lock_dir_raw:
+                with contextlib.suppress(Exception):
+                    cleanup_agent_locks(Path(lock_dir_raw).resolve(), str(args.agent_id))
 
         duration_s = (datetime.now() - start_time).total_seconds()
         logger.info(f"Worker finished in {duration_s:.1f}s")

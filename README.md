@@ -79,6 +79,10 @@ Just run `autocoder` with no arguments:
 autocoder
 ```
 
+### New Project Setup Wizard (Web UI)
+
+When creating a new project in the Web UI, AutoCoder includes an optional **Project Setup** step that can create (or copy) a per-project `autocoder.yaml`, including the `worker:` defaults (feature worker provider, patch iterations/order). You can always edit this later in Settings → Project Config.
+
 **What happens next:**
 
 1. **Setup check** - It checks if you have Node.js, npm, Claude CLI, etc.
@@ -121,6 +125,7 @@ autocoder-ui
 
 - Quick run settings: **Settings** button (or press `S`).
 - Full settings hub: open `http://127.0.0.1:8888/#/settings` (Run / Models / Advanced).
+- Diagnostics: open `http://127.0.0.1:8888/#/settings/diagnostics` (system status, configurable fixtures dir, deterministic E2E fixtures, recent run logs).
 
 ### Parallel-Safe Feature Claiming
 
@@ -142,6 +147,7 @@ For framework-agnostic verification, put an `autocoder.yaml` in the **target pro
 - `commands.setup` (optional): install deps / build
 - `commands.test` (required for non-YOLO merges)
 - `commands.lint`, `commands.typecheck`, etc. (optional; can be `allow_fail: true`)
+- `commands.acceptance` (optional): deterministic E2E/smoke checks (e.g., Playwright)
 
 This is preferred over auto-detection for non-Python stacks and monorepos.
 
@@ -169,12 +175,25 @@ Logs are pruned automatically (defaults: keep 7 days, 200 files, 200MB total). O
 - `AUTOCODER_LOGS_MAX_TOTAL_MB`
 
 Gatekeeper writes verification artifacts under `.autocoder/**/gatekeeper/*.json`. To prune those periodically, set `AUTOCODER_LOGS_PRUNE_ARTIFACTS=1` (uses the same retention knobs by default, or set `AUTOCODER_ARTIFACTS_KEEP_*` separately).
+In the Web UI: Settings -> Advanced -> Logs -> **Auto-prune Gatekeeper artifacts**.
 
 You can also prune manually:
 
 `autocoder logs --project-dir <path> --prune [--dry-run] [--include-artifacts]`
 
 In the Web UI, use **Logs** (press `L`) to view/tail, prune, or delete worker log files.
+
+### Reliability & Retry Loop Prevention
+
+Parallel mode is designed to be self-healing without getting stuck in infinite retries:
+
+- **Feature retry backoff**: failed features schedule `next_attempt_at` with exponential backoff.
+- **No-progress loop breaker (same error)**: repeated identical Gatekeeper failures increment `same_error_streak`; the feature becomes `BLOCKED` after `AUTOCODER_FEATURE_MAX_SAME_ERROR_STREAK` (default `3`).
+- **No-progress loop breaker (same diff)**: Gatekeeper computes a `diff_fingerprint`; if retries keep producing the same diff and still fail, the feature becomes `BLOCKED` after `AUTOCODER_FEATURE_MAX_SAME_DIFF_STREAK` (default `3`).
+- **Actionable failure context**: Gatekeeper writes a JSON artifact and AutoCoder stores `features.last_error` + `features.last_artifact_path` for the next retry.
+- **Windows worktree cleanup queue**: locked `node_modules` cleanups are queued and retried so `worktrees/` doesn’t grow unbounded.
+
+Details: `docs/RELIABILITY_PIPELINE.md`.
 
 ### SDK Retry/Backoff
 
@@ -187,14 +206,67 @@ Transient Claude SDK errors (rate limits, timeouts, connection blips) use expone
 - `AUTOCODER_SDK_EXPONENTIAL_BASE` (default `2`)
 - `AUTOCODER_SDK_JITTER` (default `true`)
 
+### Feature Worker Provider (optional)
+
+By default, feature implementation uses the **Claude Agent SDK** worker. You can optionally switch feature implementation to a patch worker that generates unified diffs via external CLIs.
+
+- Provider: `AUTOCODER_WORKER_PROVIDER` (`claude|codex_cli|gemini_cli|multi_cli`)
+- Iterations (patch worker): `AUTOCODER_WORKER_PATCH_MAX_ITERATIONS` (default `2`)
+- Provider order (multi): `AUTOCODER_WORKER_PATCH_AGENTS` (default `codex,gemini`)
+
+Per-project (recommended): store these under `worker:` in the target repo’s `autocoder.yaml` so each project carries its own defaults.
+
+In the Web UI: Settings -> Advanced -> Automation -> Feature Workers.
+
 ### QA Fix Mode (optional)
 
-When enabled, parallel workers will automatically switch to a “fix the last failure” prompt after a Gatekeeper rejection (using `features.last_error` / `features.last_artifact_path`).
+When enabled, parallel workers will automatically switch to a "fix the last failure" prompt after a Gatekeeper rejection (using `features.last_error` / `features.last_artifact_path`).
 
 - Enable: `AUTOCODER_QA_FIX_ENABLED=1`
 - Limit: `AUTOCODER_QA_MAX_SESSIONS` (default `3`)
 
-In the Web UI: Settings → **Advanced → Automation → QA auto-fix**.
+In the Web UI: Settings -> Advanced -> Automation -> QA auto-fix.
+
+### QA Sub-Agent (optional)
+
+When enabled, the orchestrator will spawn a short-lived QA worker immediately after a Gatekeeper rejection. The QA worker reuses the same feature branch and is capped by a small iteration budget.
+
+- Enable: `AUTOCODER_QA_SUBAGENT_ENABLED=1`
+- Iterations: `AUTOCODER_QA_SUBAGENT_MAX_ITERATIONS` (default `2`)
+- Provider: `AUTOCODER_QA_SUBAGENT_PROVIDER` (`claude|codex_cli|gemini_cli|multi_cli`)
+- Provider order (multi): `AUTOCODER_QA_SUBAGENT_AGENTS` (default `codex,gemini`)
+
+In the Web UI: Settings -> Advanced -> Automation -> QA sub-agent.
+
+### Controller Preflight (optional)
+
+When enabled, the orchestrator runs deterministic verification commands in the agent worktree before Gatekeeper merge verification.
+
+- Enable: `AUTOCODER_CONTROLLER_ENABLED=1`
+
+### Feature Planner (optional)
+
+When enabled, AutoCoder generates a short per-feature plan (Codex/Gemini drafts, optional Claude synthesis) and prepends it to the worker prompt.
+
+- Enable: `AUTOCODER_PLANNER_ENABLED=1`
+
+### E2E QA Provider Fixture (deterministic)
+
+To validate the Gatekeeper -> QA sub-agent -> re-verify loop without relying on a full feature-implementation agent, run:
+
+- Node fixture: `python scripts/e2e_qa_provider.py --out-dir "G:/Apps/autocoder-e2e-fixtures" --fixture node --provider multi_cli`
+- Python/pytest fixture: `python scripts/e2e_qa_provider.py --out-dir "G:/Apps/autocoder-e2e-fixtures" --fixture python --provider multi_cli`
+
+This creates a minimal repo that intentionally fails verification on `feat/1`, then relies on the selected QA provider to generate a patch and resubmit until Gatekeeper merges.
+
+You can also run this via the CLI (same codepath as the Diagnostics UI):
+
+- `autocoder diagnostics --fixture node --provider multi_cli --out-dir "G:/Apps/autocoder-e2e-fixtures"`
+
+Notes:
+
+- Diagnostics run logs are written under `<out_dir>/diagnostics_runs/*.log`.
+- In the Web UI, the default `out_dir` is repo-local `dev_archive/e2e-fixtures` (override via Diagnostics -> Fixtures Directory, or `AUTOCODER_DIAGNOSTICS_FIXTURES_DIR`).
 
 ### UI Server Lock
 

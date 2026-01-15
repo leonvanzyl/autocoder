@@ -34,6 +34,12 @@ ALLOWED_COMMANDS = {
     "npx",
     "pnpm",  # Project uses pnpm
     "node",
+    # Python development (framework-agnostic verification)
+    "python",
+    "python3",
+    "pip",
+    "pip3",
+    "pytest",
     # Version control
     "git",
     # Docker (for PostgreSQL)
@@ -50,6 +56,7 @@ ALLOWED_COMMANDS = {
     "mv",
     "rm",  # Use with caution
     "touch",
+    "test",
     # Shell scripts
     "sh",
     "bash",

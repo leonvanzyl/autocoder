@@ -66,6 +66,37 @@ def test_worktree_creation():
         print("✅ Worktree creation works")
 
 
+def test_worktree_can_attach_existing_branch():
+    """WorktreeManager can create a worktree for an existing branch (resume)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        repo_path = Path(tmpdir) / "main_repo"
+        repo_path.mkdir()
+
+        subprocess.run(["git", "init"], cwd=repo_path, capture_output=True, check=True)
+        subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=repo_path, capture_output=True, check=True)
+        subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo_path, capture_output=True, check=True)
+        subprocess.run(["git", "checkout", "-b", "main"], cwd=repo_path, capture_output=True, check=True)
+
+        (repo_path / "README.md").write_text("# Test Repo")
+        subprocess.run(["git", "add", "."], cwd=repo_path, capture_output=True, check=True)
+        subprocess.run(["git", "commit", "-m", "Initial commit"], cwd=repo_path, capture_output=True, check=True)
+
+        # Create an existing branch.
+        subprocess.run(["git", "checkout", "-b", "feat/existing"], cwd=repo_path, capture_output=True, check=True)
+        (repo_path / "A.txt").write_text("a", encoding="utf-8")
+        subprocess.run(["git", "add", "A.txt"], cwd=repo_path, capture_output=True, check=True)
+        subprocess.run(["git", "commit", "-m", "feat"], cwd=repo_path, capture_output=True, check=True)
+        subprocess.run(["git", "checkout", "main"], cwd=repo_path, capture_output=True, check=True)
+
+        wm = WorktreeManager(str(repo_path))
+        info = wm.create_worktree("resume-1", feature_id=1, feature_name="x", branch_name="feat/existing")
+        assert isinstance(info, dict)
+        wt = Path(info["worktree_path"])
+        assert (wt / "A.txt").exists()
+
+        wm.remove_worktree("resume-1")
+
+
 def test_worktree_listing():
     """Test listing all worktrees."""
     with tempfile.TemporaryDirectory() as tmpdir:

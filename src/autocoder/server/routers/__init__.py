@@ -17,6 +17,8 @@ from .parallel import router as parallel_router
 from .settings import router as settings_router
 from .generate import router as generate_router
 from .project_config import router as project_config_router
+from .diagnostics import router as diagnostics_router
+from .worktrees import router as worktrees_router
 
 __all__ = [
     "projects_router",
@@ -31,4 +33,6 @@ __all__ = [
     "settings_router",
     "generate_router",
     "project_config_router",
+    "diagnostics_router",
+    "worktrees_router",
 ]

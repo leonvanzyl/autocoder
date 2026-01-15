@@ -678,6 +678,22 @@ Examples:
     logs_parser.add_argument("--keep-files", type=int, default=200)
     logs_parser.add_argument("--max-mb", type=int, default=200)
 
+    # Diagnostics (deterministic fixtures)
+    diag_parser = subparsers.add_parser(
+        "diagnostics",
+        help="Run deterministic diagnostics fixtures",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  autocoder diagnostics --fixture node --provider multi_cli
+  autocoder diagnostics --fixture python --provider gemini_cli
+        """,
+    )
+    diag_parser.add_argument("--fixture", choices=["node", "python"], default="node")
+    diag_parser.add_argument("--provider", choices=["claude", "codex_cli", "gemini_cli", "multi_cli"], default="multi_cli")
+    diag_parser.add_argument("--timeout-s", type=int, default=240)
+    diag_parser.add_argument("--out-dir", type=str, default=None, help="Where to create fixture repos (default: dev_archive/e2e-fixtures)")
+
     args = parser.parse_args()
 
     # Route to appropriate mode
@@ -714,6 +730,28 @@ Examples:
             )
         else:
             print("No action specified. Try: autocoder logs --project-dir <path> --prune")
+    elif args.mode == "diagnostics":
+        # Run repo-local diagnostics scripts when available.
+        repo_root = Path(__file__).resolve().parents[2]
+        script = repo_root / "scripts" / "e2e_qa_provider.py"
+        if not script.exists():
+            print("Diagnostics script not found (scripts/e2e_qa_provider.py). Run from a source checkout.")
+            return
+        out_dir = args.out_dir or str((repo_root / "dev_archive" / "e2e-fixtures").resolve())
+        cmd = [
+            sys.executable,
+            str(script),
+            "--out-dir",
+            out_dir,
+            "--fixture",
+            args.fixture,
+            "--provider",
+            args.provider,
+            "--timeout-s",
+            str(int(args.timeout_s)),
+        ]
+        proc = subprocess.run(cmd, cwd=str(repo_root))
+        raise SystemExit(proc.returncode)
     else:
         # Default: Run setup check and ask what to launch
         setup = check_setup()

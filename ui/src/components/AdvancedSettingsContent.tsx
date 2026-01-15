@@ -30,15 +30,29 @@ const DEFAULTS: AdvancedSettings = {
   gemini_model: '',
   locks_enabled: false,
   worker_verify: true,
+  worker_provider: 'claude',
+  worker_patch_max_iterations: 2,
+  worker_patch_agents: 'codex,gemini',
   qa_fix_enabled: false,
   qa_model: '',
   qa_max_sessions: 0,
+  qa_subagent_enabled: false,
+  qa_subagent_max_iterations: 2,
+  qa_subagent_provider: 'claude',
+  qa_subagent_agents: 'codex,gemini',
   controller_enabled: false,
   controller_model: '',
   controller_max_sessions: 0,
+  planner_enabled: false,
+  planner_model: '',
+  planner_agents: 'codex,gemini',
+  planner_synthesizer: 'claude',
+  planner_timeout_s: 180,
   logs_keep_days: 7,
   logs_keep_files: 200,
   logs_max_total_mb: 200,
+  logs_prune_artifacts: false,
+  diagnostics_fixtures_dir: '',
   sdk_max_attempts: 3,
   sdk_initial_delay_s: 1,
   sdk_rate_limit_initial_delay_s: 30,
@@ -232,6 +246,46 @@ export function AdvancedSettingsContent() {
               </div>
 
               <div className="neo-card p-4">
+                <div className="font-display font-bold uppercase mb-3">Feature Workers</div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="neo-card p-3">
+                    <div className="font-display font-bold text-sm mb-2">Worker provider</div>
+                    <select
+                      value={draft.worker_provider}
+                      onChange={(e) => setDraft({ ...draft, worker_provider: e.target.value })}
+                      className="neo-btn text-sm py-2 px-3 bg-white border-3 border-[var(--color-neo-border)] font-display w-full"
+                    >
+                      <option value="claude">claude (Claude Agent SDK)</option>
+                      <option value="codex_cli">codex_cli (patch worker)</option>
+                      <option value="gemini_cli">gemini_cli (patch worker)</option>
+                      <option value="multi_cli">multi_cli (patch worker)</option>
+                    </select>
+                    <div className="text-xs text-[var(--color-neo-text-secondary)] mt-2">
+                      Patch workers implement features by generating unified diffs, then Gatekeeper verifies deterministically.
+                    </div>
+                  </div>
+
+                  <Field
+                    label="Patch iterations"
+                    value={draft.worker_patch_max_iterations}
+                    onChange={(v) => setDraft({ ...draft, worker_patch_max_iterations: clampInt(v, 1, 20) })}
+                  />
+
+                  <TextField
+                    label="Patch provider order (csv)"
+                    value={draft.worker_patch_agents}
+                    onChange={(v) => setDraft({ ...draft, worker_patch_agents: v })}
+                    placeholder="e.g. codex,gemini"
+                  />
+                </div>
+                <div className="text-xs text-[var(--color-neo-text-secondary)] mt-2">
+                  <span className="block">
+                    Note: <span className="font-mono">multi_cli</span> uses the order above. Single providers ignore it.
+                  </span>
+                </div>
+              </div>
+
+              <div className="neo-card p-4">
                 <div className="font-display font-bold uppercase mb-3">QA + Controller</div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <label className="neo-card p-3 flex items-center justify-between cursor-pointer">
@@ -242,11 +296,104 @@ export function AdvancedSettingsContent() {
                   <TextField label="QA model" value={draft.qa_model} onChange={(v) => setDraft({ ...draft, qa_model: v })} placeholder="e.g. sonnet" />
 
                   <label className="neo-card p-3 flex items-center justify-between cursor-pointer">
+                    <span className="font-display font-bold text-sm">QA sub-agent</span>
+                    <input
+                      type="checkbox"
+                      checked={draft.qa_subagent_enabled}
+                      onChange={(e) => setDraft({ ...draft, qa_subagent_enabled: e.target.checked })}
+                      className="w-5 h-5"
+                    />
+                  </label>
+                  <Field
+                    label="QA max iterations"
+                    value={draft.qa_subagent_max_iterations}
+                    onChange={(v) => setDraft({ ...draft, qa_subagent_max_iterations: clampInt(v, 1, 20) })}
+                  />
+                  <div className="neo-card p-3">
+                    <div className="font-display font-bold text-sm mb-2">QA provider</div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div>
+                        <select
+                          value={draft.qa_subagent_provider}
+                          onChange={(e) => setDraft({ ...draft, qa_subagent_provider: e.target.value })}
+                          className="neo-btn text-sm py-2 px-3 bg-white border-3 border-[var(--color-neo-border)] font-display w-full"
+                        >
+                          <option value="claude">claude</option>
+                          <option value="codex_cli">codex_cli</option>
+                          <option value="gemini_cli">gemini_cli</option>
+                          <option value="multi_cli">multi_cli</option>
+                        </select>
+                      </div>
+                      <TextField
+                        label="Order (csv)"
+                        value={draft.qa_subagent_agents}
+                        onChange={(v) => setDraft({ ...draft, qa_subagent_agents: v })}
+                        placeholder="e.g. codex,gemini"
+                      />
+                    </div>
+                    <div className="text-xs text-[var(--color-neo-text-secondary)] mt-2">
+                      Spawns a short-lived fixer after Gatekeeper rejects a feature (reuses the same branch; no new scope).
+                      <span className="block mt-1">
+                        Note: <span className="font-mono">codex_cli</span> uses <span className="font-mono">Codex model</span> above, and <span className="font-mono">gemini_cli</span> uses <span className="font-mono">Gemini model</span>.
+                      </span>
+                    </div>
+                  </div>
+
+                  <label className="neo-card p-3 flex items-center justify-between cursor-pointer">
                     <span className="font-display font-bold text-sm">Controller</span>
                     <input type="checkbox" checked={draft.controller_enabled} onChange={(e) => setDraft({ ...draft, controller_enabled: e.target.checked })} className="w-5 h-5" />
                   </label>
                   <Field label="Controller max sessions" value={draft.controller_max_sessions} onChange={(v) => setDraft({ ...draft, controller_max_sessions: clampInt(v, 0, 50) })} />
                   <TextField label="Controller model" value={draft.controller_model} onChange={(v) => setDraft({ ...draft, controller_model: v })} placeholder="e.g. haiku" />
+                </div>
+              </div>
+
+              <div className="neo-card p-4">
+                <div className="font-display font-bold uppercase mb-3">Planner</div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <label className="neo-card p-3 flex items-center justify-between cursor-pointer">
+                    <span className="font-display font-bold text-sm">Feature plan (multi-model)</span>
+                    <input
+                      type="checkbox"
+                      checked={draft.planner_enabled}
+                      onChange={(e) => setDraft({ ...draft, planner_enabled: e.target.checked })}
+                      className="w-5 h-5"
+                    />
+                  </label>
+                  <Field
+                    label="Timeout (s)"
+                    value={draft.planner_timeout_s}
+                    onChange={(v) => setDraft({ ...draft, planner_timeout_s: clampInt(v, 30, 3600) })}
+                  />
+                  <TextField
+                    label="Agents (csv)"
+                    value={draft.planner_agents}
+                    onChange={(v) => setDraft({ ...draft, planner_agents: v })}
+                    placeholder="e.g. codex,gemini"
+                  />
+                  <div className="neo-card p-3">
+                    <div className="font-display font-bold text-sm mb-2">Synthesizer</div>
+                    <select
+                      value={draft.planner_synthesizer}
+                      onChange={(e) => setDraft({ ...draft, planner_synthesizer: e.target.value })}
+                      className="neo-btn text-sm py-2 px-3 bg-white border-3 border-[var(--color-neo-border)] font-display w-full"
+                    >
+                      <option value="claude">claude</option>
+                      <option value="none">none</option>
+                      <option value="codex">codex</option>
+                      <option value="gemini">gemini</option>
+                    </select>
+                  </div>
+                  <TextField
+                    label="Claude model (optional)"
+                    value={draft.planner_model}
+                    onChange={(v) => setDraft({ ...draft, planner_model: v })}
+                    placeholder="e.g. sonnet"
+                  />
+                </div>
+                <div className="text-xs text-[var(--color-neo-text-secondary)] mt-2">
+                  Generates a short implementation plan per feature and prepends it to the worker prompt. Uses Codex/Gemini CLIs
+                  when available, with optional Claude synthesis.
                 </div>
               </div>
             </div>
@@ -285,6 +432,20 @@ export function AdvancedSettingsContent() {
                 <Field label="Keep days" value={draft.logs_keep_days} onChange={(v) => setDraft({ ...draft, logs_keep_days: clampInt(v, 0, 3650) })} />
                 <Field label="Keep files" value={draft.logs_keep_files} onChange={(v) => setDraft({ ...draft, logs_keep_files: clampInt(v, 0, 100000) })} />
                 <Field label="Max total (MB)" value={draft.logs_max_total_mb} onChange={(v) => setDraft({ ...draft, logs_max_total_mb: clampInt(v, 0, 100000) })} />
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+                <label className="neo-card p-3 flex items-center justify-between cursor-pointer">
+                  <span className="font-display font-bold text-sm">Auto-prune Gatekeeper artifacts</span>
+                  <input
+                    type="checkbox"
+                    checked={draft.logs_prune_artifacts}
+                    onChange={(e) => setDraft({ ...draft, logs_prune_artifacts: e.target.checked })}
+                    className="w-5 h-5"
+                  />
+                </label>
+                <div className="text-xs text-[var(--color-neo-text-secondary)] self-center">
+                  Prunes <span className="font-mono">.autocoder/**/gatekeeper/*.json</span> periodically during runs.
+                </div>
               </div>
             </div>
           )}

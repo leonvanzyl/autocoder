@@ -10,15 +10,15 @@
  */
 
 import { useState } from 'react'
-import { X, Bot, FileEdit, ArrowRight, ArrowLeft, Loader2, CheckCircle2, Folder } from 'lucide-react'
-import { useCreateProject } from '../hooks/useProjects'
+import { X, Bot, FileEdit, ArrowRight, ArrowLeft, Loader2, CheckCircle2, Folder, Settings2 } from 'lucide-react'
+import { useCreateProject, useProjects } from '../hooks/useProjects'
 import { SpecCreationChat } from './SpecCreationChat'
 import { FolderBrowser } from './FolderBrowser'
-import { startAgent } from '../lib/api'
+import { getAutocoderYaml, startAgent, updateAutocoderYaml } from '../lib/api'
 
 type InitializerStatus = 'idle' | 'starting' | 'error'
 
-type Step = 'name' | 'folder' | 'method' | 'chat' | 'complete'
+type Step = 'name' | 'folder' | 'setup' | 'method' | 'chat' | 'complete'
 type SpecMethod = 'claude' | 'manual'
 
 interface NewProjectModalProps {
@@ -40,11 +40,18 @@ export function NewProjectModal({
   const [initializerStatus, setInitializerStatus] = useState<InitializerStatus>('idle')
   const [initializerError, setInitializerError] = useState<string | null>(null)
   const [yoloModeSelected, setYoloModeSelected] = useState(false)
+  const [initAutocoderYaml, setInitAutocoderYaml] = useState(true)
+  const [configSource, setConfigSource] = useState<'template' | 'copy'>('template')
+  const [copyFromProject, setCopyFromProject] = useState('')
+  const [workerProvider, setWorkerProvider] = useState<'claude' | 'codex_cli' | 'gemini_cli' | 'multi_cli'>('claude')
+  const [workerPatchIterations, setWorkerPatchIterations] = useState(2)
+  const [workerPatchAgents, setWorkerPatchAgents] = useState('codex,gemini')
 
   // Suppress unused variable warning - specMethod may be used in future
   void _specMethod
 
   const createProject = useCreateProject()
+  const projectsQ = useProjects()
 
   if (!isOpen) return null
 
@@ -70,11 +77,52 @@ export function NewProjectModal({
     // Append project name to the selected path
     const fullPath = path.endsWith('/') ? `${path}${projectName.trim()}` : `${path}/${projectName.trim()}`
     setProjectPath(fullPath)
-    setStep('method')
+    setStep('setup')
   }
 
   const handleFolderCancel = () => {
     setStep('name')
+  }
+
+  const buildAutocoderYamlTemplate = (): string => {
+    const agents = workerPatchAgents
+      .split(',')
+      .map((x) => x.trim())
+      .filter(Boolean)
+      .slice(0, 10)
+    const agentsYaml = agents.length ? agents.join(', ') : 'codex, gemini'
+    const iters = Math.max(1, Math.min(20, Math.trunc(workerPatchIterations || 2)))
+    return (
+      `# autocoder.yaml\n` +
+      `# Project-level AutoCoder defaults.\n` +
+      `#\n` +
+      `# If preset/commands are omitted, Gatekeeper will infer a preset and synthesize\n` +
+      `# deterministic verification commands.\n` +
+      `\n` +
+      `worker:\n` +
+      `  provider: ${workerProvider}\n` +
+      `  patch_max_iterations: ${iters}\n` +
+      `  patch_agents: [${agentsYaml}]\n`
+    )
+  }
+
+  const maybeInitProjectConfig = async (name: string) => {
+    if (!initAutocoderYaml) return
+
+    try {
+      if (configSource === 'copy' && copyFromProject) {
+        const other = await getAutocoderYaml(copyFromProject)
+        const content = (other.content || '').trim()
+        if (content) {
+          await updateAutocoderYaml(name, content.endsWith('\n') ? content : content + '\n')
+          return
+        }
+      }
+      await updateAutocoderYaml(name, buildAutocoderYamlTemplate())
+    } catch (e: unknown) {
+      // Non-fatal: project can still run without autocoder.yaml.
+      setError(e instanceof Error ? e.message : 'Failed to initialize autocoder.yaml')
+    }
   }
 
   const handleMethodSelect = async (method: SpecMethod) => {
@@ -94,6 +142,7 @@ export function NewProjectModal({
           path: projectPath,
           specMethod: 'manual',
         })
+        await maybeInitProjectConfig(project.name)
         setStep('complete')
         setTimeout(() => {
           onProjectCreated(project.name)
@@ -105,11 +154,12 @@ export function NewProjectModal({
     } else {
       // Create project then show chat
       try {
-        await createProject.mutateAsync({
+        const project = await createProject.mutateAsync({
           name: projectName.trim(),
           path: projectPath,
           specMethod: 'claude',
         })
+        await maybeInitProjectConfig(project.name)
         setStep('chat')
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : 'Failed to create project')
@@ -163,13 +213,21 @@ export function NewProjectModal({
     setInitializerStatus('idle')
     setInitializerError(null)
     setYoloModeSelected(false)
+    setInitAutocoderYaml(true)
+    setConfigSource('template')
+    setCopyFromProject('')
+    setWorkerProvider('claude')
+    setWorkerPatchIterations(2)
+    setWorkerPatchAgents('codex,gemini')
     onClose()
   }
 
   const handleBack = () => {
     if (step === 'method') {
-      setStep('folder')
+      setStep('setup')
       setSpecMethod(null)
+    } else if (step === 'setup') {
+      setStep('folder')
     } else if (step === 'folder') {
       setStep('name')
       setProjectPath(null)
@@ -244,6 +302,7 @@ export function NewProjectModal({
         <div className="flex items-center justify-between p-4 border-b-3 border-[var(--color-neo-border)]">
           <h2 className="font-display font-bold text-xl text-[#1a1a1a]">
             {step === 'name' && 'Create New Project'}
+            {step === 'setup' && 'Project Setup'}
             {step === 'method' && 'Choose Setup Method'}
             {step === 'complete' && 'Project Created!'}
           </h2>
@@ -298,6 +357,153 @@ export function NewProjectModal({
           )}
 
           {/* Step 2: Spec Method */}
+          {step === 'setup' && (
+            <div>
+              <p className="text-[var(--color-neo-text-secondary)] mb-6">
+                Optionally configure project defaults (you can edit later).
+              </p>
+
+              <div className="neo-card p-4 mb-6">
+                <div className="flex items-start gap-3">
+                  <div className="p-2 bg-[var(--color-neo-accent)] border-2 border-[var(--color-neo-border)] shadow-[2px_2px_0px_rgba(0,0,0,1)]">
+                    <Settings2 size={20} className="text-white" />
+                  </div>
+                  <div className="flex-1">
+                    <div className="font-display font-bold uppercase">Setup Wizard</div>
+                    <div className="text-sm text-[var(--color-neo-text-secondary)]">
+                      Creates <span className="font-mono">autocoder.yaml</span> with per-project defaults (recommended for parallel runs).
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-3 grid grid-cols-1 gap-3">
+                  <label className="neo-card p-3 flex items-center justify-between cursor-pointer">
+                    <span className="font-display font-bold text-sm">Create autocoder.yaml</span>
+                    <input
+                      type="checkbox"
+                      checked={initAutocoderYaml}
+                      onChange={(e) => setInitAutocoderYaml(e.target.checked)}
+                      className="w-5 h-5"
+                    />
+                  </label>
+
+                  {initAutocoderYaml && (
+                    <>
+                      <div className="neo-card p-3">
+                        <div className="text-xs font-display font-bold uppercase mb-2">Source</div>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            className={`neo-btn text-sm ${configSource === 'template' ? 'bg-[var(--color-neo-accent)] text-white' : 'neo-btn-secondary'}`}
+                            onClick={() => setConfigSource('template')}
+                            type="button"
+                          >
+                            Template
+                          </button>
+                          <button
+                            className={`neo-btn text-sm ${configSource === 'copy' ? 'bg-[var(--color-neo-accent)] text-white' : 'neo-btn-secondary'}`}
+                            onClick={() => setConfigSource('copy')}
+                            type="button"
+                          >
+                            Copy from project
+                          </button>
+                        </div>
+                      </div>
+
+                      {configSource === 'copy' ? (
+                        <div className="neo-card p-3">
+                          <div className="text-xs font-display font-bold uppercase mb-2">Copy From</div>
+                          <select
+                            value={copyFromProject}
+                            onChange={(e) => setCopyFromProject(e.target.value)}
+                            className="neo-btn text-sm py-2 px-3 bg-white border-3 border-[var(--color-neo-border)] font-display w-full"
+                            disabled={projectsQ.isLoading || projectsQ.isFetching}
+                          >
+                            <option value="">Select a project…</option>
+                            {(projectsQ.data || [])
+                              .map((p) => p.name)
+                              .filter((n) => n)
+                              .sort()
+                              .map((name) => (
+                                <option key={name} value={name}>
+                                  {name}
+                                </option>
+                              ))}
+                          </select>
+                          <div className="text-xs text-[var(--color-neo-text-secondary)] mt-2">
+                            Copies the entire <span className="font-mono">autocoder.yaml</span> (commands/review/worker).
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="neo-card p-3">
+                          <div className="text-xs font-display font-bold uppercase mb-2">Worker</div>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div>
+                              <div className="text-xs font-display font-bold uppercase mb-1">Provider</div>
+                              <select
+                                value={workerProvider}
+                                onChange={(e) => setWorkerProvider(e.target.value as any)}
+                                className="neo-btn text-sm py-2 px-3 bg-white border-3 border-[var(--color-neo-border)] font-display w-full"
+                              >
+                                <option value="claude">claude (Claude Agent SDK)</option>
+                                <option value="codex_cli">codex_cli (patch worker)</option>
+                                <option value="gemini_cli">gemini_cli (patch worker)</option>
+                                <option value="multi_cli">multi_cli (patch worker)</option>
+                              </select>
+                            </div>
+
+                            <div>
+                              <div className="text-xs font-display font-bold uppercase mb-1">Patch iterations</div>
+                              <input
+                                type="number"
+                                value={workerPatchIterations}
+                                min={1}
+                                max={20}
+                                onChange={(e) => setWorkerPatchIterations(Number(e.target.value))}
+                                className="neo-input"
+                              />
+                            </div>
+
+                            {workerProvider === 'multi_cli' && (
+                              <div className="md:col-span-2">
+                                <div className="text-xs font-display font-bold uppercase mb-1">Patch order (csv)</div>
+                                <input
+                                  value={workerPatchAgents}
+                                  onChange={(e) => setWorkerPatchAgents(e.target.value)}
+                                  placeholder="codex,gemini"
+                                  className="neo-input"
+                                />
+                              </div>
+                            )}
+                          </div>
+                          <div className="text-xs text-[var(--color-neo-text-secondary)] mt-2">
+                            Gatekeeper still infers verification commands if you don’t set <span className="font-mono">preset</span>/<span className="font-mono">commands</span>.
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex justify-between mt-6">
+                <button onClick={handleBack} className="neo-btn neo-btn-ghost">
+                  <ArrowLeft size={16} />
+                  Back
+                </button>
+                <button
+                  onClick={() => setStep('method')}
+                  className="neo-btn neo-btn-primary"
+                  type="button"
+                  disabled={!projectPath}
+                >
+                  Next
+                  <ArrowRight size={16} />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Step 3: Spec Method */}
           {step === 'method' && (
             <div>
               <p className="text-[var(--color-neo-text-secondary)] mb-6">
@@ -393,7 +599,7 @@ export function NewProjectModal({
             </div>
           )}
 
-          {/* Step 3: Complete */}
+          {/* Step 4: Complete */}
           {step === 'complete' && (
             <div className="text-center py-8">
               <div className="inline-flex items-center justify-center w-16 h-16 bg-[var(--color-neo-done)] border-3 border-[var(--color-neo-border)] shadow-[4px_4px_0px_rgba(0,0,0,1)] mb-4">

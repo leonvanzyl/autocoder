@@ -32,18 +32,34 @@ class AdvancedSettingsModel(BaseModel):
 
     locks_enabled: bool = False
     worker_verify: bool = True
+    worker_provider: str = Field(default="claude", max_length=32)
+    worker_patch_max_iterations: int = Field(default=2, ge=1, le=20)
+    worker_patch_agents: str = Field(default="codex,gemini", max_length=256)
 
     qa_fix_enabled: bool = False
     qa_model: str = Field(default="", max_length=128)
     qa_max_sessions: int = Field(default=0, ge=0, le=50)
+    qa_subagent_enabled: bool = False
+    qa_subagent_max_iterations: int = Field(default=2, ge=1, le=20)
+    qa_subagent_provider: str = Field(default="claude", max_length=32)
+    qa_subagent_agents: str = Field(default="codex,gemini", max_length=256)
 
     controller_enabled: bool = False
     controller_model: str = Field(default="", max_length=128)
     controller_max_sessions: int = Field(default=0, ge=0, le=50)
 
+    planner_enabled: bool = False
+    planner_model: str = Field(default="", max_length=128)
+    planner_agents: str = Field(default="codex,gemini", max_length=256)
+    planner_synthesizer: str = Field(default="claude", max_length=32)
+    planner_timeout_s: int = Field(default=180, ge=30, le=3600)
+
     logs_keep_days: int = Field(default=7, ge=0, le=3650)
     logs_keep_files: int = Field(default=200, ge=0, le=100000)
     logs_max_total_mb: int = Field(default=200, ge=0, le=100000)
+    logs_prune_artifacts: bool = False
+
+    diagnostics_fixtures_dir: str = Field(default="", max_length=2000)
 
     sdk_max_attempts: int = Field(default=3, ge=1, le=20)
     sdk_initial_delay_s: int = Field(default=1, ge=0, le=600)

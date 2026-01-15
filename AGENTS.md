@@ -1,53 +1,50 @@
 # Repository Guidelines
 
-AutoCoder is built on the Claude Agent SDK + MCP tools. It supports single-agent and parallel (git worktree) runs; coordination uses SQLite (`agent_system.db`).
+AutoCoder is a Claude Agent SDK + MCP based coding agent. It supports single-agent and parallel runs via isolated git worktrees, coordinated through SQLite (`agent_system.db`).
 
 ## Project Structure & Module Organization
 
-- `src/autocoder/`: main Python package.
-- `src/autocoder/core/`: orchestrator, DB, gatekeeper, worktrees, knowledge base.
-- `src/autocoder/agent/`: agent loop, SDK client, hooks/guardrails, security allowlist.
-- `src/autocoder/tools/`: MCP servers (notably `feature_mcp.py`).
-- `src/autocoder/server/`: FastAPI backend for the Web UI.
-- `ui/`: React UI (built artifacts served by `src/autocoder/server/`).
-- `tests/`: pytest-based smoke/integration tests.
+- `src/autocoder/`: Python package root.
+- `src/autocoder/core/`: orchestrator, DB, Gatekeeper, worktrees, port allocation.
+- `src/autocoder/agent/`: Claude Agent SDK loop, hooks/guardrails, security allowlist.
+- `src/autocoder/server/`: FastAPI API + WebSocket + UI static serving.
+- `ui/`: React UI (build to `ui/dist`).
+- `tests/`: `pytest` tests.
 
 ## Build, Test, and Development Commands
 
 - Install (dev): `pip install -e '.[dev]'`
-- Run interactive CLI: `autocoder`
-- Run single agent: `autocoder agent --project-dir <path> [--yolo]`
-- Run parallel agents: `autocoder parallel --project-dir <path> --parallel 3`
-- Launch Web UI: `autocoder-ui`
-- Prune worker logs: `autocoder logs --project-dir <path> --prune [--dry-run]`
-- Run tests: `pytest -q`
+- Run single agent: `autocoder agent --project-dir <path>`
+- Run parallel: `autocoder parallel --project-dir <path> --parallel 3`
+- Start Web UI: `autocoder-ui` (then open `http://127.0.0.1:8888/`)
+- Tests: `pytest -q`
 - Format/lint: `black .` and `ruff check .`
 
 ## Coding Style & Naming Conventions
 
 - Python: 4-space indentation; Black (line length 100).
-- Prefer `pathlib.Path`; keep changes focused and small.
-- Status values in the unified DB are uppercase: `PENDING`, `IN_PROGRESS`, `DONE`.
-- Naming: modules/functions `snake_case`, classes `CapWords`, constants `UPPER_SNAKE_CASE`.
+- Prefer `pathlib.Path`; keep changes small and focused.
+- Naming: `snake_case` for functions/modules, `CapWords` for classes.
 
 ## Testing Guidelines
 
 - Framework: `pytest` (`tests/test_*.py`).
 - Keep tests hermetic: temp dirs, no network, no real API keys.
-- For orchestration/DB changes, add/update a focused state-transition test.
+- For orchestration/DB changes: add a state-transition test (claim -> work -> verify -> merge/retry).
+
+## Orchestrator Reliability Notes
+
+- When there are pending features but **none are claimable** (waiting on dependencies or `next_attempt_at` backoff), the orchestrator uses an **idle backoff** sleep (up to 60s) instead of tight polling.
+- Use `features.last_error` and Gatekeeper artifacts under `.autocoder/features/<id>/gatekeeper/` to debug retries.
+ - Feature implementation worker is configurable: `AUTOCODER_WORKER_PROVIDER=claude|codex_cli|gemini_cli|multi_cli` (patch workers use `src/autocoder/qa_worker.py --mode implement`).
 
 ## Commit & Pull Request Guidelines
 
-- Commits: short, imperative summaries (e.g., `core: fix feature claiming race`), one logical change per commit.
-- PRs: include a short description, how to verify, and test output; add UI screenshots when relevant.
+- Commits: short, imperative summaries (e.g., `core: fix feature claiming race`).
+- PRs: include what changed, how to verify, and test output; add UI screenshots for UI changes.
 
 ## Security & Agent-Specific Notes
 
-- Shared coordination DB is `agent_system.db` in the project directory; do not commit runtime DB files or `worktrees/`.
-- SQLite is tuned for multi-process (WAL + busy timeout); avoid ad-hoc connections without these settings.
-- UI server port uses `AUTOCODER_UI_PORT` (default `8888`); parallel agents use per-worker `AUTOCODER_API_PORT` / `AUTOCODER_WEB_PORT` to avoid port conflicts.
-- Parallel workers run in isolated git worktrees but share `PROJECT_DIR` (for `agent_system.db`) so all agents see the same queue.
-- Worker stdout/stderr is written to `./.autocoder/logs/*.log` (not stored in SQLite); manage via CLI or the Web UI **Logs** modal (`L`).
-- Prefer `feature_claim_next` for atomic feature assignment; `feature_get_next` is legacy/non-atomic.
-- In parallel mode, `feature_mark_passing` submits for Gatekeeper verification; `passes=true` is set only after deterministic verification/merge.
-- Bash tool usage is restricted by an allowlist in `src/autocoder/agent/security.py`; treat changes there as security-sensitive and test thoroughly.
+- Don’t commit runtime artifacts: `agent_system.db`, `.autocoder/`, `worktrees/`.
+- Gatekeeper is deterministic and the only component allowed to merge to main.
+- Shell tool usage is restricted by an allowlist in `src/autocoder/agent/security.py`; treat changes there as security-sensitive.

@@ -23,6 +23,7 @@ import contextlib
 import json
 import shutil
 import sys
+import hashlib
 from pathlib import Path
 from typing import Dict, Any, Optional
 from datetime import datetime
@@ -322,6 +323,27 @@ class Gatekeeper:
                     "errors": str(e),
                 }
 
+        def _compute_diff_fingerprint(cwd: Path) -> str | None:
+            """
+            Stable fingerprint of the merged change-set (index vs HEAD) in the verification worktree.
+
+            Used for "no progress" detection: if retries produce the same diff and still fail, the
+            feature can be blocked to avoid infinite churn.
+            """
+            try:
+                res = subprocess.run(
+                    ["git", "diff", "--cached", "--no-color", "--no-ext-diff"],
+                    cwd=str(cwd),
+                    capture_output=True,
+                    text=True,
+                )
+                if res.returncode != 0:
+                    return None
+                data = (res.stdout or "").replace("\r\n", "\n").encode("utf-8", errors="replace")
+                return hashlib.sha256(data).hexdigest()
+            except Exception:
+                return None
+
         try:
             detected_main = detect_main_branch()
             has_origin = origin_exists()
@@ -410,6 +432,7 @@ class Gatekeeper:
             # Step 4: Run tests IN TEMP WORKTREE
             logger.info("🧪 Running verification in temporary worktree...")
             temp_path = Path(str(temp_worktree_path))
+            diff_fingerprint = _compute_diff_fingerprint(temp_path)
             cfg = load_project_config(temp_path)
             if cfg.preset is None and not cfg.commands:
                 preset = infer_preset(temp_path)
@@ -434,13 +457,14 @@ class Gatekeeper:
                             "approved": False,
                             "reason": "Setup failed",
                             "verification": verification,
+                            "diff_fingerprint": diff_fingerprint,
                             "timestamp": datetime.now().isoformat(),
                         }
                         _write_artifact(result)
                         return result
 
                 # Run remaining commands; ensure "test" runs early.
-                ordered = ["test", "lint", "typecheck", "format", "build"]
+                ordered = ["test", "lint", "typecheck", "format", "build", "acceptance"]
                 seen = set(["setup"])
                 for name in ordered + sorted(k for k in command_specs.keys() if k not in ordered):
                     if name in seen:
@@ -460,6 +484,7 @@ class Gatekeeper:
                             "approved": False,
                             "reason": f"Verification command failed: {name}",
                             "verification": verification,
+                            "diff_fingerprint": diff_fingerprint,
                             "timestamp": datetime.now().isoformat(),
                         }
                         _write_artifact(result)
@@ -469,6 +494,7 @@ class Gatekeeper:
                             "approved": False,
                             "reason": f"Verification command failed: {name}",
                             "verification": verification,
+                            "diff_fingerprint": diff_fingerprint,
                             "timestamp": datetime.now().isoformat(),
                         }
                         _write_artifact(result)
@@ -485,6 +511,7 @@ class Gatekeeper:
                         "reason": "Test execution failed",
                         "test_results": test_results,
                         "verification": verification,
+                        "diff_fingerprint": diff_fingerprint,
                         "timestamp": datetime.now().isoformat(),
                     }
                     _write_artifact(result)
@@ -495,6 +522,7 @@ class Gatekeeper:
                         "reason": "Tests failed - fix and resubmit",
                         "test_results": test_results,
                         "verification": verification,
+                        "diff_fingerprint": diff_fingerprint,
                         "timestamp": datetime.now().isoformat(),
                     }
                     _write_artifact(result)
@@ -542,6 +570,7 @@ class Gatekeeper:
                         "verification": verification,
                         "test_results": test_results,
                         "review": review,
+                        "diff_fingerprint": diff_fingerprint,
                         "timestamp": datetime.now().isoformat(),
                     }
                     _write_artifact(result)
@@ -564,7 +593,8 @@ class Gatekeeper:
                     "approved": False,
                     "reason": "Failed to commit merge",
                     "error": str(e),
-                    "test_results": test_results
+                    "test_results": test_results,
+                    "diff_fingerprint": diff_fingerprint,
                 }
 
             merge_commit_hash = subprocess.run(
@@ -634,6 +664,7 @@ class Gatekeeper:
                         "error": str(e),
                         "test_results": test_results,
                         "merge_commit": merge_commit_hash,
+                        "diff_fingerprint": diff_fingerprint,
                     }
 
             logger.info(f"✅ Gatekeeper: APPROVED '{branch_name}'")
@@ -646,6 +677,7 @@ class Gatekeeper:
                 "verification": verification,
                 "review": review,
                 "merge_commit": merge_commit_hash,
+                "diff_fingerprint": diff_fingerprint,
                 "timestamp": datetime.now().isoformat()
             }
             _write_artifact(result)
@@ -871,6 +903,169 @@ class Gatekeeper:
             "errors": errors,
             "timestamp": datetime.now().isoformat()
         }
+
+    def verify_commands_only(
+        self,
+        *,
+        worktree_path: str | None = None,
+        allow_no_tests: bool = False,
+        feature_id: int | None = None,
+        agent_id: str | None = None,
+    ) -> Dict[str, Any]:
+        """
+        Run deterministic verification commands without merging.
+
+        This is a "preflight" check to catch obvious failures (missing scripts, lint/typecheck)
+        before doing a full Gatekeeper temp-worktree merge verification.
+        """
+
+        def _write_artifact(result: Dict[str, Any]) -> None:
+            try:
+                if feature_id is not None:
+                    out_dir = self.project_dir / ".autocoder" / "features" / str(int(feature_id)) / "controller"
+                else:
+                    out_dir = self.project_dir / ".autocoder" / "controller"
+                out_dir.mkdir(parents=True, exist_ok=True)
+                stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+                path = out_dir / f"{stamp}.json"
+                path.write_text(json.dumps(result, indent=2, sort_keys=True), encoding="utf-8")
+                result.setdefault("artifact_path", str(path))
+            except Exception:
+                return
+
+        def _expand_placeholders(command: str, project_dir: Path) -> str:
+            py = sys.executable.replace("\\", "/")
+            if os.name == "nt":
+                venv_py = (project_dir / ".venv" / "Scripts" / "python.exe").resolve()
+            else:
+                venv_py = (project_dir / ".venv" / "bin" / "python").resolve()
+            venv_py_s = str(venv_py).replace("\\", "/")
+            return command.replace("{PY}", py).replace("{VENV_PY}", venv_py_s)
+
+        def _run_shell(command: str, *, cwd: Path, timeout_s: int | None) -> Dict[str, Any]:
+            cmd = _expand_placeholders(command, cwd)
+            try:
+                result = subprocess.run(
+                    cmd,
+                    cwd=str(cwd),
+                    shell=True,
+                    capture_output=True,
+                    text=True,
+                    timeout=int(timeout_s) if timeout_s else None,
+                )
+                return {
+                    "success": True,
+                    "passed": result.returncode == 0,
+                    "exit_code": result.returncode,
+                    "command": cmd,
+                    "output": result.stdout or "",
+                    "errors": result.stderr or "",
+                }
+            except subprocess.TimeoutExpired:
+                return {
+                    "success": False,
+                    "passed": False,
+                    "exit_code": None,
+                    "command": command,
+                    "output": "",
+                    "errors": f"Timed out after {timeout_s} seconds",
+                    "timeout": True,
+                }
+            except Exception as e:
+                return {
+                    "success": False,
+                    "passed": False,
+                    "exit_code": None,
+                    "command": command,
+                    "output": "",
+                    "errors": str(e),
+                }
+
+        workdir = Path(worktree_path or self.project_dir).resolve()
+        cfg = load_project_config(workdir)
+        if cfg.preset is None and not cfg.commands:
+            preset = infer_preset(workdir)
+            if preset:
+                cmds = synthesize_commands_from_preset(preset, workdir)
+                cfg = type(cfg)(preset=preset, commands=cmds, review=cfg.review)
+
+        command_specs = cfg.commands or {}
+        verification: dict[str, Any] = {}
+
+        if not command_specs:
+            result = {
+                "approved": False,
+                "reason": "No deterministic verification commands configured",
+                "verification": verification,
+                "timestamp": datetime.now().isoformat(),
+                "agent_id": agent_id,
+            }
+            _write_artifact(result)
+            return result
+
+        setup = command_specs.get("setup")
+        if setup and setup.command:
+            setup_cmd = setup.command
+            if setup_cmd.strip() == "npm install":
+                selected = Gatekeeper._select_node_install_command(workdir)
+                if selected:
+                    setup_cmd = selected
+            verification["setup"] = _run_shell(setup_cmd, cwd=workdir, timeout_s=setup.timeout_s)
+            verification["setup"]["allow_fail"] = bool(getattr(setup, "allow_fail", False))
+            if not verification["setup"]["passed"] and not verification["setup"]["allow_fail"]:
+                result = {
+                    "approved": False,
+                    "reason": "Setup failed",
+                    "verification": verification,
+                    "timestamp": datetime.now().isoformat(),
+                    "agent_id": agent_id,
+                }
+                _write_artifact(result)
+                return result
+
+        ordered = ["test", "lint", "typecheck", "format", "build", "acceptance"]
+        seen = {"setup"}
+        for name in ordered + sorted(k for k in command_specs.keys() if k not in ordered):
+            if name in seen:
+                continue
+            spec = command_specs.get(name)
+            if not spec or not getattr(spec, "command", None):
+                continue
+            seen.add(name)
+            verification[name] = _run_shell(spec.command, cwd=workdir, timeout_s=spec.timeout_s)
+            verification[name]["allow_fail"] = bool(getattr(spec, "allow_fail", False))
+            if name == "test":
+                verification[name] = Gatekeeper._apply_allow_no_tests(verification[name], allow_no_tests=allow_no_tests)
+            if not verification[name]["success"] and not verification[name]["allow_fail"]:
+                result = {
+                    "approved": False,
+                    "reason": f"Verification command failed: {name}",
+                    "verification": verification,
+                    "timestamp": datetime.now().isoformat(),
+                    "agent_id": agent_id,
+                }
+                _write_artifact(result)
+                return result
+            if not verification[name]["passed"] and not verification[name]["allow_fail"]:
+                result = {
+                    "approved": False,
+                    "reason": f"Verification command failed: {name}",
+                    "verification": verification,
+                    "timestamp": datetime.now().isoformat(),
+                    "agent_id": agent_id,
+                }
+                _write_artifact(result)
+                return result
+
+        result = {
+            "approved": True,
+            "reason": "Preflight verification passed",
+            "verification": verification,
+            "timestamp": datetime.now().isoformat(),
+            "agent_id": agent_id,
+        }
+        _write_artifact(result)
+        return result
 
 
 def main():

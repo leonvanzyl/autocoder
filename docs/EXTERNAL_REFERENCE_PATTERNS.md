@@ -32,3 +32,17 @@ This repo includes `to_check/` as a scratchpad of external projects that use the
 
 Some references are **AGPL** (e.g. `to_check/autoclaude`) or have **no license**; treat them as *inspiration only*. Prefer implementing concepts from scratch and keep changes reviewed.
 
+## Status in this repository
+
+Implemented (core behavior + tests + UI where applicable):
+- Retry/backoff + bounded retry scheduling (`features.next_attempt_at`)
+- No-progress loop breaker (same error streak + same diff fingerprint -> `BLOCKED`)
+- Gatekeeper artifacts + DB pointers (`features.last_error`, `features.last_artifact_path`)
+- Framework-agnostic verification via `autocoder.yaml` + UI editor
+- Worktree cleanup queue (Windows file-lock resilience)
+- Optional multi-model review (Codex/Gemini CLIs) in Gatekeeper
+- Optional QA fix mode (worker switches to “fix last failure” prompt)
+
+Still planned / partially implemented:
+- “No-progress” detection based on *code not changing* is implemented, but can be improved by using commit hashes and/or per-file fingerprints
+- True QA sub-agent process (separate short-lived session/process) + optional multi-provider QA

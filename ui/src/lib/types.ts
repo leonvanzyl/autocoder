@@ -71,6 +71,8 @@ export interface Feature {
   last_error?: string | null
   last_artifact_path?: string | null
   depends_on?: number[]
+  ready?: boolean
+  waiting_on?: number[]
 }
 
 export interface FeatureListResponse {
@@ -173,18 +175,34 @@ export interface AdvancedSettings {
 
   locks_enabled: boolean
   worker_verify: boolean
+  worker_provider: string
+  worker_patch_max_iterations: number
+  worker_patch_agents: string
 
   qa_fix_enabled: boolean
   qa_model: string
   qa_max_sessions: number
+  qa_subagent_enabled: boolean
+  qa_subagent_max_iterations: number
+  qa_subagent_provider: string
+  qa_subagent_agents: string
 
   controller_enabled: boolean
   controller_model: string
   controller_max_sessions: number
 
+  planner_enabled: boolean
+  planner_model: string
+  planner_agents: string
+  planner_synthesizer: string
+  planner_timeout_s: number
+
   logs_keep_days: number
   logs_keep_files: number
   logs_max_total_mb: number
+  logs_prune_artifacts: boolean
+
+  diagnostics_fixtures_dir: string
 
   sdk_max_attempts: number
   sdk_initial_delay_s: number

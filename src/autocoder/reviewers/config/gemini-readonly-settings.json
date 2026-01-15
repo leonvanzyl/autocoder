@@ -1,15 +1,29 @@
 {
   "tools": {
-    "sandbox": {
-      "enabled": true
-    }
-  },
-  "permissions": {
-    "defaultMode": "reject",
-    "allow": [
-      "Read(./**)",
-      "Glob(./**)",
-      "Grep(./**)"
+    "allowed": [
+      "LSTool",
+      "ReadFileTool",
+      "ReadManyFilesTool",
+      "GrepTool",
+      "GlobTool"
+    ],
+    "core": [
+      "LSTool",
+      "ReadFileTool",
+      "ReadManyFilesTool",
+      "GrepTool",
+      "GlobTool"
+    ],
+    "exclude": [
+      "ShellTool",
+      "WriteFileTool",
+      "EditTool",
+      "WebFetchTool",
+      "WebSearchTool",
+      "MemoryTool"
     ]
+  },
+  "mcp": {
+    "allowed": []
   }
 }

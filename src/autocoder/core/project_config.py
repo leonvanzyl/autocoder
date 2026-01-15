@@ -76,10 +76,24 @@ class ReviewSpec:
 
 
 @dataclass(frozen=True)
+class WorkerSpec:
+    """
+    Per-project worker settings for feature implementation.
+
+    If unset (all fields None), callers should fall back to global defaults / env vars.
+    """
+
+    provider: str | None = None  # claude|codex_cli|gemini_cli|multi_cli
+    patch_max_iterations: int | None = None
+    patch_agents: list[str] | None = None  # order for multi_cli (codex,gemini)
+
+
+@dataclass(frozen=True)
 class ResolvedProjectConfig:
     preset: str | None
     commands: dict[str, CommandSpec | None]
     review: ReviewSpec = field(default_factory=ReviewSpec)
+    worker: WorkerSpec = field(default_factory=WorkerSpec)
 
     def get_command(self, name: str) -> CommandSpec | None:
         return self.commands.get(name)
@@ -325,7 +339,37 @@ def load_project_config(project_dir: Path) -> ResolvedProjectConfig:
             gemini_model=gemini_model,
         )
 
-    return ResolvedProjectConfig(preset=preset, commands=commands, review=review)
+    worker_in = merged.get("worker", {})
+    worker = WorkerSpec()
+    if isinstance(worker_in, dict):
+        provider_raw = worker_in.get("provider", worker_in.get("worker_provider", None))
+        provider: str | None = None
+        if isinstance(provider_raw, str) and provider_raw.strip():
+            p = provider_raw.strip().lower()
+            # Allow shorthand in YAML.
+            if p == "codex":
+                p = "codex_cli"
+            elif p == "gemini":
+                p = "gemini_cli"
+            if p in {"claude", "codex_cli", "gemini_cli", "multi_cli"}:
+                provider = p
+
+        patch_max = _as_int(worker_in.get("patch_max_iterations", worker_in.get("max_iterations", None)))
+        if patch_max is not None:
+            patch_max = max(1, min(20, patch_max))
+
+        agents_in = worker_in.get("patch_agents", worker_in.get("agents", None))
+        patch_agents: list[str] | None = None
+        if isinstance(agents_in, str):
+            parts = [p.strip().lower() for p in agents_in.replace(";", ",").split(",")]
+            patch_agents = [p for p in parts if p]
+        elif isinstance(agents_in, list):
+            parts = [str(p).strip().lower() for p in agents_in]
+            patch_agents = [p for p in parts if p]
+
+        worker = WorkerSpec(provider=provider, patch_max_iterations=patch_max, patch_agents=patch_agents)
+
+    return ResolvedProjectConfig(preset=preset, commands=commands, review=review, worker=worker)
 
 
 def infer_preset(project_dir: Path) -> str | None:

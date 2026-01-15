@@ -339,6 +339,8 @@ function App() {
                         ? 'generate'
                         : window.location.hash === '#/settings/config'
                           ? 'config'
+                          : window.location.hash === '#/settings/diagnostics'
+                            ? 'diagnostics'
                         : 'run'
                 }
                 projectName={selectedProject}

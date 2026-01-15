@@ -38,7 +38,9 @@ from .model_settings import ModelSettings, ModelPreset, get_full_model_id
 from .worktree_manager import WorktreeManager
 from .database import Database, get_database
 from .gatekeeper import Gatekeeper
+from .project_config import load_project_config
 from .logs import prune_worker_logs_from_env, prune_gatekeeper_artifacts_from_env
+from autocoder.generation.multi_model import MultiModelGenerateConfig, generate_multi_model_artifact
 
 # Agent imports (for initializer)
 from autocoder.agent import run_autonomous_agent
@@ -358,12 +360,17 @@ class Orchestrator:
         self.worktree_manager = WorktreeManager(str(self.project_dir))
         self.database = get_database(str(self.project_dir))
         self.gatekeeper = Gatekeeper(str(self.project_dir))
+        with contextlib.suppress(Exception):
+            self.project_config = load_project_config(self.project_dir)
+        if not hasattr(self, "project_config"):
+            self.project_config = None
 
         # Initialize port allocator
         self.port_allocator = PortAllocator()
         self._bootstrap_ports_from_database()
         port_status = self.port_allocator.get_status()
         self._last_logs_prune_at: Optional[datetime] = None
+        self._last_dependency_check_at: Optional[datetime] = None
 
         # Apply model preset override (workers may pass 'custom' to use persisted available_models).
         self.model_preset = model_preset
@@ -482,6 +489,7 @@ class Orchestrator:
         start_time = datetime.now()
         total_completed = 0
         total_failed = 0
+        idle_cycles = 0
 
         try:
             # Check if we need to run initializer first
@@ -526,16 +534,63 @@ class Orchestrator:
                 # Periodic deferred cleanup (Windows file locks)
                 with contextlib.suppress(Exception):
                     self.worktree_manager.process_cleanup_queue()
+                # Periodic dependency health check (prevents DAG deadlocks)
+                with contextlib.suppress(Exception):
+                    self._block_unresolvable_dependencies_if_needed()
+
+                # Any time Gatekeeper advances or retries clear, reset idle backoff.
+                idle_cycles = 0
 
                 # Get count of active agents
                 active_count = stats["agents"]["active"]
                 available_slots = self.max_agents - active_count
 
                 if available_slots > 0:
-                    # Spawn more agents
-                    self._spawn_agents(available_slots)
+                    queue_state = {}
+                    with contextlib.suppress(Exception):
+                        queue_state = self.database.get_pending_queue_state()
+
+                    claimable_now = int((queue_state or {}).get("claimable_now") or 0)
+                    pending_total = int((queue_state or {}).get("pending_total") or stats["features"]["pending"] or 0)
+
+                    if claimable_now > 0:
+                        idle_cycles = 0
+                        # Spawn more agents
+                        self._spawn_agents(min(available_slots, claimable_now))
+                    else:
+                        # Avoid tight polling when there are pending features but none are currently claimable.
+                        idle_cycles += 1
+                        waiting_backoff = int((queue_state or {}).get("waiting_backoff") or 0)
+                        waiting_deps = int((queue_state or {}).get("waiting_deps") or 0)
+
+                        # Exponential idle backoff: 5s, 10s, 20s, 40s, 60s...
+                        base_sleep = 5
+                        sleep_s = min(60, base_sleep * (2 ** min(4, idle_cycles)))
+
+                        # If we're waiting on a scheduled retry, don't sleep longer than the earliest retry.
+                        earliest = (queue_state or {}).get("earliest_next_attempt_at")
+                        if earliest:
+                            with contextlib.suppress(Exception):
+                                # SQLite timestamps are in local time; treat them as "naive" local.
+                                dt = datetime.fromisoformat(str(earliest))
+                                seconds_until = max(1, int((dt - datetime.now()).total_seconds()))
+                                sleep_s = min(sleep_s, max(1, seconds_until))
+
+                        # Log a periodic reason (every ~1 minute of idle backoff).
+                        if idle_cycles == 1 or idle_cycles % 6 == 0:
+                            reason = []
+                            if pending_total > 0 and waiting_deps > 0:
+                                reason.append(f"waiting on deps ({waiting_deps})")
+                            if pending_total > 0 and waiting_backoff > 0:
+                                reason.append(f"waiting on retry window ({waiting_backoff})")
+                            msg = ", ".join(reason) if reason else "no claimable features"
+                            logger.info(f"⏳ No claimable pending features; sleeping {sleep_s}s ({msg})")
+
+                        await asyncio.sleep(sleep_s)
+                        continue
 
                 # Wait a bit before checking again
+                idle_cycles = 0
                 await asyncio.sleep(5)
 
         except KeyboardInterrupt:
@@ -568,6 +623,8 @@ class Orchestrator:
         Returns:
             List of agent IDs that were spawned
         """
+        if count <= 0:
+            return []
         logger.info(f"🤖 Spawning {count} agent(s)...")
 
         spawned_agents = []
@@ -578,9 +635,13 @@ class Orchestrator:
         for i in range(count):
             agent_id = f"{agent_id_prefix}-{i}"
 
-            claimed_feature = self.database.claim_next_pending_feature(agent_id, branch_prefix="feat")
+            claimed_feature = self.database.claim_next_pending_feature(
+                agent_id,
+                branch_prefix="feat",
+                prioritize_blockers=self._env_truthy("AUTOCODER_DAG_PRIORITIZE_BLOCKERS"),
+            )
             if not claimed_feature:
-                logger.info("No pending features to claim")
+                logger.debug("No pending features to claim")
                 break
 
             feature_id = claimed_feature["id"]
@@ -613,24 +674,149 @@ class Orchestrator:
                 self.port_allocator.release_ports(agent_id)
                 continue
 
-            # Spawn actual agent process
-            worker_script = Path(__file__).parent.parent / "agent_worker.py"
-            cmd = [
-                sys.executable,
-                str(worker_script),
-                "--project-dir", str(self.project_dir),
-                "--agent-id", agent_id,
-                "--feature-id", str(feature_id),
-                "--worktree-path", worktree_info["worktree_path"],
-                "--model", model,
-                "--max-iterations", "5",  # Each worker gets 5 iterations
-                "--api-port", str(api_port),  # Pass API port via CLI argument
-                "--web-port", str(web_port),  # Pass web port via CLI argument
-                "--yolo"  # Use YOLO mode for parallel execution (speed)
-            ]
+            plan_path = None
+            with contextlib.suppress(Exception):
+                plan_path = self._maybe_generate_feature_plan(
+                    feature=claimed_feature, worktree_path=Path(worktree_info["worktree_path"])
+                )
+
+            # Spawn actual worker process.
+            #
+            # Providers:
+            # - AUTOCODER_E2E_DUMMY_WORKER=1: deterministic fixture worker (no LLM)
+            # - project autocoder.yaml: worker.provider / worker.patch_* (per-project defaults)
+            # - AUTOCODER_WORKER_PROVIDER=claude: Claude Agent SDK worker
+            # - AUTOCODER_WORKER_PROVIDER=codex_cli|gemini_cli|multi_cli: patch-based worker via qa_worker.py
+            cmd: list[str] = []
+            provider_for_env = "claude"
+            cfg_patch_agents: Optional[list[str]] = None
+            if self._env_truthy("AUTOCODER_E2E_DUMMY_WORKER"):
+                worker_script = Path(__file__).resolve().parents[1] / "e2e_dummy_worker.py"
+                provider_for_env = "dummy"
+                cmd = [
+                    sys.executable,
+                    str(worker_script),
+                    "--project-dir",
+                    str(self.project_dir),
+                    "--agent-id",
+                    agent_id,
+                    "--feature-id",
+                    str(feature_id),
+                    "--worktree-path",
+                    worktree_info["worktree_path"],
+                    "--api-port",
+                    str(api_port),
+                    "--web-port",
+                    str(web_port),
+                ]
+            else:
+                cfg_provider: Optional[str] = None
+                cfg_patch_iters: Optional[int] = None
+                with contextlib.suppress(Exception):
+                    cfg = load_project_config(self.project_dir)
+                    worker_cfg = getattr(cfg, "worker", None) if cfg is not None else None
+                    if worker_cfg is not None:
+                        cfg_provider = getattr(worker_cfg, "provider", None)
+                        cfg_patch_iters = getattr(worker_cfg, "patch_max_iterations", None)
+                        cfg_patch_agents = getattr(worker_cfg, "patch_agents", None)
+
+                env_provider = str(os.environ.get("AUTOCODER_WORKER_PROVIDER", "")).strip().lower()
+                # Allow shorthand.
+                if env_provider == "codex":
+                    env_provider = "codex_cli"
+                elif env_provider == "gemini":
+                    env_provider = "gemini_cli"
+
+                provider = (cfg_provider or env_provider or "claude").strip().lower()
+                if provider == "codex":
+                    provider = "codex_cli"
+                elif provider == "gemini":
+                    provider = "gemini_cli"
+                provider_for_env = provider
+
+                if provider == "claude":
+                    worker_script = Path(__file__).parent.parent / "agent_worker.py"
+                    cmd = [
+                        sys.executable,
+                        str(worker_script),
+                        "--project-dir",
+                        str(self.project_dir),
+                        "--agent-id",
+                        agent_id,
+                        "--feature-id",
+                        str(feature_id),
+                        "--worktree-path",
+                        worktree_info["worktree_path"],
+                        "--model",
+                        model,
+                        "--max-iterations",
+                        "5",  # Each worker gets 5 iterations
+                        "--api-port",
+                        str(api_port),
+                        "--web-port",
+                        str(web_port),
+                        "--yolo",  # Use YOLO mode for parallel execution (speed)
+                    ]
+                elif provider in {"codex_cli", "gemini_cli", "multi_cli"}:
+                    worker_script = Path(__file__).parent.parent / "qa_worker.py"
+                    patch_iters_raw = str(os.environ.get("AUTOCODER_WORKER_PATCH_MAX_ITERATIONS", "")).strip()
+                    env_patch_iters: Optional[int] = None
+                    if patch_iters_raw:
+                        with contextlib.suppress(Exception):
+                            env_patch_iters = int(patch_iters_raw)
+                    if env_patch_iters is not None:
+                        env_patch_iters = max(1, min(20, env_patch_iters))
+                    patch_iters = cfg_patch_iters if cfg_patch_iters is not None else (env_patch_iters if env_patch_iters is not None else 2)
+                    cmd = [
+                        sys.executable,
+                        str(worker_script),
+                        "--mode",
+                        "implement",
+                        "--project-dir",
+                        str(self.project_dir),
+                        "--agent-id",
+                        agent_id,
+                        "--feature-id",
+                        str(feature_id),
+                        "--worktree-path",
+                        worktree_info["worktree_path"],
+                        "--provider",
+                        provider,
+                        "--max-iterations",
+                        str(patch_iters),
+                    ]
+                else:
+                    logger.error(f"   ❌ Unknown AUTOCODER_WORKER_PROVIDER='{provider}', falling back to claude")
+                    worker_script = Path(__file__).parent.parent / "agent_worker.py"
+                    cmd = [
+                        sys.executable,
+                        str(worker_script),
+                        "--project-dir",
+                        str(self.project_dir),
+                        "--agent-id",
+                        agent_id,
+                        "--feature-id",
+                        str(feature_id),
+                        "--worktree-path",
+                        worktree_info["worktree_path"],
+                        "--model",
+                        model,
+                        "--max-iterations",
+                        "5",
+                        "--api-port",
+                        str(api_port),
+                        "--web-port",
+                        str(web_port),
+                        "--yolo",
+                    ]
 
             # Prepare environment with port allocations (redundant with CLI args)
             env = os.environ.copy()
+            # Make the effective provider visible to workers/subprocesses.
+            env["AUTOCODER_WORKER_PROVIDER"] = provider_for_env
+            with contextlib.suppress(Exception):
+                if provider_for_env in {"multi_cli"} and cfg_patch_agents:
+                    env["AUTOCODER_WORKER_PATCH_AGENTS"] = ",".join([str(x) for x in cfg_patch_agents if str(x).strip()])
             env["AUTOCODER_API_PORT"] = str(api_port)
             env["AUTOCODER_WEB_PORT"] = str(web_port)
             # Compatibility for common dev servers that read generic port env vars.
@@ -640,6 +826,10 @@ class Orchestrator:
             env["VITE_PORT"] = str(web_port)
             # Prevent workers from self-attesting `passes=True`; require Gatekeeper verification.
             env["AUTOCODER_REQUIRE_GATEKEEPER"] = "1"
+            # Identify this worker for hooks/tools (locks, etc.).
+            env.setdefault("AUTOCODER_AGENT_ID", str(agent_id))
+            if plan_path:
+                env["AUTOCODER_FEATURE_PLAN_PATH"] = str(plan_path)
 
             # Per-agent logs (for debugging and post-mortems)
             logs_dir = (self.project_dir / ".autocoder" / "logs")
@@ -694,6 +884,270 @@ class Orchestrator:
                 continue
 
         return spawned_agents
+
+    def _maybe_generate_feature_plan(self, *, feature: dict, worktree_path: Path) -> str | None:
+        """
+        Optionally generate a per-feature plan artifact and return its path.
+
+        The plan is written into the agent worktree under `.autocoder/feature_plan.md` so the worker
+        can read it without accessing paths outside its worktree sandbox.
+        """
+        if not self._planner_enabled():
+            return None
+        feature_id = int(feature.get("id") or 0)
+        if feature_id <= 0:
+            return None
+
+        out_path = (Path(worktree_path) / ".autocoder" / "feature_plan.md").resolve()
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+
+        drafts_root = (
+            self.project_dir
+            / ".autocoder"
+            / "features"
+            / str(feature_id)
+            / "planner"
+            / datetime.now().strftime("%Y%m%d_%H%M%S")
+        )
+        drafts_root.mkdir(parents=True, exist_ok=True)
+
+        prompt = (
+            "Create a concise implementation plan for this feature.\n\n"
+            f"Feature #{feature_id}: {feature.get('name')}\n"
+            f"Category: {feature.get('category')}\n\n"
+            f"Description:\n{feature.get('description')}\n\n"
+            f"Steps:\n"
+            + "\n".join([f"- {s}" for s in (feature.get('steps') or [])])
+            + "\n\n"
+            "Constraints:\n"
+            "- Keep it small and actionable.\n"
+            "- Include the verification commands to run.\n"
+            "- Do not invent dependencies that aren't in the repo.\n"
+        )
+
+        cfg = MultiModelGenerateConfig(
+            agents=[a for a in self._planner_agents() if a in {"codex", "gemini"}],  # type: ignore[list-item]
+            synthesizer=self._planner_synthesizer(),  # type: ignore[arg-type]
+            timeout_s=self._planner_timeout_s(),
+            codex_model=str(os.environ.get("AUTOCODER_CODEX_MODEL", "")).strip(),
+            codex_reasoning_effort=str(os.environ.get("AUTOCODER_CODEX_REASONING_EFFORT", "")).strip(),
+            gemini_model=str(os.environ.get("AUTOCODER_GEMINI_MODEL", "")).strip(),
+            claude_model=self._planner_model(),
+        )
+
+        try:
+            generate_multi_model_artifact(
+                project_dir=worktree_path,
+                kind="plan",
+                user_prompt=prompt,
+                cfg=cfg,
+                output_path=out_path,
+                drafts_root=drafts_root,
+                synthesize=True,
+            )
+            return str(out_path)
+        except Exception as e:
+            logger.warning(f"Planner failed for feature #{feature_id}: {e}")
+            return None
+
+    @staticmethod
+    def _env_truthy(name: str) -> bool:
+        raw = str(os.environ.get(name, "")).strip().lower()
+        return raw in {"1", "true", "yes", "on"}
+
+    def _controller_enabled(self) -> bool:
+        return self._env_truthy("AUTOCODER_CONTROLLER_ENABLED")
+
+    def _planner_enabled(self) -> bool:
+        return self._env_truthy("AUTOCODER_PLANNER_ENABLED")
+
+    def _planner_timeout_s(self) -> int:
+        raw = str(os.environ.get("AUTOCODER_PLANNER_TIMEOUT_S", "")).strip()
+        try:
+            v = int(raw) if raw else 180
+        except Exception:
+            v = 180
+        return max(30, min(3600, v))
+
+    def _planner_agents(self) -> list[str]:
+        raw = str(os.environ.get("AUTOCODER_PLANNER_AGENTS", "")).strip().lower()
+        parts = [p.strip() for p in raw.replace(";", ",").split(",") if p.strip()]
+        out: list[str] = []
+        for p in parts:
+            if p in {"codex", "gemini"}:
+                out.append(p)
+        return out or ["codex", "gemini"]
+
+    def _planner_synthesizer(self) -> str:
+        raw = str(os.environ.get("AUTOCODER_PLANNER_SYNTHESIZER", "")).strip().lower()
+        if raw in {"none", "claude", "codex", "gemini"}:
+            return raw
+        return "claude"
+
+    def _planner_model(self) -> str:
+        return str(os.environ.get("AUTOCODER_PLANNER_MODEL", "")).strip().lower()
+
+    def _qa_subagent_enabled(self) -> bool:
+        return self._env_truthy("AUTOCODER_QA_SUBAGENT_ENABLED")
+
+    def _qa_subagent_max_iterations(self) -> int:
+        raw = str(os.environ.get("AUTOCODER_QA_SUBAGENT_MAX_ITERATIONS", "")).strip()
+        try:
+            v = int(raw) if raw else 2
+        except Exception:
+            v = 2
+        return max(1, min(20, v))
+
+    def _qa_subagent_model(self) -> str:
+        raw = str(os.environ.get("AUTOCODER_QA_MODEL", "")).strip().lower()
+        if raw in self.available_models:
+            return raw
+        # QA is short-lived; default to a fast/strong middle tier.
+        return "sonnet" if "sonnet" in self.available_models else (self.available_models[0] if self.available_models else "opus")
+
+    def _qa_subagent_provider(self) -> str:
+        raw = str(os.environ.get("AUTOCODER_QA_SUBAGENT_PROVIDER", "")).strip().lower()
+        if raw in {"claude", "codex_cli", "gemini_cli", "multi_cli"}:
+            return raw
+        return "claude"
+
+    def _spawn_qa_subagent(self, *, feature_id: int, feature_name: str, branch_name: str) -> str | None:
+        """
+        Spawn a short-lived QA fixer worker for a rejected feature branch.
+
+        This reuses the existing branch and relies on QA Fix Mode prompts (enabled via env),
+        but runs in a fresh process/worktree with a smaller iteration budget and YOLO off.
+        """
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        qa_agent_id = f"qa-{feature_id}-{stamp}"
+
+        port_pair = self.port_allocator.allocate_ports(qa_agent_id)
+        if not port_pair:
+            logger.error(f"   ❌ Failed to allocate ports for {qa_agent_id} (QA sub-agent)")
+            return None
+        api_port, web_port = port_pair
+
+        try:
+            worktree_info = self.worktree_manager.create_worktree(
+                agent_id=qa_agent_id,
+                feature_id=feature_id,
+                feature_name=feature_name,
+                branch_name=branch_name,
+            )
+        except Exception as e:
+            logger.error(f"   ❌ Failed to create QA worktree for {qa_agent_id}: {e}")
+            self.port_allocator.release_ports(qa_agent_id)
+            return None
+
+        # Mark assigned before spawn to avoid other claims (best-effort).
+        if not self.database.assign_feature_to_agent(feature_id, qa_agent_id):
+            logger.error(f"   ❌ Failed to assign feature #{feature_id} to QA agent {qa_agent_id}")
+            with contextlib.suppress(Exception):
+                self.worktree_manager.delete_worktree(qa_agent_id, force=True)
+            self.port_allocator.release_ports(qa_agent_id)
+            return None
+
+        provider = self._qa_subagent_provider()
+        max_iterations = self._qa_subagent_max_iterations()
+        model = self._qa_subagent_model()
+
+        if provider == "claude":
+            worker_script = Path(__file__).parent.parent / "agent_worker.py"
+            cmd = [
+                sys.executable,
+                str(worker_script),
+                "--project-dir",
+                str(self.project_dir),
+                "--agent-id",
+                qa_agent_id,
+                "--feature-id",
+                str(feature_id),
+                "--worktree-path",
+                worktree_info["worktree_path"],
+                "--model",
+                model,
+                "--max-iterations",
+                str(max_iterations),
+                "--api-port",
+                str(api_port),
+                "--web-port",
+                str(web_port),
+            ]
+        else:
+            # External CLI patch fixer (Codex/Gemini).
+            worker_script = Path(__file__).parent.parent / "qa_worker.py"
+            cmd = [
+                sys.executable,
+                str(worker_script),
+                "--project-dir",
+                str(self.project_dir),
+                "--agent-id",
+                qa_agent_id,
+                "--feature-id",
+                str(feature_id),
+                "--worktree-path",
+                worktree_info["worktree_path"],
+                "--provider",
+                provider,
+                "--max-iterations",
+                str(max_iterations),
+            ]
+
+        env = os.environ.copy()
+        env["AUTOCODER_API_PORT"] = str(api_port)
+        env["AUTOCODER_WEB_PORT"] = str(web_port)
+        env["API_PORT"] = str(api_port)
+        env["WEB_PORT"] = str(web_port)
+        env["PORT"] = str(api_port)
+        env["VITE_PORT"] = str(web_port)
+        env["AUTOCODER_REQUIRE_GATEKEEPER"] = "1"
+        # QA fix prompt injection (used by Claude worker; harmless for CLI fixers).
+        env["AUTOCODER_QA_FIX_ENABLED"] = "1"
+
+        logs_dir = (self.project_dir / ".autocoder" / "logs")
+        logs_dir.mkdir(parents=True, exist_ok=True)
+        log_file_path = logs_dir / f"{qa_agent_id}.log"
+
+        logger.info(f"🧪 Launching QA sub-agent {qa_agent_id}:")
+        logger.info(f"   Feature: #{feature_id} - {feature_name}")
+        logger.info(f"   Branch: {branch_name}")
+        logger.info(f"   Provider: {provider}")
+        if provider == "claude":
+            logger.info(f"   Model: {model.upper()}")
+        logger.info(f"   Max iters: {max_iterations}")
+        logger.info(f"   Ports: API={api_port}, WEB={web_port}")
+        logger.info(f"   Logs: {log_file_path}")
+
+        try:
+            log_handle = open(log_file_path, "w", encoding="utf-8", errors="replace")
+            process = subprocess.Popen(
+                cmd,
+                stdout=log_handle,
+                stderr=log_handle,
+                env=env,
+            )
+            with contextlib.suppress(Exception):
+                log_handle.close()
+
+            pid = process.pid
+            self.database.register_agent(
+                agent_id=qa_agent_id,
+                worktree_path=worktree_info["worktree_path"],
+                feature_id=feature_id,
+                pid=pid,
+                api_port=api_port,
+                web_port=web_port,
+                log_file_path=str(log_file_path),
+            )
+            return qa_agent_id
+        except Exception as e:
+            logger.error(f"   ❌ Failed to spawn QA sub-agent process: {e}")
+            with contextlib.suppress(Exception):
+                self.database.requeue_feature(feature_id, preserve_branch=True)
+            with contextlib.suppress(Exception):
+                self.worktree_manager.delete_worktree(qa_agent_id, force=True)
+            self.port_allocator.release_ports(qa_agent_id)
+            return None
 
     def _detect_main_branch(self) -> str:
         env_branch = os.environ.get("AUTOCODER_MAIN_BRANCH")
@@ -805,6 +1259,7 @@ class Orchestrator:
                     feature_id=feature_id,
                     reason=str(verification.get("reason") or "Gatekeeper rejected feature"),
                     artifact_path=verification.get("artifact_path"),
+                    diff_fingerprint=verification.get("diff_fingerprint"),
                 )
                 return {
                     "success": False,
@@ -842,10 +1297,21 @@ class Orchestrator:
 
         # Try to get best model from knowledge base
         try:
-            model_info = self.kb.get_best_model(category)
-            if model_info:
-                recommended = model_info.get("model_used")
-                if recommended and recommended in self.available_models:
+            kb_choice = self.kb.get_best_model(category)
+            recommended: str | None = None
+            if isinstance(kb_choice, dict):
+                recommended = str(kb_choice.get("model_used") or "").strip() or None
+            elif isinstance(kb_choice, str):
+                recommended = kb_choice.strip() or None
+
+            if recommended:
+                # Normalize full model ids (e.g. "claude-opus-4-5") into short family names.
+                lowered = recommended.lower()
+                for fam in ("opus", "sonnet", "haiku"):
+                    if fam in lowered:
+                        recommended = fam
+                        break
+                if recommended in self.available_models:
                     logger.info(f"   Knowledge base recommends: {recommended}")
                     return recommended
         except Exception as e:
@@ -1018,6 +1484,31 @@ class Orchestrator:
                             "true",
                             "yes",
                         )
+                        if self._controller_enabled() and worktree_path:
+                            pre = self.gatekeeper.verify_commands_only(
+                                worktree_path=str(worktree_path),
+                                allow_no_tests=allow_no_tests,
+                                feature_id=int(feature_id),
+                                agent_id=agent_id,
+                            )
+                            if not pre.get("approved"):
+                                excerpt = self._format_gatekeeper_failure_excerpt(pre)
+                                self._handle_verification_rejection(
+                                    feature_id=int(feature_id),
+                                    feature=feature,
+                                    agent_id=agent_id,
+                                    branch_name=str(branch_name),
+                                    excerpt=excerpt,
+                                    artifact_path=pre.get("artifact_path"),
+                                    diff_fingerprint=pre.get("diff_fingerprint"),
+                                )
+                                released = self.port_allocator.release_ports(agent_id)
+                                if released:
+                                    logger.info(f"   Released ports for {agent_id}")
+                                with contextlib.suppress(Exception):
+                                    self.worktree_manager.delete_worktree(agent_id, force=True)
+                                self.database.unregister_agent(agent_id)
+                                continue
                         verification = self.gatekeeper.verify_and_merge(
                             branch_name=branch_name,
                             worktree_path=worktree_path,
@@ -1040,10 +1531,14 @@ class Orchestrator:
                             reason = verification.get("reason") or "Gatekeeper rejected feature"
                             logger.warning(f"❌ Gatekeeper rejected feature #{feature_id}: {reason}")
                             excerpt = self._format_gatekeeper_failure_excerpt(verification)
-                            self.database.mark_feature_failed(
-                                feature_id=feature_id,
-                                reason=excerpt,
+                            self._handle_verification_rejection(
+                                feature_id=int(feature_id),
+                                feature=feature,
+                                agent_id=agent_id,
+                                branch_name=str(branch_name),
+                                excerpt=excerpt,
                                 artifact_path=verification.get("artifact_path"),
+                                diff_fingerprint=verification.get("diff_fingerprint"),
                             )
                     elif assigned_agent == agent_id and not passes and review_status == "READY_FOR_VERIFICATION":
                         # READY but missing branch_name is unrecoverable; requeue.
@@ -1104,6 +1599,16 @@ class Orchestrator:
                     )
         except Exception as e:
             logger.warning(f"Failed to prune worker logs: {e}")
+
+    def _block_unresolvable_dependencies_if_needed(self) -> None:
+        # Default: once per minute.
+        now = datetime.now()
+        if self._last_dependency_check_at and (now - self._last_dependency_check_at) < timedelta(seconds=60):
+            return
+        self._last_dependency_check_at = now
+        n = int(self.database.block_unresolvable_dependencies() or 0)
+        if n > 0:
+            logger.warning(f"Dependency health check: blocked {n} feature(s) due to unresolvable dependencies")
 
     @staticmethod
     def _format_gatekeeper_failure_excerpt(verification: dict) -> str:
@@ -1170,6 +1675,73 @@ class Orchestrator:
             lines.append(f"Review: {rv.get('reason') or 'rejected'}")
 
         return "\n".join([ln for ln in lines if ln.strip()])[:4000]
+
+    def _handle_verification_rejection(
+        self,
+        *,
+        feature_id: int,
+        feature: dict,
+        agent_id: str,
+        branch_name: str,
+        excerpt: str,
+        artifact_path: object = None,
+        diff_fingerprint: object = None,
+    ) -> None:
+        """
+        Handle a deterministic verification rejection (Gatekeeper or preflight).
+
+        If the QA sub-agent is enabled, this preserves the branch and spawns a QA fixer.
+        Otherwise it records the failure and schedules a retry.
+        """
+        qa_spawned = False
+        failure_recorded = False
+
+        if self._qa_subagent_enabled():
+            qa_max_sessions_raw = str(os.environ.get("AUTOCODER_QA_MAX_SESSIONS", "")).strip()
+            try:
+                qa_max_sessions = int(qa_max_sessions_raw) if qa_max_sessions_raw else 0
+            except Exception:
+                qa_max_sessions = 0
+
+            if qa_max_sessions > 0:
+                qa_attempt = self.database.increment_qa_attempts(int(feature_id))
+                if qa_attempt is None:
+                    qa_attempt = 0
+                if qa_attempt > qa_max_sessions:
+                    logger.info(
+                        f"QA sub-agent disabled for feature #{feature_id}: qa_attempts={qa_attempt} > max={qa_max_sessions}"
+                    )
+                else:
+                    self.database.mark_feature_failed(
+                        feature_id=feature_id,
+                        reason=excerpt,
+                        artifact_path=str(artifact_path) if artifact_path is not None else None,
+                        diff_fingerprint=str(diff_fingerprint) if diff_fingerprint is not None else None,
+                        preserve_branch=True,
+                        next_status="IN_PROGRESS",
+                    )
+                    failure_recorded = True
+                    refreshed = self.database.get_feature(int(feature_id)) or {}
+                    if str(refreshed.get("status") or "").upper() == "BLOCKED":
+                        logger.info(f"Feature #{feature_id} is BLOCKED; skipping QA sub-agent spawn")
+                    else:
+                        qa_id = self._spawn_qa_subagent(
+                            feature_id=int(feature_id),
+                            feature_name=str(feature.get("name") or f"feature-{feature_id}"),
+                            branch_name=str(branch_name),
+                        )
+                        qa_spawned = bool(qa_id)
+                        if not qa_spawned:
+                            with contextlib.suppress(Exception):
+                                self.database.requeue_feature(int(feature_id), preserve_branch=True)
+
+        if (not qa_spawned) and (not failure_recorded):
+            self.database.mark_feature_failed(
+                feature_id=feature_id,
+                reason=excerpt,
+                artifact_path=str(artifact_path) if artifact_path is not None else None,
+                diff_fingerprint=str(diff_fingerprint) if diff_fingerprint is not None else None,
+            )
 
     def get_status(self) -> Dict[str, Any]:
         """Get current orchestrator status."""

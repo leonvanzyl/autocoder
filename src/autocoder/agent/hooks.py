@@ -7,7 +7,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
-from autocoder.core.file_locks import get_lock_holder
+from autocoder.core.file_locks import get_lock_holder, try_acquire_lock
 
 
 def _env_int(name: str, default: int) -> int:
@@ -135,10 +135,17 @@ class FileLockGuard:
                 "decision": "block",
                 "reason": f"File lock required: '{path}' is locked by '{holder}' (agent '{self.agent_id}' cannot write).",
             }
+
+        # Opportunistic auto-acquire: first writer wins. This keeps UX smooth while still preventing
+        # concurrent edits to the same file across agents/sub-agents.
+        if try_acquire_lock(self.lock_dir, path, self.agent_id):
+            return {}
+
+        holder = get_lock_holder(self.lock_dir, path)
         return {
             "decision": "block",
             "reason": (
-                f"File lock required: acquire lock for '{path}' before writing "
+                f"File lock required: '{path}' is locked by '{holder or 'unknown'}' "
                 f"(agent '{self.agent_id}', lock dir '{self.lock_dir}')."
             ),
         }

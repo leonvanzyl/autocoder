@@ -2,7 +2,7 @@
 Project Config Router
 =====================
 
-Read/write helpers for per-project `autocoder.yaml` (Gatekeeper verification commands + review config).
+Read/write helpers for per-project `autocoder.yaml` (Gatekeeper verification commands + review config + worker defaults).
 """
 
 from __future__ import annotations
@@ -45,6 +45,8 @@ class AutocoderYamlResponse(BaseModel):
     content: str
     inferred_preset: str | None = None
     resolved_commands: list[str] = Field(default_factory=list)
+    resolved_worker_provider: str | None = None
+    resolved_worker_patch_max_iterations: int | None = None
 
 
 class AutocoderYamlUpdateRequest(BaseModel):
@@ -69,6 +71,7 @@ async def get_autocoder_yaml(project_name: str) -> AutocoderYamlResponse:
         resolved_names = sorted([k for k, v in (resolved.commands or {}).items() if v is not None])
     except Exception:
         resolved_names = []
+        resolved = None
 
     return AutocoderYamlResponse(
         exists=exists,
@@ -76,6 +79,10 @@ async def get_autocoder_yaml(project_name: str) -> AutocoderYamlResponse:
         content=content,
         inferred_preset=inferred,
         resolved_commands=resolved_names,
+        resolved_worker_provider=(getattr(getattr(resolved, "worker", None), "provider", None) if resolved else None),
+        resolved_worker_patch_max_iterations=(
+            getattr(getattr(resolved, "worker", None), "patch_max_iterations", None) if resolved else None
+        ),
     )
 
 
@@ -108,5 +115,6 @@ async def put_autocoder_yaml(project_name: str, req: AutocoderYamlUpdateRequest)
         content=text,
         inferred_preset=inferred,
         resolved_commands=resolved_names,
+        resolved_worker_provider=getattr(getattr(resolved, "worker", None), "provider", None),
+        resolved_worker_patch_max_iterations=getattr(getattr(resolved, "worker", None), "patch_max_iterations", None),
     )
-

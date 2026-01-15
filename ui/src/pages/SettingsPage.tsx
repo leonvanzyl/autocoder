@@ -6,14 +6,15 @@
  */
 
 import { useState } from 'react'
-import { Settings as SettingsIcon, SlidersHorizontal, Brain, Sparkles, FileText } from 'lucide-react'
+import { Settings as SettingsIcon, SlidersHorizontal, Brain, Sparkles, FileText, Activity } from 'lucide-react'
 import { ModelSettingsContent } from '../components/ModelSettingsContent'
 import { AdvancedSettingsContent } from '../components/AdvancedSettingsContent'
 import { MultiModelGeneratePanel } from '../components/MultiModelGeneratePanel'
 import { ProjectConfigEditor } from '../components/ProjectConfigEditor'
+import { DiagnosticsContent } from '../components/DiagnosticsContent'
 import type { RunSettings } from '../components/SettingsModal'
 
-type SettingsPageTab = 'run' | 'models' | 'generate' | 'config' | 'advanced'
+type SettingsPageTab = 'run' | 'models' | 'generate' | 'config' | 'advanced' | 'diagnostics'
 
 export function SettingsPage({
   initialTab = 'run',
@@ -34,6 +35,23 @@ export function SettingsPage({
 
   const canUseParallel = !yoloEnabled
 
+  const setTabWithHash = (next: SettingsPageTab) => {
+    setTab(next)
+    const route =
+      next === 'advanced'
+        ? '#/settings/advanced'
+        : next === 'models'
+          ? '#/settings/models'
+          : next === 'generate'
+            ? '#/settings/generate'
+            : next === 'config'
+              ? '#/settings/config'
+              : next === 'diagnostics'
+                ? '#/settings/diagnostics'
+                : '#/settings'
+    window.location.hash = route
+  }
+
   return (
     <div className="space-y-6">
       <div className="neo-card p-4">
@@ -53,37 +71,44 @@ export function SettingsPage({
         <div className="mt-4 flex flex-wrap gap-2">
           <button
             className={`neo-btn text-sm ${tab === 'run' ? 'bg-[var(--color-neo-accent)] text-white' : 'neo-btn-secondary'}`}
-            onClick={() => setTab('run')}
+            onClick={() => setTabWithHash('run')}
           >
             <SlidersHorizontal size={18} />
             Run
           </button>
           <button
             className={`neo-btn text-sm ${tab === 'models' ? 'bg-[var(--color-neo-accent)] text-white' : 'neo-btn-secondary'}`}
-            onClick={() => setTab('models')}
+            onClick={() => setTabWithHash('models')}
           >
             <Brain size={18} />
             Models
           </button>
           <button
             className={`neo-btn text-sm ${tab === 'generate' ? 'bg-[var(--color-neo-accent)] text-white' : 'neo-btn-secondary'}`}
-            onClick={() => setTab('generate')}
+            onClick={() => setTabWithHash('generate')}
           >
             <Sparkles size={18} />
             Generate
           </button>
           <button
             className={`neo-btn text-sm ${tab === 'config' ? 'bg-[var(--color-neo-accent)] text-white' : 'neo-btn-secondary'}`}
-            onClick={() => setTab('config')}
+            onClick={() => setTabWithHash('config')}
           >
             <FileText size={18} />
             Config
           </button>
           <button
             className={`neo-btn text-sm ${tab === 'advanced' ? 'bg-[var(--color-neo-accent)] text-white' : 'neo-btn-secondary'}`}
-            onClick={() => setTab('advanced')}
+            onClick={() => setTabWithHash('advanced')}
           >
             Advanced
+          </button>
+          <button
+            className={`neo-btn text-sm ${tab === 'diagnostics' ? 'bg-[var(--color-neo-accent)] text-white' : 'neo-btn-secondary'}`}
+            onClick={() => setTabWithHash('diagnostics')}
+          >
+            <Activity size={18} />
+            Diagnostics
           </button>
         </div>
       </div>
@@ -156,6 +181,8 @@ export function SettingsPage({
         <MultiModelGeneratePanel projectName={projectName} />
       ) : tab === 'config' ? (
         <ProjectConfigEditor projectName={projectName} />
+      ) : tab === 'diagnostics' ? (
+        <DiagnosticsContent />
       ) : (
         <AdvancedSettingsContent />
       )}

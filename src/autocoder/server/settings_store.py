@@ -45,19 +45,37 @@ class AdvancedSettings:
 
     # Worker behavior
     worker_verify: bool = True
+    worker_provider: str = "claude"  # claude|codex_cli|gemini_cli|multi_cli
+    worker_patch_max_iterations: int = 2
+    worker_patch_agents: str = "codex,gemini"  # csv; used when worker_provider=multi_cli
 
     # QA/controller sub-agents (optional)
     qa_fix_enabled: bool = False
     qa_model: str = ""
     qa_max_sessions: int = 0
+    qa_subagent_enabled: bool = False
+    qa_subagent_max_iterations: int = 2
+    qa_subagent_provider: str = "claude"  # claude|codex_cli|gemini_cli|multi_cli
+    qa_subagent_agents: str = "codex,gemini"  # csv; used when provider=multi_cli
     controller_enabled: bool = False
     controller_model: str = ""
     controller_max_sessions: int = 0
+
+    # Feature planner (optional; multi-model plan artifact)
+    planner_enabled: bool = False
+    planner_model: str = ""  # Claude model for synthesis (optional)
+    planner_agents: str = "codex,gemini"  # csv (codex,gemini)
+    planner_synthesizer: str = "claude"  # none|claude|codex|gemini
+    planner_timeout_s: int = 180
 
     # Log retention defaults (used by orchestrator periodic pruning)
     logs_keep_days: int = 7
     logs_keep_files: int = 200
     logs_max_total_mb: int = 200
+    logs_prune_artifacts: bool = False
+
+    # Diagnostics (Web UI)
+    diagnostics_fixtures_dir: str = ""
 
     # Retry/backoff for Claude Agent SDK queries
     sdk_max_attempts: int = 3
@@ -93,15 +111,29 @@ class AdvancedSettings:
             "AUTOCODER_GEMINI_MODEL": str(self.gemini_model or ""),
             "AUTOCODER_LOCKS_ENABLED": "1" if self.locks_enabled else "0",
             "AUTOCODER_WORKER_VERIFY": "1" if self.worker_verify else "0",
+            "AUTOCODER_WORKER_PROVIDER": str(self.worker_provider or "claude"),
+            "AUTOCODER_WORKER_PATCH_MAX_ITERATIONS": str(int(self.worker_patch_max_iterations or 2)),
+            "AUTOCODER_WORKER_PATCH_AGENTS": str(self.worker_patch_agents or "codex,gemini"),
             "AUTOCODER_QA_FIX_ENABLED": "1" if self.qa_fix_enabled else "0",
             "AUTOCODER_QA_MODEL": str(self.qa_model or ""),
             "AUTOCODER_QA_MAX_SESSIONS": str(int(self.qa_max_sessions or 0)),
+            "AUTOCODER_QA_SUBAGENT_ENABLED": "1" if self.qa_subagent_enabled else "0",
+            "AUTOCODER_QA_SUBAGENT_MAX_ITERATIONS": str(int(self.qa_subagent_max_iterations or 2)),
+            "AUTOCODER_QA_SUBAGENT_PROVIDER": str(self.qa_subagent_provider or "claude"),
+            "AUTOCODER_QA_SUBAGENT_AGENTS": str(self.qa_subagent_agents or "codex,gemini"),
             "AUTOCODER_CONTROLLER_ENABLED": "1" if self.controller_enabled else "0",
             "AUTOCODER_CONTROLLER_MODEL": str(self.controller_model or ""),
             "AUTOCODER_CONTROLLER_MAX_SESSIONS": str(int(self.controller_max_sessions or 0)),
+            "AUTOCODER_PLANNER_ENABLED": "1" if self.planner_enabled else "0",
+            "AUTOCODER_PLANNER_MODEL": str(self.planner_model or ""),
+            "AUTOCODER_PLANNER_AGENTS": str(self.planner_agents or "codex,gemini"),
+            "AUTOCODER_PLANNER_SYNTHESIZER": str(self.planner_synthesizer or "claude"),
+            "AUTOCODER_PLANNER_TIMEOUT_S": str(int(self.planner_timeout_s or 180)),
             "AUTOCODER_LOGS_KEEP_DAYS": str(self.logs_keep_days),
             "AUTOCODER_LOGS_KEEP_FILES": str(self.logs_keep_files),
             "AUTOCODER_LOGS_MAX_TOTAL_MB": str(self.logs_max_total_mb),
+            "AUTOCODER_LOGS_PRUNE_ARTIFACTS": "1" if self.logs_prune_artifacts else "0",
+            "AUTOCODER_DIAGNOSTICS_FIXTURES_DIR": str(self.diagnostics_fixtures_dir or ""),
             "AUTOCODER_SDK_MAX_ATTEMPTS": str(self.sdk_max_attempts),
             "AUTOCODER_SDK_INITIAL_DELAY_S": str(self.sdk_initial_delay_s),
             "AUTOCODER_SDK_RATE_LIMIT_INITIAL_DELAY_S": str(self.sdk_rate_limit_initial_delay_s),

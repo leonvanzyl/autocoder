@@ -89,6 +89,8 @@ class FeatureResponse(FeatureBase):
     last_error: str | None = None
     last_artifact_path: str | None = None
     depends_on: list[int] = []
+    ready: bool = False
+    waiting_on: list[int] = []
 
     class Config:
         from_attributes = True

@@ -10,6 +10,7 @@ def test_load_project_config_missing_returns_empty(tmp_path: Path):
     assert cfg.preset is None
     assert cfg.commands == {}
     assert cfg.review.enabled is False
+    assert cfg.worker.provider is None
 
 
 def test_load_project_config_with_preset_and_override(tmp_path: Path):
@@ -53,6 +54,23 @@ review:
     assert cfg.review.reviewer_type == "command"
     assert cfg.review.command is not None and "python -c" in cfg.review.command
     assert cfg.review.timeout_s == 12
+
+
+def test_load_project_config_worker_section(tmp_path: Path):
+    (tmp_path / "autocoder.yaml").write_text(
+        """
+worker:
+  provider: multi_cli
+  patch_max_iterations: 5
+  patch_agents: [codex, gemini]
+""".strip(),
+        encoding="utf-8",
+    )
+
+    cfg = load_project_config(tmp_path)
+    assert cfg.worker.provider == "multi_cli"
+    assert cfg.worker.patch_max_iterations == 5
+    assert cfg.worker.patch_agents == ["codex", "gemini"]
 
 
 def test_synthesize_node_commands_avoids_missing_test_script(tmp_path: Path):

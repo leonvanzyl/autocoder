@@ -38,6 +38,10 @@ def _cli_argv(name: str) -> list[str]:
     resolved = (shutil.which(name) or "").lower()
     if resolved.endswith((".exe",)):
         return [name]
+    if resolved.endswith(".ps1"):
+        shell = "pwsh" if shutil.which("pwsh") else "powershell"
+        # Arguments after the script path are forwarded to the script.
+        return [shell, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", shutil.which(name) or name]
     return ["cmd.exe", "/c", name]
 
 
@@ -380,6 +384,12 @@ class MultiCliReviewer(Reviewer):
                 if "not found" in (err or "").lower() or "skipped" in (err or "").lower():
                     per.append((name, ReviewResult(approved=True, skipped=True, reason=err.strip())))
                     continue
+
+                # gemini -o json wraps the model response; extract `response` when present.
+                if name == "gemini":
+                    outer = _extract_json_from_text(out)
+                    if isinstance(outer, dict) and isinstance(outer.get("response"), str):
+                        out = outer["response"]
 
                 data = _extract_json_from_text(out)
                 if not ok or data is None:

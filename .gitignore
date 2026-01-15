@@ -144,7 +144,12 @@ to_check/
 .serena/
 research/
 
+# Local diagnostics fixtures (created by UI/CLI)
+dev_archive/e2e-fixtures/
+dev_archive/.quarantine/
+
 # Runtime databases and worktrees
 features.db
 agent_system.db
 worktrees/
+autocoder-e2e-fixtures/

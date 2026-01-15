@@ -219,6 +219,18 @@ class WorktreeManager:
         logger.info(f"Creating worktree: {worktree_path}")
         logger.info(f"Branch: {branch_name}")
 
+        def branch_exists(name: str) -> bool:
+            try:
+                subprocess.run(
+                    ["git", "rev-parse", "--verify", name],
+                    cwd=self.project_dir,
+                    check=True,
+                    capture_output=True,
+                )
+                return True
+            except subprocess.CalledProcessError:
+                return False
+
         # Prefer creating feature branches from main/master rather than whatever the repo is currently on.
         base_ref: Optional[str] = None
         for candidate in ("main", "master"):
@@ -235,17 +247,16 @@ class WorktreeManager:
                 continue
 
         try:
-            # Git worktree add command
-            cmd = [
-                "git",
-                "worktree",
-                "add",
-                str(worktree_path),
-                "-b",
-                branch_name,
-            ]
-            if base_ref:
-                cmd.append(base_ref)
+            # Git worktree add command:
+            # - If branch already exists, attach worktree to it (resume).
+            # - Otherwise, create a new branch from base_ref.
+            cmd: list[str] = ["git", "worktree", "add", str(worktree_path)]
+            if branch_exists(branch_name):
+                cmd.append(branch_name)
+            else:
+                cmd.extend(["-b", branch_name])
+                if base_ref:
+                    cmd.append(base_ref)
             subprocess.run(
                 cmd,
                 cwd=self.project_dir,
@@ -284,7 +295,11 @@ class WorktreeManager:
         worktree_path = self.worktrees_base_dir / safe_agent_id
 
         if not worktree_path.exists():
-            logger.warning(f"Worktree does not exist: {worktree_path}")
+            # This can happen during repeated cleanup attempts or when a worker never created its worktree.
+            if force:
+                logger.debug(f"Worktree does not exist: {worktree_path}")
+            else:
+                logger.warning(f"Worktree does not exist: {worktree_path}")
             return False
 
         try:

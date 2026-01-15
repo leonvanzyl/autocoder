@@ -209,6 +209,140 @@ export async function updateAdvancedSettings(settings: AdvancedSettings): Promis
 }
 
 // ============================================================================
+// Diagnostics API
+// ============================================================================
+
+export interface DiagnosticsFixturesDirResponse {
+  default_dir: string
+  configured_dir: string
+  effective_dir: string
+}
+
+export async function getDiagnosticsFixturesDir(): Promise<DiagnosticsFixturesDirResponse> {
+  return fetchJSON('/diagnostics/fixtures-dir')
+}
+
+export interface RunQAProviderE2ERequest {
+  fixture: 'node' | 'python'
+  provider: 'claude' | 'codex_cli' | 'gemini_cli' | 'multi_cli'
+  timeout_s?: number
+}
+
+export interface RunQAProviderE2EResponse {
+  success: boolean
+  exit_code: number
+  out_dir: string
+  log_path: string
+  output_tail: string
+}
+
+export async function runQAProviderE2E(req: RunQAProviderE2ERequest): Promise<RunQAProviderE2EResponse> {
+  return fetchJSON('/diagnostics/e2e/qa-provider/run', {
+    method: 'POST',
+    body: JSON.stringify(req),
+  })
+}
+
+export interface RunParallelMiniE2ERequest {
+  parallel?: number
+  preset?: string
+  timeout_s?: number
+}
+
+export interface RunParallelMiniE2EResponse {
+  success: boolean
+  exit_code: number
+  out_dir: string
+  log_path: string
+  output_tail: string
+}
+
+export async function runParallelMiniE2E(req: RunParallelMiniE2ERequest): Promise<RunParallelMiniE2EResponse> {
+  return fetchJSON('/diagnostics/e2e/parallel-mini/run', {
+    method: 'POST',
+    body: JSON.stringify(req),
+  })
+}
+
+export interface DiagnosticsRun {
+  name: string
+  path: string
+  size_bytes: number
+  modified_at: string
+}
+
+export async function listDiagnosticsRuns(limit: number = 25): Promise<DiagnosticsRun[]> {
+  const n = Math.max(1, Math.min(200, Number(limit || 25)))
+  return fetchJSON(`/diagnostics/runs?limit=${encodeURIComponent(String(n))}`)
+}
+
+export interface DiagnosticsRunTailResponse {
+  name: string
+  path: string
+  size_bytes: number
+  modified_at: string
+  tail: string
+}
+
+export async function tailDiagnosticsRun(
+  name: string,
+  maxChars: number = 8000
+): Promise<DiagnosticsRunTailResponse> {
+  const n = Math.max(200, Math.min(200000, Number(maxChars || 8000)))
+  return fetchJSON(
+    `/diagnostics/runs/${encodeURIComponent(name)}/tail?max_chars=${encodeURIComponent(String(n))}`
+  )
+}
+
+// ============================================================================
+// Worktrees / Cleanup Queue (per project)
+// ============================================================================
+
+export interface CleanupQueueItem {
+  path: string
+  attempts: number
+  next_try_at: number
+  added_at: number
+  reason: string
+}
+
+export interface CleanupQueueResponse {
+  queue_path: string
+  items: CleanupQueueItem[]
+}
+
+export async function getCleanupQueue(projectName: string): Promise<CleanupQueueResponse> {
+  return fetchJSON(`/projects/${encodeURIComponent(projectName)}/worktrees/cleanup-queue`)
+}
+
+export interface ProcessCleanupQueueRequest {
+  max_items?: number
+}
+
+export interface ProcessCleanupQueueResponse {
+  processed: number
+  remaining: number
+  queue_path: string
+}
+
+export async function processCleanupQueue(
+  projectName: string,
+  req: ProcessCleanupQueueRequest = {}
+): Promise<ProcessCleanupQueueResponse> {
+  return fetchJSON(`/projects/${encodeURIComponent(projectName)}/worktrees/cleanup-queue/process`, {
+    method: 'POST',
+    body: JSON.stringify(req),
+  })
+}
+
+export async function clearCleanupQueue(projectName: string): Promise<{ success: boolean; queue_path: string }> {
+  return fetchJSON(`/projects/${encodeURIComponent(projectName)}/worktrees/cleanup-queue/clear`, {
+    method: 'POST',
+    body: JSON.stringify({ confirm: true }),
+  })
+}
+
+// ============================================================================
 // Multi-Model Generate API
 // ============================================================================
 
@@ -247,6 +381,8 @@ export interface AutocoderYamlResponse {
   content: string
   inferred_preset?: string | null
   resolved_commands?: string[]
+  resolved_worker_provider?: string | null
+  resolved_worker_patch_max_iterations?: number | null
 }
 
 export async function getAutocoderYaml(projectName: string): Promise<AutocoderYamlResponse> {
