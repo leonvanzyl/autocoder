@@ -246,10 +246,16 @@ def feature_skip(
 ) -> str:
     """Skip a feature by moving it to the end of the priority queue.
 
-    Use this when a feature cannot be implemented yet due to:
-    - Dependencies on other features that aren't implemented yet
-    - External blockers (missing assets, unclear requirements)
-    - Technical prerequisites that need to be addressed first
+    Use this ONLY for truly external blockers you cannot control:
+    - External API credentials not configured (e.g., Stripe keys, OAuth secrets)
+    - External service unavailable or inaccessible
+    - Hardware/environment limitations you cannot fulfill
+
+    DO NOT skip for:
+    - Missing functionality (build it yourself)
+    - Refactoring features (implement them like any other feature)
+    - "Unclear requirements" (interpret the intent and implement)
+    - Dependencies on other features (build those first)
 
     The feature's priority is set to max_priority + 1, so it will be
     worked on after all other pending features. Also clears the in_progress

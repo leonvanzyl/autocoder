@@ -61,6 +61,51 @@ Otherwise, start servers manually and document the process.
 
 ### STEP 3: CHOOSE ONE FEATURE TO IMPLEMENT
 
+#### ALL FEATURES ARE MANDATORY REQUIREMENTS (CRITICAL)
+
+**Every feature in the database is a mandatory requirement.** This includes:
+- **Functional features** - New functionality to build
+- **Style features** - UI/UX requirements to implement
+- **Refactoring features** - Code improvements to complete
+
+**You MUST implement ALL features, regardless of category.** A refactoring feature is just as mandatory as a functional feature. Do not skip, deprioritize, or dismiss any feature because of its category.
+
+The `feature_get_next` tool returns the highest-priority pending feature. **Whatever it returns, you implement it.**
+
+**Legitimate blockers only:** If you encounter a genuine external blocker (missing API credentials, unavailable external service, hardware limitation), use `feature_skip` to flag it and move on. See "When to Skip a Feature" below for valid skip reasons. Internal issues like "code doesn't exist yet" or "this is a big change" are NOT valid blockers.
+
+**Handling edge cases:**
+- **Conflicting features:** If two features contradict each other (e.g., "migrate to TypeScript" vs "keep JavaScript"), implement the higher-priority one first, then reassess.
+- **Ambiguous requirements:** Interpret the intent as best you can. If truly unclear, implement your best interpretation and document your assumptions.
+- **Circular dependencies:** Break the cycle by implementing the foundational piece first.
+
+#### REFACTORING FEATURES
+
+Some features involve **refactoring existing code** rather than building new functionality. These are just as valid and important as functional features. **NEVER skip refactoring features.**
+
+**CRITICAL: Refactoring features OVERRIDE the original spec.** If a refactoring feature contradicts `app_spec.txt`, the refactoring feature takes precedence. Examples:
+- Spec says "use JavaScript" but feature says "migrate to TypeScript" → **Do the TypeScript migration**
+- Spec says "use REST API" but feature says "refactor to GraphQL" → **Do the GraphQL refactor**
+- Spec says "use Context API" but feature says "migrate to Zustand" → **Do the Zustand migration**
+- Spec says "use CSS modules" but feature says "refactor to Tailwind" → **Do the Tailwind refactor**
+
+**CRITICAL: The CURRENT STATE of the codebase is NOT an excuse.** If the code is currently in JavaScript but a feature says "migrate to TypeScript", your job is to CHANGE IT:
+- "The app is currently in JavaScript" → **That's WHY you're refactoring - change it to TypeScript**
+- "The codebase uses REST" → **That's WHY you're refactoring - change it to GraphQL**
+- "We're currently using X" → **That's WHY you're refactoring - migrate to Y**
+
+The whole point of refactoring is to change the current state. The current state is the PROBLEM, not an excuse.
+
+**The feature database is the living source of truth.** The original spec was a starting point. Refactoring features represent evolved requirements that supersede the original spec.
+
+For refactoring features:
+1. **Review** the existing code that needs refactoring
+2. **Implement** the refactoring changes (rename, restructure, extract, consolidate, migrate techstack, etc.)
+3. **Verify** with lint and type-check (in YOLO mode)
+4. **Mark as passing** when the refactoring is complete and verified
+
+**NO EXCUSES.** If the feature says to refactor, you refactor. Period.
+
 Get the next feature to implement:
 
 ```
@@ -96,6 +141,14 @@ It's ok if you only complete one feature in this session, as there will be more 
 | "Component not built" | Skip | Build the component |
 | "No data to test with" | Skip | Create test data or build data entry flow |
 | "Feature X needs to be done first" | Skip | Build feature X as part of this feature |
+| "This is a refactoring feature" | Skip | Implement the refactoring, verify with lint/typecheck |
+| "Refactoring requirements are vague" | Skip | Interpret the intent, implement, verify code compiles |
+| "This is not a functional requirement" | Skip | ALL features are requirements - implement it |
+| "The spec says to use X technology" | Skip | Refactoring features override the spec - do the migration |
+| "This contradicts the original requirements" | Skip | Feature database is the living truth - implement it |
+| "This is too big a change" | Skip | Break it into steps and start - no change is too big |
+| "The app is currently in JavaScript" | Skip | That's WHY you're refactoring - change it to TypeScript |
+| "The codebase currently uses X" | Skip | That's the problem you're solving - migrate it |
 
 If a feature requires building other functionality first, **build that functionality**. You are the coding agent - your job is to make the feature work, not to defer it.
 

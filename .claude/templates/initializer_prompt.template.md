@@ -49,6 +49,16 @@ Use the feature_create_bulk tool with features=[
       "Step 2: Take screenshot",
       "Step 3: Verify visual requirements"
     ]
+  },
+  {
+    "category": "refactoring",
+    "name": "Brief refactoring task name",
+    "description": "Description of code improvement or restructuring needed",
+    "steps": [
+      "Step 1: Review existing code",
+      "Step 2: Implement refactoring changes",
+      "Step 3: Verify code compiles and tests pass"
+    ]
   }
 ]
 ```
@@ -65,7 +75,7 @@ Use the feature_create_bulk tool with features=[
   - **Simple apps**: ~150 tests
   - **Medium apps**: ~250 tests
   - **Complex apps**: ~400+ tests
-- Both "functional" and "style" categories
+- Categories: "functional", "style", and "refactoring"
 - Mix of narrow tests (2-5 steps) and comprehensive tests (10+ steps)
 - At least 25 tests MUST have 10+ steps each (more for complex apps)
 - Order features by priority: fundamental features first (the API assigns priority based on order)
