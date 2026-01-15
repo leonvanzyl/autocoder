@@ -244,6 +244,12 @@ You can edit feature details (category/name/description/steps/priority) for non-
 
 - Web UI: open a feature → click the pencil icon → edit and save.
 
+### Expand Project (add features via chat)
+
+If a project already has a spec, you can add more features without manually writing them:
+
+- Web UI: click **Expand** (press `E`) → chat → **Finish** to add the new features to the queue.
+
 ### Controller Preflight (optional)
 
 When enabled, the orchestrator runs deterministic verification commands in the agent worktree before Gatekeeper merge verification.

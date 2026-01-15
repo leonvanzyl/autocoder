@@ -324,6 +324,77 @@ export type SpecChatServerMessage =
   | SpecChatPongMessage
   | SpecChatResponseDoneMessage
 
+// ============================================================================
+// Expand Project Chat Types
+// ============================================================================
+
+export interface ExpandChatTextMessage {
+  type: 'text'
+  content: string
+}
+
+export interface ExpandChatCreatedFeature {
+  id: number
+  name: string
+  category: string
+}
+
+export interface ExpandChatFeaturesCreatedMessage {
+  type: 'features_created'
+  count: number
+  features: ExpandChatCreatedFeature[]
+}
+
+export interface ExpandChatCompleteMessage {
+  type: 'expansion_complete'
+  total_added: number
+}
+
+export interface ExpandChatErrorMessage {
+  type: 'error'
+  content: string
+}
+
+export interface ExpandChatPongMessage {
+  type: 'pong'
+}
+
+export interface ExpandChatResponseDoneMessage {
+  type: 'response_done'
+}
+
+export type ExpandChatServerMessage =
+  | ExpandChatTextMessage
+  | ExpandChatFeaturesCreatedMessage
+  | ExpandChatCompleteMessage
+  | ExpandChatErrorMessage
+  | ExpandChatPongMessage
+  | ExpandChatResponseDoneMessage
+
+export interface ExpandChatStartMessage {
+  type: 'start'
+}
+
+export interface ExpandChatUserMessage {
+  type: 'message'
+  content: string
+  attachments?: ImageAttachment[]
+}
+
+export interface ExpandChatDoneMessage {
+  type: 'done'
+}
+
+export interface ExpandChatPingMessage {
+  type: 'ping'
+}
+
+export type ExpandChatClientMessage =
+  | ExpandChatStartMessage
+  | ExpandChatUserMessage
+  | ExpandChatDoneMessage
+  | ExpandChatPingMessage
+
 // Image attachment for chat messages
 export interface ImageAttachment {
   id: string

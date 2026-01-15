@@ -19,12 +19,14 @@ from .generate import router as generate_router
 from .project_config import router as project_config_router
 from .diagnostics import router as diagnostics_router
 from .worktrees import router as worktrees_router
+from .expand_project import router as expand_project_router
 
 __all__ = [
     "projects_router",
     "features_router",
     "agent_router",
     "spec_creation_router",
+    "expand_project_router",
     "filesystem_router",
     "assistant_chat_router",
     "model_settings_router",

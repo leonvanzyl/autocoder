@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useProjects, useFeatures, useAgentStatus } from './hooks/useProjects'
 import { useProjectWebSocket } from './hooks/useWebSocket'
 import { useFeatureSound } from './hooks/useFeatureSound'
@@ -12,6 +13,7 @@ import { ProgressDashboard } from './components/ProgressDashboard'
 import { SetupWizard } from './components/SetupWizard'
 import { AddFeatureForm } from './components/AddFeatureForm'
 import { FeatureModal } from './components/FeatureModal'
+import { ExpandProjectModal } from './components/ExpandProjectModal'
 import { DebugLogViewer } from './components/DebugLogViewer'
 import { AgentThought } from './components/AgentThought'
 import { AssistantFAB } from './components/AssistantFAB'
@@ -19,10 +21,11 @@ import { AssistantPanel } from './components/AssistantPanel'
 import { AgentStatusGrid } from './components/AgentStatusGrid'
 import { SettingsModal, type RunSettings } from './components/SettingsModal'
 import { SettingsPage } from './pages/SettingsPage'
-import { Plus, Loader2, FileText, Settings as SettingsIcon } from 'lucide-react'
+import { Plus, Loader2, FileText, Settings as SettingsIcon, Sparkles } from 'lucide-react'
 import type { Feature } from './lib/types'
 
 function App() {
+  const queryClient = useQueryClient()
   // Initialize selected project from localStorage
   const [selectedProject, setSelectedProject] = useState<string | null>(() => {
     try {
@@ -32,6 +35,7 @@ function App() {
     }
   })
   const [showAddFeature, setShowAddFeature] = useState(false)
+  const [showExpandProject, setShowExpandProject] = useState(false)
   const [selectedFeature, setSelectedFeature] = useState<Feature | null>(null)
   const [setupComplete, setSetupComplete] = useState(true) // Start optimistic
   const [debugOpen, setDebugOpen] = useState(false)
@@ -54,6 +58,8 @@ function App() {
   const { data: features } = useFeatures(selectedProject)
   const { data: agentStatusData } = useAgentStatus(selectedProject)
   const wsState = useProjectWebSocket(selectedProject)
+  const selectedProjectData = projects?.find((p) => p.name === selectedProject) ?? null
+  const canExpandProject = Boolean(selectedProjectData?.has_spec)
 
   // Play sounds when features move between columns
   useFeatureSound(features)
@@ -140,6 +146,12 @@ function App() {
         setDebugOpen(true)
       }
 
+      // E : Expand project (when project selected)
+      if ((e.key === 'e' || e.key === 'E') && selectedProject) {
+        e.preventDefault()
+        setShowExpandProject(true)
+      }
+
       // Escape : Close modals
       if (e.key === 'Escape') {
         if (showSettings) {
@@ -148,6 +160,8 @@ function App() {
           setAssistantOpen(false)
         } else if (showAddFeature) {
           setShowAddFeature(false)
+        } else if (showExpandProject) {
+          setShowExpandProject(false)
         } else if (selectedFeature) {
           setSelectedFeature(null)
         } else if (debugOpen) {
@@ -158,7 +172,7 @@ function App() {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [selectedProject, showAddFeature, selectedFeature, debugOpen, assistantOpen, showSettings, route])
+  }, [selectedProject, showAddFeature, showExpandProject, selectedFeature, debugOpen, assistantOpen, showSettings, route])
 
   // Hash-based routing (no router dependency)
   useEffect(() => {
@@ -263,6 +277,24 @@ function App() {
                     <span className="hidden sm:inline">Add Feature</span>
                     <kbd className="hidden md:inline ml-1.5 px-1.5 py-0.5 text-xs bg-black/20 rounded font-mono">
                       N
+                    </kbd>
+                  </button>
+
+                  <button
+                    onClick={() => setShowExpandProject(true)}
+                    disabled={!canExpandProject}
+                    className={`neo-btn text-sm flex items-center gap-2 ${
+                      canExpandProject
+                        ? 'bg-[var(--color-neo-progress)] text-[var(--color-neo-text)]'
+                        : 'bg-white/60 text-[var(--color-neo-text-secondary)] cursor-not-allowed'
+                    }`}
+                    title={canExpandProject ? 'Expand Project (Press E)' : 'Create a spec first to expand'}
+                    aria-label="Expand project"
+                  >
+                    <Sparkles size={18} />
+                    <span className="hidden sm:inline">Expand</span>
+                    <kbd className="hidden md:inline ml-1.5 px-1.5 py-0.5 text-xs bg-black/20 rounded font-mono">
+                      E
                     </kbd>
                   </button>
 
@@ -417,6 +449,18 @@ function App() {
         <AddFeatureForm
           projectName={selectedProject}
           onClose={() => setShowAddFeature(false)}
+        />
+      )}
+
+      {/* Expand Project Modal */}
+      {showExpandProject && selectedProject && (
+        <ExpandProjectModal
+          isOpen={showExpandProject}
+          projectName={selectedProject}
+          onClose={() => setShowExpandProject(false)}
+          onFeaturesAdded={() => {
+            queryClient.invalidateQueries({ queryKey: ['features', selectedProject] })
+          }}
         />
       )}
 

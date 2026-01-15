@@ -25,6 +25,7 @@ from .routers import (
     features_router,
     agent_router,
     spec_creation_router,
+    expand_project_router,
     filesystem_router,
     assistant_chat_router,
     model_settings_router,
@@ -39,6 +40,7 @@ from .routers import (
 from .websocket import project_websocket
 from .services.process_manager import cleanup_all_managers
 from .services.assistant_chat_session import cleanup_all_sessions as cleanup_assistant_sessions
+from .services.expand_chat_session import cleanup_all_expand_sessions
 from .schemas import SetupStatus
 from autocoder.core.port_config import get_ui_port, get_ui_cors_origins
 
@@ -77,6 +79,7 @@ async def lifespan(app: FastAPI):
     # Shutdown - cleanup all running agents and assistant sessions
     await cleanup_all_managers()
     await cleanup_assistant_sessions()
+    await cleanup_all_expand_sessions()
 
 
 # Create FastAPI app
@@ -121,6 +124,7 @@ app.include_router(projects_router)
 app.include_router(features_router)
 app.include_router(agent_router)
 app.include_router(spec_creation_router)
+app.include_router(expand_project_router)
 app.include_router(filesystem_router)
 app.include_router(assistant_chat_router)
 app.include_router(model_settings_router)

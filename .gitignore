@@ -1,8 +1,11 @@
 # Agent-generated output directories
 generations/
 
-# Claude Code skills and commands (user-specific)
-.claude/
+# Claude Code (ship commands; ignore local state)
+.claude/*
+!.claude/commands/
+!.claude/commands/*.md
+.claude/settings.local.json
 
 # Log files
 logs/
