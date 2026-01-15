@@ -9,9 +9,9 @@ in isolation without conflicting with each other.
 Run with: pytest tests/test_worktree_manager.py -v
 """
 
-import tempfile
 import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 
 from autocoder.core.worktree_manager import WorktreeManager
@@ -35,7 +35,8 @@ def test_worktree_manager_initialization():
 
         # Initialize worktree manager
         wm = WorktreeManager(str(repo_path))
-        assert wm.repo_path == str(repo_path)
+        # Windows can canonicalize/expand short paths (e.g. RUNNER~1) when resolving.
+        assert Path(wm.repo_path).resolve() == repo_path.resolve()
         print("✅ Worktree manager initialization works")
 
 
