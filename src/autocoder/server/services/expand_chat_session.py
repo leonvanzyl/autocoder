@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import re
 import shutil
 import threading
@@ -30,6 +31,16 @@ from autocoder.core.database import get_database
 from ..schemas import ImageAttachment
 
 logger = logging.getLogger(__name__)
+
+# Environment variables to pass through to Claude CLI for API configuration.
+API_ENV_VARS = [
+    "ANTHROPIC_BASE_URL",
+    "ANTHROPIC_AUTH_TOKEN",
+    "API_TIMEOUT_MS",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+]
 
 
 async def _make_multimodal_message(content_blocks: list[dict]) -> AsyncGenerator[dict, None]:
@@ -170,6 +181,8 @@ class ExpandChatSession:
         self.created_feature_ids: list[int] = []
         self._settings_file: Optional[Path] = None
         self._query_lock = asyncio.Lock()
+        self._claude_md_backup: str | None = None
+        self._claude_md_created: bool = False
 
     async def close(self) -> None:
         """Clean up resources and close the Claude client."""
@@ -181,6 +194,15 @@ class ExpandChatSession:
             finally:
                 self._client_entered = False
                 self.client = None
+
+        claude_md_path = self.project_dir / "CLAUDE.md"
+        try:
+            if self._claude_md_backup is not None:
+                claude_md_path.write_text(self._claude_md_backup, encoding="utf-8")
+            elif self._claude_md_created and claude_md_path.exists():
+                claude_md_path.unlink()
+        except Exception as e:
+            logger.warning(f"Error restoring CLAUDE.md: {e}")
 
         if self._settings_file and self._settings_file.exists():
             try:
@@ -228,17 +250,37 @@ class ExpandChatSession:
         project_path = str(self.project_dir.resolve())
         system_prompt = skill_content.replace("$ARGUMENTS", project_path)
 
+        claude_md_path = self.project_dir / "CLAUDE.md"
+        if claude_md_path.exists():
+            try:
+                self._claude_md_backup = claude_md_path.read_text(encoding="utf-8")
+            except Exception:
+                self._claude_md_backup = None
+        else:
+            self._claude_md_created = True
+
+        try:
+            claude_md_path.write_text(system_prompt, encoding="utf-8")
+        except Exception as e:
+            yield {"type": "error", "content": f"Failed to write CLAUDE.md: {str(e)}"}
+            return
+
+        sdk_env = {var: os.getenv(var) for var in API_ENV_VARS if os.getenv(var)}
+        model = os.getenv("ANTHROPIC_DEFAULT_OPUS_MODEL", "claude-opus-4-5-20251101")
+
         try:
             self.client = ClaudeSDKClient(
                 options=ClaudeAgentOptions(
-                    model="claude-opus-4-5-20251101",
+                    model=model,
                     cli_path=system_cli,
-                    system_prompt=system_prompt,
+                    system_prompt="You are an expert product-minded software architect.",
+                    setting_sources=["project"],
                     allowed_tools=["Read", "Glob"],
                     permission_mode="bypassPermissions",
                     max_turns=100,
                     cwd=str(self.project_dir.resolve()),
                     settings=str(settings_file.resolve()),
+                    env=sdk_env,
                 )
             )
             await self.client.__aenter__()

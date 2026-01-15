@@ -9,8 +9,10 @@ Uses the create-spec.md skill to guide users through app spec creation.
 import asyncio
 import json
 import logging
+import os
 import shutil
 import threading
+import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import AsyncGenerator, Optional
@@ -20,6 +22,16 @@ from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
 from ..schemas import ImageAttachment
 
 logger = logging.getLogger(__name__)
+
+# Environment variables to pass through to Claude CLI for API configuration.
+API_ENV_VARS = [
+    "ANTHROPIC_BASE_URL",
+    "ANTHROPIC_AUTH_TOKEN",
+    "API_TIMEOUT_MS",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+]
 
 
 async def _make_multimodal_message(content_blocks: list[dict]) -> AsyncGenerator[dict, None]:
@@ -72,6 +84,9 @@ class SpecChatSession:
         self.created_at = datetime.now()
         self._conversation_id: Optional[str] = None
         self._client_entered: bool = False  # Track if context manager is active
+        self._claude_md_backup: str | None = None
+        self._claude_md_created: bool = False
+        self._settings_file: Optional[Path] = None
 
     async def close(self) -> None:
         """Clean up resources and close the Claude client."""
@@ -83,6 +98,23 @@ class SpecChatSession:
             finally:
                 self._client_entered = False
                 self.client = None
+
+        # Restore project CLAUDE.md if we temporarily replaced it.
+        claude_md_path = self.project_dir / "CLAUDE.md"
+        try:
+            if self._claude_md_backup is not None:
+                claude_md_path.write_text(self._claude_md_backup, encoding="utf-8")
+            elif self._claude_md_created and claude_md_path.exists():
+                claude_md_path.unlink()
+        except Exception as e:
+            logger.warning(f"Error restoring CLAUDE.md: {e}")
+
+        # Clean up temporary settings file if we created a per-session one.
+        if self._settings_file and self._settings_file.exists():
+            try:
+                self._settings_file.unlink()
+            except Exception as e:
+                logger.warning(f"Error removing settings file: {e}")
 
     async def start(self) -> AsyncGenerator[dict, None]:
         """
@@ -131,14 +163,36 @@ class SpecChatSession:
                 ],
             },
         }
-        settings_file = self.project_dir / ".claude_settings.json"
-        with open(settings_file, "w") as f:
-            json.dump(security_settings, f, indent=2)
+        # Use a unique settings file per session to avoid collisions across concurrent sessions.
+        settings_file = self.project_dir / f".claude_settings.spec.{uuid.uuid4().hex}.json"
+        self._settings_file = settings_file
+        settings_file.write_text(json.dumps(security_settings, indent=2), encoding="utf-8")
 
         # Replace $ARGUMENTS with absolute project path (like CLI does in start.py:184)
         # Using absolute path avoids confusion when project folder name differs from app name
         project_path = str(self.project_dir.resolve())
         system_prompt = skill_content.replace("$ARGUMENTS", project_path)
+
+        # Write system prompt to CLAUDE.md to avoid Windows command line length limits.
+        # The SDK reads this when `setting_sources=["project"]` is enabled.
+        claude_md_path = self.project_dir / "CLAUDE.md"
+        if claude_md_path.exists():
+            try:
+                self._claude_md_backup = claude_md_path.read_text(encoding="utf-8")
+            except Exception:
+                self._claude_md_backup = None
+        else:
+            self._claude_md_created = True
+
+        try:
+            claude_md_path.write_text(system_prompt, encoding="utf-8")
+        except Exception as e:
+            yield {"type": "error", "content": f"Failed to write CLAUDE.md: {str(e)}"}
+            return
+
+        # Build environment overrides for API configuration (custom endpoints/model overrides).
+        sdk_env = {var: os.getenv(var) for var in API_ENV_VARS if os.getenv(var)}
+        model = os.getenv("ANTHROPIC_DEFAULT_OPUS_MODEL", "claude-opus-4-5-20251101")
 
         # Create Claude SDK client with limited tools for spec creation
         # Use Opus for best quality spec generation
@@ -147,9 +201,10 @@ class SpecChatSession:
         try:
             self.client = ClaudeSDKClient(
                 options=ClaudeAgentOptions(
-                    model="claude-opus-4-5-20251101",
+                    model=model,
                     cli_path=system_cli,
-                    system_prompt=system_prompt,
+                    system_prompt="You are an expert product-minded software architect.",
+                    setting_sources=["project"],
                     allowed_tools=[
                         "Read",
                         "Write",
@@ -160,6 +215,7 @@ class SpecChatSession:
                     max_turns=100,
                     cwd=str(self.project_dir.resolve()),
                     settings=str(settings_file.resolve()),
+                    env=sdk_env,
                 )
             )
             # Enter the async context and track it
