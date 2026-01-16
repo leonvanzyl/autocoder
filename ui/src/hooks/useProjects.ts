@@ -106,6 +106,28 @@ export function useUpdateFeature(projectName: string) {
   })
 }
 
+export function useEnqueueFeature(projectName: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (featureId: number) => api.enqueueFeature(projectName, featureId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['features', projectName] })
+    },
+  })
+}
+
+export function useEnqueueFeatures(projectName: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (count: number) => api.enqueueFeatures(projectName, count),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['features', projectName] })
+    },
+  })
+}
+
 // ============================================================================
 // Agent
 // ============================================================================

@@ -23,6 +23,8 @@ WorkerProvider = Literal["claude", "codex_cli", "gemini_cli", "multi_cli"]
 PlannerSynthesizer = Literal["none", "claude", "codex", "gemini"]
 CodexReasoningEffort = Literal["low", "medium", "high"]
 ReviewConsensus = Literal["any", "majority", "all"]
+InitializerProvider = Literal["claude", "codex_cli", "gemini_cli", "multi_cli"]
+InitializerSynthesizer = Literal["none", "claude", "codex", "gemini"]
 
 
 class AdvancedSettingsModel(BaseModel):
@@ -63,6 +65,13 @@ class AdvancedSettingsModel(BaseModel):
     planner_agents: str = Field(default="codex,gemini", max_length=256)
     planner_synthesizer: PlannerSynthesizer = Field(default="claude")
     planner_timeout_s: int = Field(default=180, ge=30, le=3600)
+
+    initializer_provider: InitializerProvider = Field(default="claude")
+    initializer_agents: str = Field(default="codex,gemini", max_length=256)
+    initializer_synthesizer: InitializerSynthesizer = Field(default="claude")
+    initializer_timeout_s: int = Field(default=300, ge=30, le=3600)
+    initializer_stage_threshold: int = Field(default=120, ge=0, le=100000)
+    initializer_enqueue_count: int = Field(default=30, ge=0, le=100000)
 
     logs_keep_days: int = Field(default=7, ge=0, le=3650)
     logs_keep_files: int = Field(default=200, ge=0, le=100000)
@@ -118,6 +127,13 @@ class AdvancedSettingsModel(BaseModel):
         # Planner conditionals
         if self.planner_enabled and not (self.planner_agents or "").strip():
             raise ValueError("planner_agents is required when planner_enabled=true")
+
+        # Initializer conditionals
+        if self.initializer_provider == "multi_cli" and not (self.initializer_agents or "").strip():
+            raise ValueError("initializer_agents is required when initializer_provider=multi_cli")
+
+        if self.initializer_enqueue_count < 0:
+            raise ValueError("initializer_enqueue_count must be >= 0")
 
         return self
 

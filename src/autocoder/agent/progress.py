@@ -77,13 +77,13 @@ def count_passing_tests(project_dir: Path) -> tuple[int, int, int]:
     try:
         conn = sqlite3.connect(db_file)
         cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM features")
+        cursor.execute("SELECT COUNT(*) FROM features WHERE enabled = 1")
         total = cursor.fetchone()[0]
-        cursor.execute("SELECT COUNT(*) FROM features WHERE passes = TRUE")
+        cursor.execute("SELECT COUNT(*) FROM features WHERE passes = TRUE AND enabled = 1")
         passing = cursor.fetchone()[0]
         # Use status field for in_progress check
         try:
-            cursor.execute("SELECT COUNT(*) FROM features WHERE UPPER(status) = 'IN_PROGRESS'")
+            cursor.execute("SELECT COUNT(*) FROM features WHERE UPPER(status) = 'IN_PROGRESS' AND enabled = 1")
             in_progress = cursor.fetchone()[0]
         except sqlite3.OperationalError:
             in_progress = 0

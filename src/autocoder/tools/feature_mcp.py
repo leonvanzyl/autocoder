@@ -138,6 +138,7 @@ def feature_get_stats() -> str:
         "passing": stats["features"]["completed"],
         "in_progress": stats["features"]["in_progress"],
         "pending": stats["features"]["pending"],
+        "staged": stats["features"].get("staged", 0),
         "total": stats["features"]["total"],
         "percentage": progress["percentage"]
     }

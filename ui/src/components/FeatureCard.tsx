@@ -1,4 +1,4 @@
-import { CheckCircle2, Circle, Loader2, AlertCircle } from 'lucide-react'
+import { CheckCircle2, Circle, Loader2, AlertCircle, PauseCircle } from 'lucide-react'
 import type { Feature } from '../lib/types'
 
 interface FeatureCardProps {
@@ -33,6 +33,7 @@ export function FeatureCard({ feature, onClick, isInProgress }: FeatureCardProps
   const status = (feature.status ?? (isInProgress ? 'IN_PROGRESS' : feature.in_progress ? 'IN_PROGRESS' : feature.passes ? 'DONE' : 'PENDING')).toUpperCase()
   const attempts = feature.attempts ?? 0
   const isBlocked = status === 'BLOCKED'
+  const isStaged = feature.staged || (status === 'PENDING' && feature.enabled === false)
 
   return (
     <button
@@ -85,6 +86,11 @@ export function FeatureCard({ feature, onClick, isInProgress }: FeatureCardProps
           <>
             <CheckCircle2 size={16} className="text-neo-done" />
             <span className="text-neo-done font-bold">Complete</span>
+          </>
+        ) : isStaged ? (
+          <>
+            <PauseCircle size={16} className="text-[var(--color-neo-text-muted)]" />
+            <span className="text-[var(--color-neo-text-muted)] font-bold">Staged</span>
           </>
         ) : (
           <>

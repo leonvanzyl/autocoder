@@ -185,6 +185,25 @@ Optional multi-model workflows (Codex/Gemini via local CLIs):
 - Review in Gatekeeper: `docs/multi_model_review.md`
 - Spec/plan drafting: `docs/multi_model_generate.md`
 
+#### Initializer backlog + staging
+
+You can also control **how the feature backlog is generated and staged**:
+
+```yaml
+initializer:
+  provider: claude           # claude|codex_cli|gemini_cli|multi_cli
+  agents: [codex, gemini]    # only used for multi_cli
+  synthesizer: claude        # none|claude|codex|gemini
+  timeout_s: 300
+  stage_threshold: 120       # stage backlog above this count
+  enqueue_count: 30          # keep this many enabled
+```
+
+Notes:
+- Large backlogs are **staged** (not dropped). Only `enqueue_count` features are active at a time.
+- UI: **Settings → Advanced → Initializer** sets global defaults; **Settings → Project Config** overrides per project.
+- Staged features show in a separate column and can be enqueued in batches.
+
 ### Onboarding Existing Projects (GSD → Spec)
 
 If you have a Claude/GSD-style codebase mapping under `./.planning/codebase/*.md`, the Web UI can convert it into an AutoCoder spec:

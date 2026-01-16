@@ -48,6 +48,12 @@ export function NewProjectModal({
   const [workerProvider, setWorkerProvider] = useState<'claude' | 'codex_cli' | 'gemini_cli' | 'multi_cli'>('claude')
   const [workerPatchIterations, setWorkerPatchIterations] = useState(2)
   const [workerPatchAgents, setWorkerPatchAgents] = useState('codex,gemini')
+  const [initializerProvider, setInitializerProvider] = useState<'claude' | 'codex_cli' | 'gemini_cli' | 'multi_cli'>('claude')
+  const [initializerAgents, setInitializerAgents] = useState('codex,gemini')
+  const [initializerSynthesizer, setInitializerSynthesizer] = useState<'none' | 'claude' | 'codex' | 'gemini'>('claude')
+  const [initializerTimeoutS, setInitializerTimeoutS] = useState(300)
+  const [initializerStageThreshold, setInitializerStageThreshold] = useState(120)
+  const [initializerEnqueueCount, setInitializerEnqueueCount] = useState(30)
 
   // Suppress unused variable warning - specMethod may be used in future
   void _specMethod
@@ -99,6 +105,12 @@ export function NewProjectModal({
       .slice(0, 10)
     const agentsYaml = agents.length ? agents.join(', ') : 'codex, gemini'
     const iters = Math.max(1, Math.min(20, Math.trunc(workerPatchIterations || 2)))
+    const initAgents = initializerAgents
+      .split(',')
+      .map((x) => x.trim())
+      .filter(Boolean)
+      .slice(0, 10)
+    const initAgentsYaml = initAgents.length ? initAgents.join(', ') : 'codex, gemini'
     return (
       `# autocoder.yaml\n` +
       `# Project-level AutoCoder defaults.\n` +
@@ -109,7 +121,15 @@ export function NewProjectModal({
       `worker:\n` +
       `  provider: ${workerProvider}\n` +
       `  patch_max_iterations: ${iters}\n` +
-      `  patch_agents: [${agentsYaml}]\n`
+      `  patch_agents: [${agentsYaml}]\n` +
+      `\n` +
+      `initializer:\n` +
+      `  provider: ${initializerProvider}\n` +
+      `  agents: [${initAgentsYaml}]\n` +
+      `  synthesizer: ${initializerSynthesizer}\n` +
+      `  timeout_s: ${Math.max(30, Math.min(3600, Math.trunc(initializerTimeoutS || 300)))}\n` +
+      `  stage_threshold: ${Math.max(0, Math.trunc(initializerStageThreshold || 0))}\n` +
+      `  enqueue_count: ${Math.max(0, Math.trunc(initializerEnqueueCount || 0))}\n`
     )
   }
 
@@ -226,6 +246,12 @@ export function NewProjectModal({
     setWorkerProvider('claude')
     setWorkerPatchIterations(2)
     setWorkerPatchAgents('codex,gemini')
+    setInitializerProvider('claude')
+    setInitializerAgents('codex,gemini')
+    setInitializerSynthesizer('claude')
+    setInitializerTimeoutS(300)
+    setInitializerStageThreshold(120)
+    setInitializerEnqueueCount(30)
     onClose()
   }
 
@@ -441,51 +467,129 @@ export function NewProjectModal({
                           </div>
                         </div>
                       ) : (
-                        <div className="neo-card p-3">
-                          <div className="text-xs font-display font-bold uppercase mb-2">Worker</div>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                            <div>
-                              <div className="text-xs font-display font-bold uppercase mb-1">Provider</div>
-                              <select
-                                value={workerProvider}
-                                onChange={(e) => setWorkerProvider(e.target.value as any)}
-                                className="neo-btn text-sm py-2 px-3 bg-white border-3 border-[var(--color-neo-border)] font-display w-full"
-                              >
-                                <option value="claude">claude (Claude Agent SDK)</option>
-                                <option value="codex_cli">codex_cli (patch worker)</option>
-                                <option value="gemini_cli">gemini_cli (patch worker)</option>
-                                <option value="multi_cli">multi_cli (patch worker)</option>
-                              </select>
-                            </div>
+                        <>
+                          <div className="neo-card p-3">
+                            <div className="text-xs font-display font-bold uppercase mb-2">Worker</div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                              <div>
+                                <div className="text-xs font-display font-bold uppercase mb-1">Provider</div>
+                                <select
+                                  value={workerProvider}
+                                  onChange={(e) => setWorkerProvider(e.target.value as any)}
+                                  className="neo-btn text-sm py-2 px-3 bg-white border-3 border-[var(--color-neo-border)] font-display w-full"
+                                >
+                                  <option value="claude">claude (Claude Agent SDK)</option>
+                                  <option value="codex_cli">codex_cli (patch worker)</option>
+                                  <option value="gemini_cli">gemini_cli (patch worker)</option>
+                                  <option value="multi_cli">multi_cli (patch worker)</option>
+                                </select>
+                              </div>
 
-                            <div>
-                              <div className="text-xs font-display font-bold uppercase mb-1">Patch iterations</div>
-                              <input
-                                type="number"
-                                value={workerPatchIterations}
-                                min={1}
-                                max={20}
-                                onChange={(e) => setWorkerPatchIterations(Number(e.target.value))}
-                                className="neo-input"
-                              />
-                            </div>
-
-                            {workerProvider === 'multi_cli' && (
-                              <div className="md:col-span-2">
-                                <div className="text-xs font-display font-bold uppercase mb-1">Patch order (csv)</div>
+                              <div>
+                                <div className="text-xs font-display font-bold uppercase mb-1">Patch iterations</div>
                                 <input
-                                  value={workerPatchAgents}
-                                  onChange={(e) => setWorkerPatchAgents(e.target.value)}
+                                  type="number"
+                                  value={workerPatchIterations}
+                                  min={1}
+                                  max={20}
+                                  onChange={(e) => setWorkerPatchIterations(Number(e.target.value))}
+                                  className="neo-input"
+                                />
+                              </div>
+
+                              {workerProvider === 'multi_cli' && (
+                                <div className="md:col-span-2">
+                                  <div className="text-xs font-display font-bold uppercase mb-1">Patch order (csv)</div>
+                                  <input
+                                    value={workerPatchAgents}
+                                    onChange={(e) => setWorkerPatchAgents(e.target.value)}
+                                    placeholder="codex,gemini"
+                                    className="neo-input"
+                                  />
+                                </div>
+                              )}
+                            </div>
+                            <div className="text-xs text-[var(--color-neo-text-secondary)] mt-2">
+                              Gatekeeper still infers verification commands if you don’t set <span className="font-mono">preset</span>/<span className="font-mono">commands</span>.
+                            </div>
+                          </div>
+                          <div className="neo-card p-3">
+                            <div className="text-xs font-display font-bold uppercase mb-2">Initializer</div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                              <div>
+                                <div className="text-xs font-display font-bold uppercase mb-1">Provider</div>
+                                <select
+                                  value={initializerProvider}
+                                  onChange={(e) => setInitializerProvider(e.target.value as any)}
+                                  className="neo-btn text-sm py-2 px-3 bg-white border-3 border-[var(--color-neo-border)] font-display w-full"
+                                >
+                                  <option value="claude">claude (Claude Agent SDK)</option>
+                                  <option value="codex_cli">codex_cli</option>
+                                  <option value="gemini_cli">gemini_cli</option>
+                                  <option value="multi_cli">multi_cli</option>
+                                </select>
+                              </div>
+                              <div>
+                                <div className="text-xs font-display font-bold uppercase mb-1">Synthesizer</div>
+                                <select
+                                  value={initializerSynthesizer}
+                                  onChange={(e) => setInitializerSynthesizer(e.target.value as any)}
+                                  className="neo-btn text-sm py-2 px-3 bg-white border-3 border-[var(--color-neo-border)] font-display w-full"
+                                >
+                                  <option value="claude">claude</option>
+                                  <option value="none">none</option>
+                                  <option value="codex">codex</option>
+                                  <option value="gemini">gemini</option>
+                                </select>
+                              </div>
+                              <div className="md:col-span-2">
+                                <div className="text-xs font-display font-bold uppercase mb-1">Agents (csv)</div>
+                                <input
+                                  value={initializerAgents}
+                                  onChange={(e) => setInitializerAgents(e.target.value)}
                                   placeholder="codex,gemini"
                                   className="neo-input"
                                 />
                               </div>
-                            )}
+                              <div>
+                                <div className="text-xs font-display font-bold uppercase mb-1">Timeout (s)</div>
+                                <input
+                                  type="number"
+                                  value={initializerTimeoutS}
+                                  min={30}
+                                  max={3600}
+                                  onChange={(e) => setInitializerTimeoutS(Number(e.target.value))}
+                                  className="neo-input"
+                                />
+                              </div>
+                              <div>
+                                <div className="text-xs font-display font-bold uppercase mb-1">Stage threshold</div>
+                                <input
+                                  type="number"
+                                  value={initializerStageThreshold}
+                                  min={0}
+                                  max={100000}
+                                  onChange={(e) => setInitializerStageThreshold(Number(e.target.value))}
+                                  className="neo-input"
+                                />
+                              </div>
+                              <div className="md:col-span-2">
+                                <div className="text-xs font-display font-bold uppercase mb-1">Enqueue count</div>
+                                <input
+                                  type="number"
+                                  value={initializerEnqueueCount}
+                                  min={0}
+                                  max={100000}
+                                  onChange={(e) => setInitializerEnqueueCount(Number(e.target.value))}
+                                  className="neo-input"
+                                />
+                              </div>
+                            </div>
+                            <div className="text-xs text-[var(--color-neo-text-secondary)] mt-2">
+                              Large backlogs get staged; only the top enqueue count stays active.
+                            </div>
                           </div>
-                          <div className="text-xs text-[var(--color-neo-text-secondary)] mt-2">
-                            Gatekeeper still infers verification commands if you don’t set <span className="font-mono">preset</span>/<span className="font-mono">commands</span>.
-                          </div>
-                        </div>
+                        </>
                       )}
                     </>
                   )}

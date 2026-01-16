@@ -135,6 +135,7 @@ function fireConfetti(): void {
 function isAllComplete(features: FeatureListResponse | undefined): boolean {
   if (!features) return false
   return (
+    (features.staged?.length ?? 0) === 0 &&
     features.pending.length === 0 &&
     features.in_progress.length === 0 &&
     features.done.length > 0

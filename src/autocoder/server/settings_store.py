@@ -72,6 +72,14 @@ class AdvancedSettings:
     planner_synthesizer: str = "claude"  # none|claude|codex|gemini
     planner_timeout_s: int = 180
 
+    # Initializer defaults (feature backlog generation)
+    initializer_provider: str = "claude"  # claude|codex_cli|gemini_cli|multi_cli
+    initializer_agents: str = "codex,gemini"
+    initializer_synthesizer: str = "claude"  # none|claude|codex|gemini
+    initializer_timeout_s: int = 300
+    initializer_stage_threshold: int = 120
+    initializer_enqueue_count: int = 30
+
     # Log retention defaults (used by orchestrator periodic pruning)
     logs_keep_days: int = 7
     logs_keep_files: int = 200
@@ -133,6 +141,12 @@ class AdvancedSettings:
             "AUTOCODER_PLANNER_AGENTS": str(self.planner_agents or "codex,gemini"),
             "AUTOCODER_PLANNER_SYNTHESIZER": str(self.planner_synthesizer or "claude"),
             "AUTOCODER_PLANNER_TIMEOUT_S": str(int(self.planner_timeout_s or 180)),
+            "AUTOCODER_INITIALIZER_PROVIDER": str(self.initializer_provider or "claude"),
+            "AUTOCODER_INITIALIZER_AGENTS": str(self.initializer_agents or "codex,gemini"),
+            "AUTOCODER_INITIALIZER_SYNTHESIZER": str(self.initializer_synthesizer or "claude"),
+            "AUTOCODER_INITIALIZER_TIMEOUT_S": str(int(self.initializer_timeout_s or 300)),
+            "AUTOCODER_INITIALIZER_STAGE_THRESHOLD": str(int(self.initializer_stage_threshold or 0)),
+            "AUTOCODER_INITIALIZER_ENQUEUE_COUNT": str(int(self.initializer_enqueue_count or 0)),
             "AUTOCODER_LOGS_KEEP_DAYS": str(self.logs_keep_days),
             "AUTOCODER_LOGS_KEEP_FILES": str(self.logs_keep_files),
             "AUTOCODER_LOGS_MAX_TOTAL_MB": str(self.logs_max_total_mb),

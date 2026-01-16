@@ -13,6 +13,7 @@ import { ProgressDashboard } from './components/ProgressDashboard'
 import { SetupWizard } from './components/SetupWizard'
 import { AddFeatureForm } from './components/AddFeatureForm'
 import { FeatureModal } from './components/FeatureModal'
+import { StagedBacklogPanel } from './components/StagedBacklogPanel'
 import { ExpandProjectModal } from './components/ExpandProjectModal'
 import { DebugLogViewer } from './components/DebugLogViewer'
 import { AgentThought } from './components/AgentThought'
@@ -441,6 +442,7 @@ function App() {
              features.pending.length === 0 &&
              features.in_progress.length === 0 &&
              features.done.length === 0 &&
+             (features.staged?.length ?? 0) === 0 &&
              wsState.agentStatus === 'running' && (
               <div className="neo-card p-8 text-center">
                 <Loader2 size={32} className="animate-spin mx-auto mb-4 text-[var(--color-neo-progress)]" />
@@ -451,6 +453,10 @@ function App() {
                   The agent is reading your spec and creating features. This may take a moment.
                 </p>
               </div>
+            )}
+
+            {selectedProject && features && (features.staged?.length ?? 0) > 0 && (
+              <StagedBacklogPanel projectName={selectedProject} stagedCount={features.staged.length} />
             )}
 
             {/* Kanban Board */}

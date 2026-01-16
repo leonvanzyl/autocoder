@@ -108,6 +108,8 @@ class FeatureResponse(FeatureBase):
     status: str = "PENDING"
     passes: bool
     in_progress: bool
+    enabled: bool = True
+    staged: bool = False
     attempts: int = 0
     last_error: str | None = None
     last_artifact_path: str | None = None
@@ -121,6 +123,7 @@ class FeatureResponse(FeatureBase):
 
 class FeatureListResponse(BaseModel):
     """Response containing list of features organized by status."""
+    staged: list[FeatureResponse] = []
     pending: list[FeatureResponse]
     in_progress: list[FeatureResponse]
     done: list[FeatureResponse]
