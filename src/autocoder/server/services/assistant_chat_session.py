@@ -332,10 +332,12 @@ class AssistantChatSession:
         system_cli = shutil.which(cli_command)
         sdk_env = {var: os.getenv(var) for var in API_ENV_VARS if os.getenv(var)}
 
+        model = os.getenv("ANTHROPIC_DEFAULT_OPUS_MODEL", "claude-opus-4-5-20251101")
+
         try:
             self.client = ClaudeSDKClient(
                 options=ClaudeAgentOptions(
-                    model="claude-opus-4-5-20251101",
+                    model=model,
                     cli_path=system_cli,
                     env=sdk_env if sdk_env else None,
                     system_prompt=system_prompt,
