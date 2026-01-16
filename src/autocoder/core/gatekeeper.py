@@ -234,12 +234,50 @@ class Gatekeeper:
                 "agent_system.db",
                 ".eslintrc.json",
             ]
+            ignore_untracked_filenames = {
+                # Claude Code CLI can leave these behind in the target project root.
+                # They are not part of the user's repo and shouldn't block deterministic merges.
+                ".claude_settings.json",
+                "claude-progress.txt",
+            }
             ignored: list[str] = []
             remaining: list[str] = []
             for ln in lines:
                 target = ln.replace("\\", "/")
+                status = ln[:2]
+                path_part = ln[3:] if len(ln) > 3 else ""
+                # Handle renames like: "R  old -> new"
+                if "->" in path_part:
+                    path_part = path_part.split("->", 1)[-1].strip()
+                filename = path_part.replace("\\", "/").split("/")[-1] if path_part else ""
+
+                # Ignore known runtime artifacts (any status).
                 if any(s in target for s in ignore_substrings):
                     ignored.append(ln)
+                # Ignore known Claude CLI artifacts only when untracked.
+                elif status == "??" and filename in ignore_untracked_filenames:
+                    ignored.append(ln)
+                # Claude CLI sometimes drops a redundant root-level app_spec.txt even when prompts/app_spec.txt exists.
+                # Treat it as an artifact only in that case, and only when untracked.
+                elif (
+                    status == "??"
+                    and filename == "app_spec.txt"
+                    and (self.project_dir / "prompts" / "app_spec.txt").exists()
+                ):
+                    ignored.append(ln)
+                # AutoCoder prompt scaffolding files are often left untracked in the target project.
+                # They are not part of the feature code and should not block merges.
+                elif status == "??":
+                    rel = path_part.replace("\\", "/")
+                    if rel == "prompts/" or rel == "prompts":
+                        ignored.append(ln)
+                    elif rel.startswith("prompts/"):
+                        rel_name = rel.split("/")[-1] if rel else ""
+                        # Defensive: only ignore the known AutoCoder prompt filenames.
+                        if rel_name == "app_spec.txt" or rel_name.endswith("_prompt.txt"):
+                            ignored.append(ln)
+                        else:
+                            remaining.append(ln)
                 else:
                     remaining.append(ln)
             return ignored, remaining
@@ -613,40 +651,67 @@ class Gatekeeper:
                 capture_output=True,
                 text=True,
             ).stdout.strip()
-            if can_update_ref_without_checkout and current_branch not in {detected_main, "HEAD"}:
+            # If the main working tree contains only ignorable runtime artifacts, we want to avoid
+            # failing merges due to "untracked file would be overwritten" edge cases (common with
+            # Claude CLI artifacts like claude-progress.txt). We still update the working tree when
+            # possible, but first remove only the known safe-to-delete artifacts.
+            def _cleanup_safe_untracked_artifacts(lines: list[str]) -> None:
+                safe_names = {".claude_settings.json", "claude-progress.txt"}
+                for raw_ln in lines:
+                    if raw_ln[:2] != "??":
+                        continue
+                    p = raw_ln[3:].strip().replace("\\", "/")
+                    if "->" in p:
+                        p = p.split("->", 1)[-1].strip()
+                    name = p.split("/")[-1] if p else ""
+                    if name in safe_names:
+                        with contextlib.suppress(Exception):
+                            (self.project_dir / p).unlink(missing_ok=True)  # type: ignore[arg-type]
+                    if (
+                        name == "app_spec.txt"
+                        and (self.project_dir / "prompts" / "app_spec.txt").exists()
+                    ):
+                        with contextlib.suppress(Exception):
+                            (self.project_dir / p).unlink(missing_ok=True)  # type: ignore[arg-type]
+
+            # Fast-forward local main to verified merge commit.
+            original_ref = current_branch
+            try:
+                # Only do destructive cleanup when the tree was already classified as "safe dirty".
+                if can_update_ref_without_checkout:
+                    _cleanup_safe_untracked_artifacts(ignored_dirty)
+
                 subprocess.run(
-                    ["git", "update-ref", f"refs/heads/{detected_main}", merge_commit_hash],
+                    ["git", "checkout", detected_main],
                     cwd=self.project_dir,
                     check=True,
                     capture_output=True,
-                    text=True,
                 )
-            else:
-                # Fast-forward local main to verified merge commit, updating working tree.
-                original_ref = current_branch
-                try:
-                    subprocess.run(
-                        ["git", "checkout", detected_main],
-                        cwd=self.project_dir,
-                        check=True,
-                        capture_output=True,
-                    )
-                    subprocess.run(
-                        ["git", "merge", "--ff-only", merge_commit_hash],
-                        cwd=self.project_dir,
-                        check=True,
-                        capture_output=True,
-                    )
-                finally:
-                    # Restore original branch (best-effort).
-                    with contextlib.suppress(Exception):
-                        if original_ref and original_ref != detected_main:
-                            subprocess.run(
-                                ["git", "checkout", original_ref],
-                                cwd=self.project_dir,
-                                check=True,
-                                capture_output=True,
-                            )
+                subprocess.run(
+                    ["git", "merge", "--ff-only", merge_commit_hash],
+                    cwd=self.project_dir,
+                    check=True,
+                    capture_output=True,
+                )
+            except subprocess.CalledProcessError as e:
+                return {
+                    "approved": False,
+                    "reason": "Failed to update main to verified merge commit",
+                    "error": str(e),
+                    "test_results": test_results,
+                    "merge_commit": merge_commit_hash,
+                    "diff_fingerprint": diff_fingerprint,
+                }
+            finally:
+                # Restore original branch (best-effort).
+                with contextlib.suppress(Exception):
+                    if original_ref and original_ref not in {detected_main, "HEAD"}:
+                        subprocess.run(
+                            ["git", "checkout", original_ref],
+                            cwd=self.project_dir,
+                            check=True,
+                            capture_output=True,
+                        )
 
             if push_remote and has_origin:
                 try:

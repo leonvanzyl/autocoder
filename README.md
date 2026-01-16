@@ -168,6 +168,8 @@ In parallel mode, workers should not self-attest `passes=true`. Instead, `featur
 
 By default, Gatekeeper rejects features when it cannot run a deterministic verification command (or when verification fails). For Node projects without a `test` script, Gatekeeper falls back to other available scripts like `build`/`typecheck`/`lint` when present. Override with `AUTOCODER_ALLOW_NO_TESTS=1` only if you explicitly want “merge without tests” for a project (YOLO-only).
 
+Gatekeeper also refuses to merge if your main working tree has uncommitted changes — but it ignores known runtime artifacts like `.autocoder/`, `worktrees/`, `agent_system.db`, plus common Claude Code CLI leftovers (e.g. `.claude_settings.json`, `claude-progress.txt`).
+
 ### Project Config (`autocoder.yaml`)
 
 For framework-agnostic verification, put an `autocoder.yaml` in the **target project** root to tell Gatekeeper exactly what to run:
