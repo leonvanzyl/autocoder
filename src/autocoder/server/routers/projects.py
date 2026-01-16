@@ -7,6 +7,7 @@ Uses project registry for path lookups instead of fixed generations/ directory.
 """
 
 import re
+import os
 import shutil
 from pathlib import Path
 
@@ -124,7 +125,7 @@ async def list_projects():
 async def create_project(project: ProjectCreate):
     """Create a new project at the specified path."""
     _init_imports()
-    register_project, _, get_project_path, _, _ = _get_registry_functions()
+    register_project, _, get_project_path, list_registered_projects, _ = _get_registry_functions()
 
     name = validate_project_name(project.name)
     project_path = Path(project.path).resolve()
@@ -136,6 +137,26 @@ async def create_project(project: ProjectCreate):
             status_code=409,
             detail=f"Project '{name}' already exists at {existing}"
         )
+
+    # Prevent duplicate project registrations that point at the same directory.
+    # This matters for "existing project" onboarding where folder name may not match project name.
+    registered = list_registered_projects()
+    normalized_new = str(project_path)
+    if os.name == "nt":
+        normalized_new = normalized_new.casefold()
+    for existing_name, info in registered.items():
+        try:
+            existing_path = Path(info["path"]).resolve()
+        except Exception:
+            continue
+        normalized_existing = str(existing_path)
+        if os.name == "nt":
+            normalized_existing = normalized_existing.casefold()
+        if normalized_existing == normalized_new:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Path is already registered as project '{existing_name}'"
+            )
 
     # Security: Check if path is in a blocked location
     from .filesystem import is_path_blocked

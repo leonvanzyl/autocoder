@@ -1,24 +1,14 @@
 ---
 allowed-tools: Read, Write, Bash, Glob, Grep
-description: Convert GSD codebase mapping (.planning/codebase/*.md) into AutoCoder prompts/app_spec.txt
+description: Convert GSD codebase mapping (.planning/codebase/*.md) to AutoCoder prompts/app_spec.txt
 ---
 
 # GSD → AutoCoder Spec
 
-If a project already has GSD/Claude codebase mapping docs under:
+Convert `.planning/codebase/*.md` (from `/gsd:map-codebase`) into AutoCoder's `prompts/app_spec.txt`.
 
-- `.planning/codebase/STACK.md`
-- `.planning/codebase/ARCHITECTURE.md`
-- `.planning/codebase/STRUCTURE.md`
+If you prefer the Web UI, you can also run this from:
 
-You can convert them into AutoCoder’s `prompts/app_spec.txt` using the **Web UI**:
+Settings → Generate → **GSD → app_spec.txt**
 
-1. Open AutoCoder UI
-2. Select the project
-3. Settings → Generate → **GSD → app_spec.txt**
-
-This uses the same multi-model generate pipeline (Codex/Gemini CLIs + optional synthesis) and writes:
-
-- `prompts/app_spec.txt`
-- Drafts under `.autocoder/drafts/spec/...`
-
+@.claude/skills/gsd-to-autocoder-spec/SKILL.md

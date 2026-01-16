@@ -128,19 +128,18 @@ For each new capability, estimate features:
 
 ---
 
-# FEATURE CREATION (NO TOOLS)
+# FEATURE CREATION
 
-When the user approves, you must output the features in a machine-readable block so the server can add them to the database.
+Once the user approves, create features using the MCP tool.
 
 **Signal that you're ready to create features by saying:**
 
 > "Great! I'll create these N features now."
 
-**Then output exactly one `<features_to_create>` block containing a JSON array:**
+**Then call the `feature_create_bulk` tool to save them directly to the database:**
 
-```xml
-<features_to_create>
-[
+```
+feature_create_bulk(features=[
   {
     "category": "functional",
     "name": "Brief feature name",
@@ -150,16 +149,26 @@ When the user approves, you must output the features in a machine-readable block
       "Step 2: Expected result",
       "Step 3: Verification"
     ]
+  },
+  {
+    "category": "style",
+    "name": "Another feature name",
+    "description": "Description of visual/style requirement",
+    "steps": [
+      "Step 1: Navigate to page",
+      "Step 2: Check visual element",
+      "Step 3: Verify styling"
+    ]
   }
-]
-</features_to_create>
+])
 ```
 
 **CRITICAL:**
-- Output valid JSON (double quotes, no trailing commas)
+- Call the `feature_create_bulk` MCP tool with ALL features at once
+- Use valid JSON (double quotes, no trailing commas)
 - Include ALL features you promised to create
-- Each feature needs: `category`, `name`, `description`, `steps` (array of strings)
-- Do not output any other JSON blocks besides `<features_to_create>`
+- Each feature needs: category, name, description, steps (array of strings)
+- The tool will return the count of created features - verify it matches your expected count
 
 ---
 
@@ -193,7 +202,7 @@ When the user approves, you must output the features in a machine-readable block
 
 # AFTER FEATURE CREATION
 
-After emitting the `<features_to_create>` block, tell the user:
+Once features are created, tell the user:
 
 > "I've created N new features for your project!
 >
@@ -201,6 +210,8 @@ After emitting the `<features_to_create>` block, tell the user:
 > - These features are now in your pending queue
 > - The agent will implement them in priority order
 > - They'll appear in the Pending column on your kanban board
+>
+> **To start implementing:** Close this chat and click the Play button to start the agent.
 >
 > Would you like to add more features, or are you done for now?"
 
@@ -221,4 +232,3 @@ If they want to add more, go back to Phase 1.
 # BEGIN
 
 Start by reading the app specification file at `$ARGUMENTS/prompts/app_spec.txt`, then greet the user with a summary of their existing project and ask what they want to add.
-
