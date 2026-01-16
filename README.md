@@ -502,9 +502,9 @@ Result: 3x faster development without sacrificing quality (thanks to the Gatekee
 
 ## Known Issues / TODO
 
-- [ ] Auto-setup could handle venv creation too (currently warns but doesn't create it)
-- [ ] Some edge cases with Windows paths in the git worktree code
-- [ ] Documentation could use more examples of actual project specs
+- [x] Auto-setup can bootstrap a local venv for this repo (run `autocoder setup`)
+- [x] Windows worktree edge cases: enable git `core.longpaths` automatically per repo
+- [x] More real spec examples: see `docs/examples/` (Node + Python + SEO affiliate)
 
 ---
 

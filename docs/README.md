@@ -84,6 +84,12 @@ This directory contains detailed documentation for the autonomous coding system.
 
 - **[LOCAL_DEV_TEMPLATE.md](LOCAL_DEV_TEMPLATE.md)** - Template for local-only notes (copy to `LOCAL_DEV.md`)
 
+### Example Specs
+
+- `docs/examples/fortune-of-dragons-affiliate/` - Realistic SEO/affiliate site spec
+- `docs/examples/minimal-nextjs-seo-site/` - Minimal Node/Next SEO site spec + `autocoder.yaml`
+- `docs/examples/minimal-fastapi-api/` - Minimal FastAPI + pytest spec + `autocoder.yaml`
+
 ## 🎯 Documentation by Use Case
 
 ### For New Users

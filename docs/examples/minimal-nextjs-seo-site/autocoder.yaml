@@ -1,0 +1,17 @@
+worker:
+  provider: claude
+  patch_max_iterations: 2
+  patch_agents: "codex,gemini"
+
+commands:
+  setup:
+    - command: npm install
+  test:
+    - command: npm run build
+  lint:
+    - command: npm run lint
+      allow_fail: true
+  typecheck:
+    - command: npm run typecheck
+      allow_fail: true
+

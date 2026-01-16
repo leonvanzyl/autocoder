@@ -60,6 +60,86 @@ DEFAULT_MODEL = "claude-opus-4-5-20251101"
 DEFAULT_PARALLEL = 3
 DEFAULT_PRESET = "balanced"
 
+def _is_repo_root(path: Path) -> bool:
+    try:
+        p = path.resolve()
+    except Exception:
+        p = path
+    return (p / "pyproject.toml").exists() and (p / "src" / "autocoder").exists() and (p / "ui").exists()
+
+
+def _venv_python(venv_dir: Path) -> Path:
+    if os.name == "nt":
+        return venv_dir / "Scripts" / "python.exe"
+    return venv_dir / "bin" / "python"
+
+
+def _prompt_yes_no(question: str, *, default_yes: bool = True) -> bool:
+    default = "Y/n" if default_yes else "y/N"
+    while True:
+        ans = input(f"{question} [{default}]: ").strip().lower()
+        if not ans:
+            return default_yes
+        if ans in ("y", "yes"):
+            return True
+        if ans in ("n", "no"):
+            return False
+
+
+def _run_dev_setup(*, repo_root: Path, venv_dir: Path, install: bool, build_ui: bool) -> bool:
+    repo_root = repo_root.resolve()
+    venv_dir = venv_dir.resolve()
+    print(f"\n🧪 Dev setup target: {repo_root}")
+
+    if not _is_repo_root(repo_root):
+        print("❌ This doesn't look like the AutoCoder repo root (missing pyproject.toml/src/autocoder/ui/).")
+        return False
+
+    if not venv_dir.exists():
+        print(f"\n🐍 Creating venv: {venv_dir}")
+        try:
+            subprocess.run([sys.executable, "-m", "venv", str(venv_dir)], cwd=str(repo_root), check=True)
+        except Exception as e:
+            print(f"❌ Failed to create venv: {e}")
+            return False
+    else:
+        print(f"\n✅ Venv already exists: {venv_dir}")
+
+    py = _venv_python(venv_dir)
+    if not py.exists():
+        print(f"❌ Venv python not found at: {py}")
+        return False
+
+    if install:
+        print("\n📦 Installing AutoCoder (editable) + dev deps into venv…")
+        try:
+            subprocess.run([str(py), "-m", "pip", "install", "-U", "pip"], cwd=str(repo_root), check=True)
+            subprocess.run([str(py), "-m", "pip", "install", "-e", ".[dev]"], cwd=str(repo_root), check=True)
+        except Exception as e:
+            print(f"❌ pip install failed: {e}")
+            return False
+
+    if build_ui:
+        ui_dir = repo_root / "ui"
+        if not ui_dir.exists():
+            print("❌ ui/ directory not found; skipping UI build")
+        else:
+            print("\n🎨 Building UI (npm install + build)…")
+            try:
+                subprocess.run(["npm", "install"], cwd=str(ui_dir), check=True)
+                subprocess.run(["npm", "run", "build"], cwd=str(ui_dir), check=True)
+            except Exception as e:
+                print(f"❌ UI build failed: {e}")
+                return False
+
+    print("\n✅ Dev setup complete.")
+    if os.name == "nt":
+        print(f"   Activate: {venv_dir}\\Scripts\\activate")
+    else:
+        print(f"   Activate: source {venv_dir}/bin/activate")
+    print("   Then run: autocoder  (or autocoder-ui)")
+    return True
+
 
 # ============================================================================
 # SETUP CHECKS & AUTO-SETUP
@@ -136,6 +216,15 @@ def auto_setup(setup: dict) -> bool:
     print("\n" + "=" * 60)
     print("  🔧 Auto-Setup")
     print("=" * 60)
+
+    # 0. Dev venv bootstrap (source checkout only)
+    # This is intentionally conservative: it only runs when we're in a repo checkout, and only if you confirm.
+    if not setup["in_venv"] and _is_repo_root(ROOT_DIR):
+        print("\n🐍 You're not in a virtual environment (recommended).")
+        if _prompt_yes_no("Create a local .venv for this repo now?", default_yes=False):
+            ok = _run_dev_setup(repo_root=ROOT_DIR, venv_dir=ROOT_DIR / ".venv", install=True, build_ui=False)
+            if ok:
+                print("\nHeads up: you need to activate the venv and re-run `autocoder` for it to take effect.")
 
     # 1. Build UI if needed
     if not setup["ui_built"] and setup["npm"] and setup["node"]:
@@ -576,6 +665,25 @@ For more help on a specific command:
 
     subparsers = parser.add_subparsers(dest='mode', help='Operating mode')
 
+    # Dev setup (repo checkout)
+    setup_parser = subparsers.add_parser(
+        "setup",
+        help="Bootstrap a local dev environment (repo checkout)",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Create .venv + install deps + build UI (run from repo root)
+  autocoder setup
+
+  # Custom venv dir
+  autocoder setup --venv-dir .venv
+        """,
+    )
+    setup_parser.add_argument("--path", type=str, default=".", help="Repo root path (default: .)")
+    setup_parser.add_argument("--venv-dir", type=str, default=".venv", help="Venv directory name/path (default: .venv)")
+    setup_parser.add_argument("--no-install", action="store_true", help="Skip pip install -e '.[dev]'")
+    setup_parser.add_argument("--no-ui", action="store_true", help="Skip npm install/build for ui/")
+
     # Agent mode
     agent_parser = subparsers.add_parser(
         'agent',
@@ -698,7 +806,14 @@ Examples:
     args = parser.parse_args()
 
     # Route to appropriate mode
-    if args.mode == 'agent':
+    if args.mode == "setup":
+        repo_root = Path(args.path).expanduser().resolve()
+        venv_dir = Path(args.venv_dir)
+        if not venv_dir.is_absolute():
+            venv_dir = (repo_root / venv_dir).resolve()
+        ok = _run_dev_setup(repo_root=repo_root, venv_dir=venv_dir, install=not args.no_install, build_ui=not args.no_ui)
+        raise SystemExit(0 if ok else 1)
+    elif args.mode == 'agent':
         run_agent(args)
     elif args.mode == 'parallel':
         run_parallel(args)

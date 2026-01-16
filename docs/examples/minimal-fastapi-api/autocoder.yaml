@@ -1,0 +1,11 @@
+worker:
+  provider: claude
+  patch_max_iterations: 2
+  patch_agents: "codex,gemini"
+
+commands:
+  setup:
+    - command: "{VENV_PY} -m pip install -r requirements.txt"
+  test:
+    - command: "{VENV_PY} -m pytest -q"
+

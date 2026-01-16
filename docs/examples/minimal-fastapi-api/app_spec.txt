@@ -1,0 +1,31 @@
+<project_specification>
+Project: Minimal FastAPI API (SQLite)
+Name: Tiny Tasks API
+
+Goal
+- Build a small FastAPI backend with a SQLite DB to validate the Python verification pipeline.
+
+Core Features
+1) Health + docs
+- GET /health returns { "ok": true }
+- OpenAPI docs enabled (default FastAPI).
+
+2) Tasks CRUD
+- POST /tasks { title } -> create
+- GET /tasks -> list
+- GET /tasks/{id} -> detail
+- PATCH /tasks/{id} -> update title/completed
+- DELETE /tasks/{id} -> delete
+
+3) Persistence
+- SQLite file db (local).
+- Simple schema migration or “create tables on startup”.
+
+Testing
+- Pytest smoke tests for health and CRUD happy path.
+
+Definition of Done
+- `pytest -q` passes.
+- API starts with `uvicorn app.main:app --reload`.
+</project_specification>
+

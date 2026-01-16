@@ -54,6 +54,19 @@ class WorktreeManager:
         if not (self.project_dir / ".git").exists():
             raise ValueError(f"Not a git repository: {self.project_dir}")
 
+        # Windows path edge-cases: enable long path support for this repo (local config).
+        # This avoids failures when Node/Next creates deep node_modules trees in worktrees.
+        if os.name == "nt":
+            try:
+                subprocess.run(
+                    ["git", "config", "core.longpaths", "true"],
+                    cwd=self.project_dir,
+                    check=False,
+                    capture_output=True,
+                )
+            except Exception:
+                pass
+
         # Backwards-compatible attribute name (used by older tests)
         self.repo_path = str(self.project_dir)
 

@@ -1,0 +1,38 @@
+<project_specification>
+Project: Minimal Next.js SEO site (no DB)
+Name: Single-Topic SEO Microsite
+
+Goal
+- Build a fast, SEO-friendly microsite focused on ONE topic.
+- Demonstrate the “spec → features → Gatekeeper verified merge” workflow.
+
+Core Pages
+1) Home
+- Topic overview (H1 + intro + sections).
+- Table of contents that links to sections.
+- “Related Articles” block.
+
+2) Blog
+- /blog list page (pagination)
+- /blog/[slug] article page (MD/MDX or local TS data)
+- Seed with at least 5 posts.
+
+3) About
+- About the site + editorial policy page.
+
+SEO Requirements
+- Title/description/OG/Twitter for every page.
+- Canonical URLs and basic JSON-LD (Breadcrumb on blog posts).
+- robots.txt + sitemap.xml.
+- No external APIs required.
+
+Tech Preferences
+- Next.js + TypeScript.
+- Keep dependencies minimal; avoid heavy client JS.
+
+Definition of Done
+- `npm run build` passes.
+- Pages render with correct metadata.
+- Blog list + post detail works.
+</project_specification>
+
