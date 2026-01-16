@@ -18,21 +18,28 @@ interface WebSocketState {
 }
 
 const MAX_LOGS = 100 // Keep last 100 log lines
+const INITIAL_STATE: WebSocketState = {
+  progress: { passing: 0, in_progress: 0, total: 0, percentage: 0 },
+  agentStatus: 'stopped',
+  logs: [],
+  isConnected: false,
+}
 
 export function useProjectWebSocket(projectName: string | null) {
-  const [state, setState] = useState<WebSocketState>({
-    progress: { passing: 0, in_progress: 0, total: 0, percentage: 0 },
-    agentStatus: 'stopped',
-    logs: [],
-    isConnected: false,
-  })
+  const [state, setState] = useState<WebSocketState>(INITIAL_STATE)
 
   const wsRef = useRef<WebSocket | null>(null)
   const reconnectTimeoutRef = useRef<number | null>(null)
   const reconnectAttempts = useRef(0)
+  const isManualCloseRef = useRef(false)
+  const projectRef = useRef<string | null>(projectName)
 
   const connect = useCallback(() => {
     if (!projectName) return
+    if (wsRef.current && (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING)) {
+      return
+    }
+    isManualCloseRef.current = false
 
     // Build WebSocket URL
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
@@ -98,6 +105,8 @@ export function useProjectWebSocket(projectName: string | null) {
       ws.onclose = () => {
         setState(prev => ({ ...prev, isConnected: false }))
         wsRef.current = null
+        if (isManualCloseRef.current) return
+        if (projectRef.current !== projectName) return
 
         // Exponential backoff reconnection
         const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 30000)
@@ -125,9 +134,14 @@ export function useProjectWebSocket(projectName: string | null) {
 
   // Connect when project changes
   useEffect(() => {
+    projectRef.current = projectName
+    // Reset state on project switch so progress/logs don't leak across projects.
+    setState(INITIAL_STATE)
+
     if (!projectName) {
       // Disconnect if no project
       if (wsRef.current) {
+        isManualCloseRef.current = true
         wsRef.current.close()
         wsRef.current = null
       }
@@ -145,6 +159,7 @@ export function useProjectWebSocket(projectName: string | null) {
         clearTimeout(reconnectTimeoutRef.current)
       }
       if (wsRef.current) {
+        isManualCloseRef.current = true
         wsRef.current.close()
         wsRef.current = null
       }

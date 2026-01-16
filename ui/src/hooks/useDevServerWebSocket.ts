@@ -20,26 +20,33 @@ interface DevServerState {
 }
 
 const MAX_LOGS = 500
+const INITIAL_STATE: DevServerState = {
+  status: 'stopped',
+  pid: null,
+  started_at: null,
+  command: null,
+  url: null,
+  api_port: null,
+  web_port: null,
+  logs: [],
+  isConnected: false,
+}
 
 export function useDevServerWebSocket(projectName: string | null) {
-  const [state, setState] = useState<DevServerState>({
-    status: 'stopped',
-    pid: null,
-    started_at: null,
-    command: null,
-    url: null,
-    api_port: null,
-    web_port: null,
-    logs: [],
-    isConnected: false,
-  })
+  const [state, setState] = useState<DevServerState>(INITIAL_STATE)
 
   const wsRef = useRef<WebSocket | null>(null)
   const reconnectTimeoutRef = useRef<number | null>(null)
   const reconnectAttempts = useRef(0)
+  const isManualCloseRef = useRef(false)
+  const projectRef = useRef<string | null>(projectName)
 
   const connect = useCallback(() => {
     if (!projectName) return
+    if (wsRef.current && (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING)) {
+      return
+    }
+    isManualCloseRef.current = false
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     const host = window.location.host
@@ -86,6 +93,8 @@ export function useDevServerWebSocket(projectName: string | null) {
       ws.onclose = () => {
         setState(prev => ({ ...prev, isConnected: false }))
         wsRef.current = null
+        if (isManualCloseRef.current) return
+        if (projectRef.current !== projectName) return
 
         const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 30000)
         reconnectAttempts.current++
@@ -104,12 +113,15 @@ export function useDevServerWebSocket(projectName: string | null) {
   }, [projectName])
 
   useEffect(() => {
+    projectRef.current = projectName
+    setState(INITIAL_STATE)
+
     if (!projectName) {
       if (wsRef.current) {
+        isManualCloseRef.current = true
         wsRef.current.close()
         wsRef.current = null
       }
-      setState(prev => ({ ...prev, isConnected: false }))
       return
     }
 
@@ -119,6 +131,7 @@ export function useDevServerWebSocket(projectName: string | null) {
         clearTimeout(reconnectTimeoutRef.current)
       }
       if (wsRef.current) {
+        isManualCloseRef.current = true
         wsRef.current.close()
         wsRef.current = null
       }
