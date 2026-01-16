@@ -119,6 +119,10 @@ ui/.vite/
 .env.production.local
 .env.*.local
 
+# Local-only notes/docs (never commit)
+LOCAL_DEV.md
+dev_notes/
+
 # ===================
 # Cache directories
 # ===================

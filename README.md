@@ -29,6 +29,12 @@ It's an autonomous coding agent powered by Claude that:
 
 It's not going to replace your dev team (yet), but it's shockingly good at building features when you give it clear specs.
 
+### Settings: project vs global (and who wins)
+
+- **Project settings (portable):** stored in the target project’s `agent_system.db` (notably **Model Settings**). This means each project can carry its own model preset/mapping without touching `.env`.
+- **Global settings (your machine):** stored in `~/.autocoder/settings.db` (Web UI **Advanced Settings**: ports, retry/backoff, QA provider defaults, log retention, diagnostics, etc.). Override path with `AUTOCODER_SETTINGS_DB_PATH`.
+- **Precedence when the UI launches a run:** saved Advanced Settings override `.env`/shell env vars (but only if you actually saved settings). If you never saved Advanced Settings, the UI won’t override your env.
+
 ---
 
 ## Prerequisites

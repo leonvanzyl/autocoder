@@ -4,6 +4,11 @@ This directory contains detailed documentation for the autonomous coding system.
 
 ## 📚 Documentation Index
 
+### Before you go digging
+
+- Most day-to-day usage is covered in the root `README.md`.
+- If you want a place for personal notes (paths, local setup quirks), copy `docs/LOCAL_DEV_TEMPLATE.md` to `LOCAL_DEV.md` (it’s git-ignored).
+
 ### Quick Start Guides
 
 - **[PARALLEL_MODE_UI.md](PARALLEL_MODE_UI.md)** - How to use parallel mode from the web UI
@@ -76,6 +81,8 @@ This directory contains detailed documentation for the autonomous coding system.
   - Context when asking other AI models for help
   - System architecture overview
   - Key design decisions
+
+- **[LOCAL_DEV_TEMPLATE.md](LOCAL_DEV_TEMPLATE.md)** - Template for local-only notes (copy to `LOCAL_DEV.md`)
 
 ## 🎯 Documentation by Use Case
 
