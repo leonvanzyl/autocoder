@@ -8,10 +8,17 @@ Core agent interaction functions for running autonomous coding sessions.
 import asyncio
 import sys
 import os
+import re
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
 from claude_agent_sdk import ClaudeSDKClient
+
+try:
+    from zoneinfo import ZoneInfo
+except Exception:  # pragma: no cover - very old Python / missing tzdata
+    ZoneInfo = None  # type: ignore[assignment]
 
 # Fix Windows console encoding for Unicode characters (emoji, etc.)
 # Without this, print() can crash when Claude outputs emoji like ✅
@@ -43,6 +50,51 @@ from ..core.database import get_database
 
 # Configuration
 AUTO_CONTINUE_DELAY_SECONDS = 3
+
+
+def _auto_continue_delay_from_rate_limit(response: str) -> tuple[float, str | None]:
+    """
+    If the Claude CLI indicates a rate limit reset time, return a delay (seconds)
+    until the reset and a human-readable target time string.
+
+    Expected pattern (Claude CLI):
+      "Limit reached ... Resets 5:30pm (America/Los_Angeles)"
+    """
+    if not response:
+        return float(AUTO_CONTINUE_DELAY_SECONDS), None
+    if not response.lower().strip().startswith("limit reached"):
+        return float(AUTO_CONTINUE_DELAY_SECONDS), None
+    if ZoneInfo is None:
+        return float(AUTO_CONTINUE_DELAY_SECONDS), None
+
+    match = re.search(
+        r"resets\s+(\d+)(?::(\d+))?\s*(am|pm)\s*\(([^)]+)\)",
+        response,
+        flags=re.IGNORECASE,
+    )
+    if not match:
+        return float(AUTO_CONTINUE_DELAY_SECONDS), None
+
+    hour = int(match.group(1))
+    minute = int(match.group(2)) if match.group(2) else 0
+    period = match.group(3).lower()
+    tz_name = match.group(4).strip()
+
+    if period == "pm" and hour != 12:
+        hour += 12
+    elif period == "am" and hour == 12:
+        hour = 0
+
+    try:
+        tz = ZoneInfo(tz_name)
+        now = datetime.now(tz)
+        target = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        if target <= now:
+            target += timedelta(days=1)
+        delay = max(0.0, (target - now).total_seconds())
+        return delay, target.strftime("%B %d, %Y at %I:%M %p %Z")
+    except Exception:
+        return float(AUTO_CONTINUE_DELAY_SECONDS), None
 
 
 async def run_agent_session(
@@ -378,9 +430,14 @@ async def run_autonomous_agent(
 
         # Handle status
         if status == "continue":
-            print(f"\nAgent will auto-continue in {AUTO_CONTINUE_DELAY_SECONDS}s...")
+            delay_s, target = _auto_continue_delay_from_rate_limit(response)
+            if target:
+                print(f"\nAgent will auto-continue in {delay_s:.0f}s ({target})...", flush=True)
+            else:
+                print(f"\nAgent will auto-continue in {delay_s:.0f}s...", flush=True)
             print_progress_summary(features_state_dir)
-            await asyncio.sleep(AUTO_CONTINUE_DELAY_SECONDS)
+            sys.stdout.flush()
+            await asyncio.sleep(delay_s)
 
         elif status == "error":
             print("\nSession encountered an error")
