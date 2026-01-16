@@ -139,10 +139,10 @@ export function FolderBrowser({ onSelect, onCancel, initialPath }: FolderBrowser
   return (
     <div className="flex flex-col h-full max-h-[70vh]">
       {/* Header with breadcrumb navigation */}
-      <div className="flex-shrink-0 p-4 border-b-3 border-[var(--color-neo-border)] bg-white">
+      <div className="flex-shrink-0 p-4 border-b-3 border-[var(--color-neo-border)] bg-[var(--color-neo-card)]">
         <div className="flex items-center gap-2 mb-3">
           <Folder size={20} className="text-[var(--color-neo-progress)]" />
-          <span className="font-bold text-[#1a1a1a]">Select Project Folder</span>
+          <span className="font-bold text-[var(--color-neo-text)]">Select Project Folder</span>
         </div>
 
         {/* Breadcrumb navigation */}
@@ -159,11 +159,11 @@ export function FolderBrowser({ onSelect, onCancel, initialPath }: FolderBrowser
 
           {breadcrumbs.map((crumb, index) => (
             <div key={crumb.path} className="flex items-center">
-              {index > 0 && <ChevronRight size={14} className="text-gray-400 mx-1" />}
+              {index > 0 && <ChevronRight size={14} className="text-[var(--color-neo-text-muted)] mx-1" />}
               <button
                 onClick={() => handleNavigate(crumb.path)}
                 className={`
-                  px-2 py-1 rounded text-[#1a1a1a]
+                  px-2 py-1 rounded text-[var(--color-neo-text)]
                   hover:bg-[var(--color-neo-bg)]
                   ${index === breadcrumbs.length - 1 ? 'font-bold' : ''}
                 `}
@@ -187,7 +187,7 @@ export function FolderBrowser({ onSelect, onCancel, initialPath }: FolderBrowser
                 className={`
                   neo-btn neo-btn-ghost py-1 px-2 text-sm
                   flex items-center gap-1
-                  ${currentPath?.startsWith(drive.letter) ? 'bg-[var(--color-neo-progress)] text-white' : ''}
+                  ${currentPath?.startsWith(drive.letter) ? 'bg-[var(--color-neo-progress)] text-[var(--color-neo-text-on-bright)]' : ''}
                 `}
               >
                 <HardDrive size={14} />
@@ -199,7 +199,7 @@ export function FolderBrowser({ onSelect, onCancel, initialPath }: FolderBrowser
       )}
 
       {/* Directory listing */}
-      <div className="flex-1 overflow-y-auto p-2 bg-white">
+      <div className="flex-1 overflow-y-auto p-2 bg-[var(--color-neo-card)]">
         {isLoading ? (
           <div className="flex items-center justify-center p-8">
             <Loader2 size={24} className="animate-spin text-[var(--color-neo-progress)]" />
@@ -238,9 +238,9 @@ export function FolderBrowser({ onSelect, onCancel, initialPath }: FolderBrowser
                   ) : (
                     <Folder size={18} className="text-[var(--color-neo-pending)] flex-shrink-0" />
                   )}
-                  <span className="truncate flex-1 text-[#1a1a1a]">{entry.name}</span>
+                  <span className="truncate flex-1 text-[var(--color-neo-text)]">{entry.name}</span>
                   {entry.has_children && (
-                    <ChevronRight size={14} className="ml-auto text-gray-400 flex-shrink-0" />
+                    <ChevronRight size={14} className="ml-auto text-[var(--color-neo-text-muted)] flex-shrink-0" />
                   )}
                 </button>
               ))}
@@ -299,11 +299,16 @@ export function FolderBrowser({ onSelect, onCancel, initialPath }: FolderBrowser
       </div>
 
       {/* Footer with selected path and actions */}
-      <div className="flex-shrink-0 p-4 border-t-3 border-[var(--color-neo-border)] bg-white">
+      <div className="flex-shrink-0 p-4 border-t-3 border-[var(--color-neo-border)] bg-[var(--color-neo-card)]">
         {/* Selected path display */}
         <div className="mb-3 p-2 bg-[var(--color-neo-bg)] rounded border-2 border-[var(--color-neo-border)]">
-          <div className="text-xs text-[#4a4a4a] mb-1">Selected path:</div>
-          <div className="font-mono text-sm truncate text-[#1a1a1a]">{selectedPath || 'No folder selected'}</div>
+          <div className="text-xs text-[var(--color-neo-text-secondary)] mb-1">Selected path:</div>
+          <div className="font-mono text-sm truncate text-[var(--color-neo-text)]">{selectedPath || 'No folder selected'}</div>
+          {selectedPath && (
+            <div className="text-xs text-[var(--color-neo-text-secondary)] mt-2 italic">
+              This folder will contain all project files
+            </div>
+          )}
         </div>
 
         {/* Actions */}

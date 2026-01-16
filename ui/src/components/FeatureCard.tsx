@@ -7,16 +7,17 @@ interface FeatureCardProps {
   isInProgress?: boolean
 }
 
-// Generate consistent color for category
+// Generate consistent color for category using CSS variable references
+// These map to the --color-neo-category-* variables defined in globals.css
 function getCategoryColor(category: string): string {
   const colors = [
-    '#ff006e', // pink
-    '#00b4d8', // cyan
-    '#70e000', // green
-    '#ffd60a', // yellow
-    '#ff5400', // orange
-    '#8338ec', // purple
-    '#3a86ff', // blue
+    'var(--color-neo-category-pink)',
+    'var(--color-neo-category-cyan)',
+    'var(--color-neo-category-green)',
+    'var(--color-neo-category-yellow)',
+    'var(--color-neo-category-orange)',
+    'var(--color-neo-category-purple)',
+    'var(--color-neo-category-blue)',
   ]
 
   let hash = 0
@@ -39,18 +40,18 @@ export function FeatureCard({ feature, onClick, isInProgress }: FeatureCardProps
       className={`
         w-full text-left neo-card p-4 cursor-pointer
         ${isInProgress ? 'animate-pulse-neo' : ''}
-        ${feature.passes ? 'border-[var(--color-neo-done)]' : ''}
+        ${feature.passes ? 'border-neo-done' : ''}
       `}
     >
       {/* Header */}
       <div className="flex items-start justify-between gap-2 mb-2">
         <span
           className="neo-badge"
-          style={{ backgroundColor: categoryColor, color: 'white' }}
+          style={{ backgroundColor: categoryColor, color: 'var(--color-neo-text-on-bright)' }}
         >
           {feature.category}
         </span>
-        <span className="font-mono text-sm text-[var(--color-neo-text-secondary)]">
+        <span className="font-mono text-sm text-neo-text-secondary">
           #{feature.priority}
         </span>
       </div>
@@ -61,7 +62,7 @@ export function FeatureCard({ feature, onClick, isInProgress }: FeatureCardProps
       </h3>
 
       {/* Description */}
-      <p className="text-sm text-[var(--color-neo-text-secondary)] line-clamp-2 mb-3">
+      <p className="text-sm text-neo-text-secondary line-clamp-2 mb-3">
         {feature.description}
       </p>
 
@@ -77,20 +78,20 @@ export function FeatureCard({ feature, onClick, isInProgress }: FeatureCardProps
           </>
         ) : isInProgress ? (
           <>
-            <Loader2 size={16} className="animate-spin text-[var(--color-neo-progress)]" />
-            <span className="text-[var(--color-neo-progress)] font-bold">Processing...</span>
+            <Loader2 size={16} className="animate-spin text-neo-progress" />
+            <span className="text-neo-progress font-bold">Processing...</span>
           </>
         ) : feature.passes ? (
           <>
-            <CheckCircle2 size={16} className="text-[var(--color-neo-done)]" />
-            <span className="text-[var(--color-neo-done)] font-bold">Complete</span>
+            <CheckCircle2 size={16} className="text-neo-done" />
+            <span className="text-neo-done font-bold">Complete</span>
           </>
         ) : (
           <>
-            <Circle size={16} className="text-[var(--color-neo-text-secondary)]" />
-            <span className="text-[var(--color-neo-text-secondary)]">Pending</span>
+            <Circle size={16} className="text-neo-text-secondary" />
+            <span className="text-neo-text-secondary">Pending</span>
             {attempts > 0 && (
-              <span className="font-mono text-xs text-[var(--color-neo-text-secondary)]">({attempts})</span>
+              <span className="font-mono text-xs text-neo-text-secondary">({attempts})</span>
             )}
           </>
         )}

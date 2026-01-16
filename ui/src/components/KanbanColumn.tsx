@@ -32,9 +32,9 @@ export function KanbanColumn({
         className="px-4 py-3 border-b-3 border-[var(--color-neo-border)]"
         style={{ backgroundColor: colorMap[color] }}
       >
-        <h2 className="font-display text-lg font-bold uppercase flex items-center justify-between text-[var(--color-neo-text)]">
+        <h2 className="font-display text-lg font-bold uppercase flex items-center justify-between text-[var(--color-neo-text-on-bright)]">
           {title}
-          <span className="neo-badge bg-white text-[var(--color-neo-text)]">{count}</span>
+          <span className="neo-badge bg-[var(--color-neo-card)] text-[var(--color-neo-text)]">{count}</span>
         </h2>
       </div>
 

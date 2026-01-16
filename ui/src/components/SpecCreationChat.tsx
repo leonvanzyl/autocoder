@@ -203,9 +203,9 @@ export function SpecCreationChat({
   return (
     <div className="flex flex-col h-full bg-[var(--color-neo-bg)]">
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b-3 border-[var(--color-neo-border)] bg-white">
+      <div className="flex items-center justify-between p-4 border-b-3 border-[var(--color-neo-border)] bg-[var(--color-neo-card)]">
         <div className="flex items-center gap-3">
-          <h2 className="font-display font-bold text-lg text-[#1a1a1a]">
+          <h2 className="font-display font-bold text-lg text-[var(--color-neo-text)]">
             Create Spec: {projectName}
           </h2>
           <ConnectionIndicator />
@@ -241,12 +241,12 @@ export function SpecCreationChat({
 
       {/* Error banner */}
       {error && (
-        <div className="flex items-center gap-2 p-3 bg-[var(--color-neo-danger)] text-white border-b-3 border-[var(--color-neo-border)]">
+        <div className="flex items-center gap-2 p-3 bg-[var(--color-neo-error-bg)] text-[var(--color-neo-error-text)] border-b-3 border-[var(--color-neo-error-border)]">
           <AlertCircle size={16} />
           <span className="flex-1 text-sm">{error}</span>
           <button
             onClick={() => setError(null)}
-            className="p-1 hover:bg-white/20 rounded"
+            className="p-1 hover:opacity-70 transition-opacity rounded"
           >
             <X size={14} />
           </button>
@@ -300,7 +300,7 @@ export function SpecCreationChat({
       {/* Input area */}
       {!isComplete && (
         <div
-          className="p-4 border-t-3 border-[var(--color-neo-border)] bg-white"
+          className="p-4 border-t-3 border-[var(--color-neo-border)] bg-[var(--color-neo-card)]"
           onDrop={handleDrop}
           onDragOver={handleDragOver}
         >
@@ -310,7 +310,8 @@ export function SpecCreationChat({
               {pendingAttachments.map((attachment) => (
                 <div
                   key={attachment.id}
-                  className="relative group border-2 border-[var(--color-neo-border)] p-1 bg-white shadow-[2px_2px_0px_rgba(0,0,0,1)]"
+                  className="relative group border-2 border-[var(--color-neo-border)] p-1 bg-[var(--color-neo-card)]"
+                  style={{ boxShadow: 'var(--shadow-neo-sm)' }}
                 >
                   <img
                     src={attachment.previewUrl}
@@ -319,7 +320,7 @@ export function SpecCreationChat({
                   />
                   <button
                     onClick={() => handleRemoveAttachment(attachment.id)}
-                    className="absolute -top-2 -right-2 bg-[var(--color-neo-danger)] text-white rounded-full p-0.5 border-2 border-[var(--color-neo-border)] hover:scale-110 transition-transform"
+                    className="absolute -top-2 -right-2 bg-[var(--color-neo-danger)] text-[var(--color-neo-text-on-bright)] rounded-full p-0.5 border-2 border-[var(--color-neo-border)] hover:scale-110 transition-transform"
                     title="Remove attachment"
                   >
                     <X size={12} />
@@ -400,22 +401,22 @@ export function SpecCreationChat({
             <div className="flex items-center gap-2">
               {initializerStatus === 'starting' ? (
                 <>
-                  <Loader2 size={20} className="animate-spin" />
-                  <span className="font-bold">
+                  <Loader2 size={20} className="animate-spin text-[var(--color-neo-text-on-bright)]" />
+                  <span className="font-bold text-[var(--color-neo-text-on-bright)]">
                     Starting agent{yoloEnabled ? ' (YOLO mode)' : ''}...
                   </span>
                 </>
               ) : initializerStatus === 'error' ? (
                 <>
-                  <AlertCircle size={20} className="text-white" />
-                  <span className="font-bold text-white">
+                  <AlertCircle size={20} className="text-[var(--color-neo-text-on-bright)]" />
+                  <span className="font-bold text-[var(--color-neo-text-on-bright)]">
                     {initializerError || 'Failed to start agent'}
                   </span>
                 </>
               ) : (
                 <>
-                  <CheckCircle2 size={20} />
-                  <span className="font-bold">Specification created successfully!</span>
+                  <CheckCircle2 size={20} className="text-[var(--color-neo-text-on-bright)]" />
+                  <span className="font-bold text-[var(--color-neo-text-on-bright)]">Specification created successfully!</span>
                 </>
               )}
             </div>
@@ -423,7 +424,7 @@ export function SpecCreationChat({
               {initializerStatus === 'error' && onRetryInitializer && (
                 <button
                   onClick={onRetryInitializer}
-                  className="neo-btn bg-white"
+                  className="neo-btn bg-[var(--color-neo-card)]"
                 >
                   <RotateCcw size={14} />
                   Retry
@@ -435,7 +436,7 @@ export function SpecCreationChat({
                   <button
                     onClick={() => setYoloEnabled(!yoloEnabled)}
                     className={`neo-btn text-sm py-2 px-3 ${
-                      yoloEnabled ? 'neo-btn-warning' : 'bg-white'
+                      yoloEnabled ? 'neo-btn-warning' : 'bg-[var(--color-neo-card)]'
                     }`}
                     title="YOLO Mode: Skip testing for rapid prototyping"
                   >

@@ -129,28 +129,28 @@ export function ExpandProjectChat({ projectName, onComplete, onCancel }: ExpandP
     switch (connectionStatus) {
       case 'connected':
         return (
-          <span className="flex items-center gap-1 text-xs text-[var(--color-neo-done)]">
+          <span className="flex items-center gap-1 text-xs text-neo-done">
             <Wifi size={12} />
             Connected
           </span>
         )
       case 'connecting':
         return (
-          <span className="flex items-center gap-1 text-xs text-[var(--color-neo-pending)]">
+          <span className="flex items-center gap-1 text-xs text-neo-pending">
             <Wifi size={12} className="animate-pulse" />
             Connecting...
           </span>
         )
       case 'error':
         return (
-          <span className="flex items-center gap-1 text-xs text-[var(--color-neo-danger)]">
+          <span className="flex items-center gap-1 text-xs text-neo-danger">
             <WifiOff size={12} />
             Error
           </span>
         )
       default:
         return (
-          <span className="flex items-center gap-1 text-xs text-[var(--color-neo-text-secondary)]">
+          <span className="flex items-center gap-1 text-xs text-neo-text-secondary">
             <WifiOff size={12} />
             Disconnected
           </span>
@@ -159,16 +159,16 @@ export function ExpandProjectChat({ projectName, onComplete, onCancel }: ExpandP
   }
 
   return (
-    <div className="flex flex-col h-full bg-[var(--color-neo-bg)]">
+    <div className="flex flex-col h-full bg-neo-bg">
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b-3 border-[var(--color-neo-border)] bg-white">
+      <div className="flex items-center justify-between p-4 border-b-3 border-neo-border bg-neo-card">
         <div className="flex items-center gap-3">
-          <h2 className="font-display font-bold text-lg text-[var(--color-neo-text)]">
+          <h2 className="font-display font-bold text-lg text-neo-text">
             Expand Project: {projectName}
           </h2>
           <ConnectionIndicator />
           {featuresCreated > 0 && (
-            <span className="flex items-center gap-1 text-sm text-[var(--color-neo-done)] font-bold">
+            <span className="flex items-center gap-1 text-sm text-neo-done font-bold">
               <Plus size={14} />
               {featuresCreated} added
             </span>
@@ -187,6 +187,12 @@ export function ExpandProjectChat({ projectName, onComplete, onCancel }: ExpandP
               <span className="hidden sm:inline">Finish</span>
             </button>
           )}
+          {isComplete && (
+            <span className="flex items-center gap-1 text-sm text-neo-done font-bold">
+              <CheckCircle2 size={16} />
+              Complete
+            </span>
+          )}
 
           <button onClick={onCancel} className="neo-btn neo-btn-ghost p-2" title="Close">
             <X size={20} />
@@ -196,10 +202,13 @@ export function ExpandProjectChat({ projectName, onComplete, onCancel }: ExpandP
 
       {/* Error banner */}
       {error && (
-        <div className="flex items-center gap-2 p-3 bg-[var(--color-neo-danger)] text-white border-b-3 border-[var(--color-neo-border)]">
+        <div className="flex items-center gap-2 p-3 bg-neo-error-bg text-neo-error-text border-b-3 border-neo-error-border">
           <AlertCircle size={16} />
           <span className="flex-1 text-sm">{error}</span>
-          <button onClick={() => setError(null)} className="p-1 hover:opacity-70 transition-opacity rounded">
+          <button
+            onClick={() => setError(null)}
+            className="p-1 hover:opacity-70 transition-opacity rounded"
+          >
             <X size={14} />
           </button>
         </div>
@@ -213,8 +222,8 @@ export function ExpandProjectChat({ projectName, onComplete, onCancel }: ExpandP
               <h3 className="font-display font-bold text-lg mb-2">
                 Starting Project Expansion
               </h3>
-              <p className="text-sm text-[var(--color-neo-text-secondary)]">
-                Connecting to Claude to help you add new features...
+              <p className="text-sm text-neo-text-secondary">
+                Connecting to Claude to help you add new features to your project...
               </p>
               {connectionStatus === 'error' && (
                 <button onClick={start} className="neo-btn neo-btn-primary mt-4 text-sm">
@@ -237,16 +246,16 @@ export function ExpandProjectChat({ projectName, onComplete, onCancel }: ExpandP
       {/* Input area */}
       {!isComplete && (
         <div
-          className="p-4 border-t-3 border-[var(--color-neo-border)] bg-white"
+          className="p-4 border-t-3 border-neo-border bg-neo-card"
           onDrop={handleDrop}
           onDragOver={handleDragOver}
         >
-          {pendingAttachments.length > 0 && (
+            {pendingAttachments.length > 0 && (
             <div className="flex flex-wrap gap-2 mb-3">
               {pendingAttachments.map((attachment) => (
                 <div
                   key={attachment.id}
-                  className="relative group border-3 border-[var(--color-neo-border)] p-1 bg-white"
+                  className="relative group border-2 border-neo-border p-1 bg-neo-card"
                   style={{ boxShadow: 'var(--shadow-neo-sm)' }}
                 >
                   <img
@@ -256,7 +265,7 @@ export function ExpandProjectChat({ projectName, onComplete, onCancel }: ExpandP
                   />
                   <button
                     onClick={() => handleRemoveAttachment(attachment.id)}
-                    className="absolute -top-2 -right-2 bg-[var(--color-neo-danger)] text-white rounded-full p-0.5 border-2 border-[var(--color-neo-border)] hover:scale-110 transition-transform"
+                    className="absolute -top-2 -right-2 bg-neo-danger text-neo-text-on-bright rounded-full p-0.5 border-2 border-neo-border hover:scale-110 transition-transform"
                     title="Remove attachment"
                   >
                     <X size={12} />
@@ -308,7 +317,8 @@ export function ExpandProjectChat({ projectName, onComplete, onCancel }: ExpandP
             </button>
           </div>
 
-          <p className="text-xs text-[var(--color-neo-text-secondary)] mt-2">
+          {/* Help text */}
+          <p className="text-xs text-neo-text-secondary mt-2">
             Press Enter to send. Drag & drop or click <Paperclip size={12} className="inline" /> to attach images.
           </p>
         </div>
@@ -316,7 +326,7 @@ export function ExpandProjectChat({ projectName, onComplete, onCancel }: ExpandP
 
       {/* Completion footer */}
       {isComplete && (
-        <div className="p-4 border-t-3 border-[var(--color-neo-border)] bg-[var(--color-neo-done)] text-black">
+        <div className="p-4 border-t-3 border-neo-border bg-neo-done text-neo-text-on-bright">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <CheckCircle2 size={20} />
@@ -324,7 +334,10 @@ export function ExpandProjectChat({ projectName, onComplete, onCancel }: ExpandP
                 Added {featuresCreated} new feature{featuresCreated !== 1 ? 's' : ''}!
               </span>
             </div>
-            <button onClick={() => onComplete(featuresCreated)} className="neo-btn bg-white">
+            <button
+              onClick={() => onComplete(featuresCreated)}
+              className="neo-btn bg-neo-card"
+            >
               Close
             </button>
           </div>

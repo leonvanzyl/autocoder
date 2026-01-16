@@ -36,11 +36,13 @@ export function ProgressDashboard({
 
       {/* Large Percentage */}
       <div className="text-center mb-6">
-        <span className="font-display text-6xl font-bold">
-          {percentage.toFixed(1)}
-        </span>
-        <span className="font-display text-3xl font-bold text-[var(--color-neo-text-secondary)]">
-          %
+        <span className="inline-flex items-baseline">
+          <span className="font-display text-6xl font-bold">
+            {percentage.toFixed(1)}
+          </span>
+          <span className="font-display text-3xl font-bold text-[var(--color-neo-text-secondary)]">
+            %
+          </span>
         </span>
       </div>
 

@@ -33,7 +33,7 @@ export function ProjectSelector({
       {/* Dropdown Trigger */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="neo-btn bg-white text-[var(--color-neo-text)] min-w-[200px] justify-between"
+        className="neo-btn bg-[var(--color-neo-card)] text-[var(--color-neo-text)] min-w-[200px] justify-between"
         disabled={isLoading}
       >
         {isLoading ? (
@@ -80,7 +80,7 @@ export function ProjectSelector({
                     }}
                     className={`w-full neo-dropdown-item flex items-center justify-between ${
                       project.name === selectedProject
-                        ? 'bg-[var(--color-neo-pending)]'
+                        ? 'bg-[var(--color-neo-pending)] text-[var(--color-neo-text-on-bright)]'
                         : ''
                     }`}
                   >

@@ -33,9 +33,11 @@ It's not going to replace your dev team (yet), but it's shockingly good at build
 
 ## Prerequisites
 
-### Claude Code CLI (Required)
+### Claude Code CLI (Recommended)
 
-You need the Claude Code CLI installed. Pick your poison:
+AutoCoder can use Claude via API keys, but the Claude Code CLI is still recommended (and required for some UI chat features like Assistant / Expand Project).
+
+Pick your poison:
 
 **macOS / Linux:**
 ```bash
@@ -52,7 +54,8 @@ irm https://claude.ai/install.ps1 | iex
 You'll need one of these:
 
 - **Claude Pro/Max Subscription** - Run `claude login` (recommended, especially for parallel agents)
-- **Anthropic API Key** - From https://console.anthropic.com/ (pay-per-use)
+- **Anthropic API Key** - Set `ANTHROPIC_API_KEY` (pay-per-use)
+- **Anthropic-compatible endpoint / proxy** - Set `ANTHROPIC_AUTH_TOKEN` + `ANTHROPIC_BASE_URL` (the Web UI shows an **ALT API** badge; it shows **GLM** for common z.ai/GLM endpoints)
 
 ---
 
@@ -125,6 +128,7 @@ autocoder-ui
 
 - Quick run settings: **Settings** button (or press `S`).
 - Full settings hub: open `http://127.0.0.1:8888/#/settings` (Run / Models / Advanced).
+- Provider badge: when a project is selected, the header shows **ALT API** (custom endpoint) or **GLM** (z.ai/GLM-style endpoint) if configured via `.env`.
 - Diagnostics: open `http://127.0.0.1:8888/#/settings/diagnostics` (system status, configurable fixtures dir, deterministic E2E fixtures, recent run logs).
 
 ### Parallel-Safe Feature Claiming

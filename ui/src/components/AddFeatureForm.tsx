@@ -87,13 +87,13 @@ export function AddFeatureForm({ projectName, onClose }: AddFeatureFormProps) {
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           {/* Error Message */}
           {error && (
-            <div className="flex items-center gap-3 p-4 bg-[var(--color-neo-danger)] text-white border-3 border-[var(--color-neo-border)]">
+            <div className="flex items-center gap-3 p-4 bg-[var(--color-neo-error-bg)] text-[var(--color-neo-error-text)] border-3 border-[var(--color-neo-error-border)]">
               <AlertCircle size={20} />
               <span>{error}</span>
               <button
                 type="button"
                 onClick={() => setError(null)}
-                className="ml-auto"
+                className="ml-auto hover:opacity-70 transition-opacity"
               >
                 <X size={16} />
               </button>
@@ -166,8 +166,11 @@ export function AddFeatureForm({ projectName, onClose }: AddFeatureFormProps) {
             </label>
             <div className="space-y-2">
               {steps.map((step, index) => (
-                <div key={step.id} className="flex gap-2">
-                  <span className="neo-input w-12 text-center flex-shrink-0 flex items-center justify-center">
+                <div key={step.id} className="flex gap-2 items-center">
+                  <span
+                    className="w-10 h-10 flex-shrink-0 flex items-center justify-center font-mono font-bold text-sm border-3 border-[var(--color-neo-border)] bg-[var(--color-neo-bg)] text-[var(--color-neo-text-secondary)]"
+                    style={{ boxShadow: 'var(--shadow-neo-sm)' }}
+                  >
                     {index + 1}
                   </span>
                   <input

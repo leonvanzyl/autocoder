@@ -17,9 +17,8 @@ export function AssistantFAB({ onClick, isOpen }: AssistantFABProps) {
         fixed bottom-6 right-6 z-50
         w-14 h-14
         flex items-center justify-center
-        bg-[var(--color-neo-progress)] text-white
+        bg-[var(--color-neo-progress)] text-[var(--color-neo-text-on-bright)]
         border-3 border-[var(--color-neo-border)]
-        rounded-full
         shadow-neo-md
         transition-all duration-200
         hover:shadow-neo-lg hover:-translate-y-0.5

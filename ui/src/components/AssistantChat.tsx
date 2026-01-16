@@ -194,14 +194,15 @@ export function AssistantChat({ projectName, conversationId: externalConversatio
       )}
 
       {/* Input area */}
-      <div className="border-t-3 border-[var(--color-neo-border)] p-4 bg-white">
+      <div className="border-t-3 border-[var(--color-neo-border)] p-4 bg-[var(--color-neo-card)]">
         {/* Attachment previews */}
         {attachments.length > 0 && (
           <div className="flex flex-wrap gap-2 mb-3">
             {attachments.map((attachment) => (
               <div
                 key={attachment.id}
-                className="relative border-2 border-[var(--color-neo-border)] p-1 bg-white shadow-[2px_2px_0px_rgba(0,0,0,1)]"
+                className="relative border-2 border-[var(--color-neo-border)] p-1 bg-[var(--color-neo-bg)]"
+                style={{ boxShadow: 'var(--shadow-neo-sm)' }}
               >
                 <img
                   src={attachment.previewUrl}
@@ -210,7 +211,8 @@ export function AssistantChat({ projectName, conversationId: externalConversatio
                 />
                 <button
                   onClick={() => removeAttachment(attachment.id)}
-                  className="absolute -top-2 -right-2 bg-[var(--color-neo-danger)] text-white border-2 border-[var(--color-neo-border)] p-0.5 shadow-[2px_2px_0px_rgba(0,0,0,1)] hover:opacity-90"
+                  className="absolute -top-2 -right-2 bg-[var(--color-neo-danger)] text-white border-2 border-[var(--color-neo-border)] p-0.5 hover:opacity-90"
+                  style={{ boxShadow: 'var(--shadow-neo-sm)' }}
                   title="Remove image"
                 >
                   <X size={14} />
@@ -219,7 +221,6 @@ export function AssistantChat({ projectName, conversationId: externalConversatio
             ))}
           </div>
         )}
-
         <div className="flex gap-2">
           <input
             ref={fileInputRef}

@@ -271,11 +271,11 @@ export function NewProjectModal({
             <div className="flex items-center gap-3">
               <Folder size={24} className="text-[var(--color-neo-progress)]" />
               <div>
-                <h2 className="font-display font-bold text-xl text-[#1a1a1a]">
+                <h2 className="font-display font-bold text-xl text-[var(--color-neo-text)]">
                   Select Project Location
                 </h2>
-                <p className="text-sm text-[#4a4a4a]">
-                  A folder named <span className="font-bold font-mono">{projectName}</span> will be created inside the selected directory
+                <p className="text-sm text-[var(--color-neo-text-secondary)]">
+                  Select the folder to use for project <span className="font-bold font-mono">{projectName}</span>. Create a new folder or choose an existing one.
                 </p>
               </div>
             </div>
@@ -307,7 +307,7 @@ export function NewProjectModal({
       >
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b-3 border-[var(--color-neo-border)]">
-          <h2 className="font-display font-bold text-xl text-[#1a1a1a]">
+          <h2 className="font-display font-bold text-xl text-[var(--color-neo-text)]">
             {step === 'name' && 'Create New Project'}
             {step === 'setup' && 'Project Setup'}
             {step === 'method' && 'Choose Setup Method'}
@@ -327,7 +327,7 @@ export function NewProjectModal({
           {step === 'name' && (
             <form onSubmit={handleNameSubmit}>
               <div className="mb-6">
-                <label className="block font-bold mb-2 text-[#1a1a1a]">
+                <label className="block font-bold mb-2 text-[var(--color-neo-text)]">
                   Project Name
                 </label>
                 <input
@@ -345,7 +345,7 @@ export function NewProjectModal({
               </div>
 
               {error && (
-                <div className="mb-4 p-3 bg-[var(--color-neo-danger)] text-white text-sm border-2 border-[var(--color-neo-border)]">
+                <div className="mb-4 p-3 bg-[var(--color-neo-error-bg)] text-[var(--color-neo-error-text)] text-sm border-3 border-[var(--color-neo-error-border)]">
                   {error}
                 </div>
               )}
@@ -522,25 +522,27 @@ export function NewProjectModal({
                 <button
                   onClick={() => handleMethodSelect('claude')}
                   disabled={createProject.isPending}
-                  className={`
+                  className="
                     w-full text-left p-4
                     border-3 border-[var(--color-neo-border)]
-                    bg-white
-                    shadow-[4px_4px_0px_rgba(0,0,0,1)]
+                    bg-[var(--color-neo-card)]
                     hover:translate-x-[-2px] hover:translate-y-[-2px]
-                    hover:shadow-[6px_6px_0px_rgba(0,0,0,1)]
                     transition-all duration-150
                     disabled:opacity-50 disabled:cursor-not-allowed
-                  `}
+                    neo-card
+                  "
                 >
                   <div className="flex items-start gap-4">
-                    <div className="p-2 bg-[var(--color-neo-progress)] border-2 border-[var(--color-neo-border)] shadow-[2px_2px_0px_rgba(0,0,0,1)]">
-                      <Bot size={24} className="text-white" />
+                    <div
+                      className="p-2 bg-[var(--color-neo-progress)] border-2 border-[var(--color-neo-border)]"
+                      style={{ boxShadow: 'var(--shadow-neo-sm)' }}
+                    >
+                      <Bot size={24} className="text-[var(--color-neo-text-on-bright)]" />
                     </div>
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
-                        <span className="font-bold text-lg text-[#1a1a1a]">Create with Claude</span>
-                        <span className="neo-badge bg-[var(--color-neo-done)] text-xs">
+                        <span className="font-bold text-lg text-[var(--color-neo-text)]">Create with Claude</span>
+                        <span className="neo-badge bg-[var(--color-neo-done)] text-[var(--color-neo-text-on-bright)] text-xs">
                           Recommended
                         </span>
                       </div>
@@ -555,23 +557,25 @@ export function NewProjectModal({
                 <button
                   onClick={() => handleMethodSelect('manual')}
                   disabled={createProject.isPending}
-                  className={`
+                  className="
                     w-full text-left p-4
                     border-3 border-[var(--color-neo-border)]
-                    bg-white
-                    shadow-[4px_4px_0px_rgba(0,0,0,1)]
+                    bg-[var(--color-neo-card)]
                     hover:translate-x-[-2px] hover:translate-y-[-2px]
-                    hover:shadow-[6px_6px_0px_rgba(0,0,0,1)]
                     transition-all duration-150
                     disabled:opacity-50 disabled:cursor-not-allowed
-                  `}
+                    neo-card
+                  "
                 >
                   <div className="flex items-start gap-4">
-                    <div className="p-2 bg-[var(--color-neo-pending)] border-2 border-[var(--color-neo-border)] shadow-[2px_2px_0px_rgba(0,0,0,1)]">
-                      <FileEdit size={24} />
+                    <div
+                      className="p-2 bg-[var(--color-neo-pending)] border-2 border-[var(--color-neo-border)]"
+                      style={{ boxShadow: 'var(--shadow-neo-sm)' }}
+                    >
+                      <FileEdit size={24} className="text-[var(--color-neo-text-on-bright)]" />
                     </div>
                     <div className="flex-1">
-                      <span className="font-bold text-lg text-[#1a1a1a]">Edit Templates Manually</span>
+                      <span className="font-bold text-lg text-[var(--color-neo-text)]">Edit Templates Manually</span>
                       <p className="text-sm text-[var(--color-neo-text-secondary)] mt-1">
                         Edit the template files directly. Best for developers who want full control.
                       </p>
@@ -581,7 +585,7 @@ export function NewProjectModal({
               </div>
 
               {error && (
-                <div className="mt-4 p-3 bg-[var(--color-neo-danger)] text-white text-sm border-2 border-[var(--color-neo-border)]">
+                <div className="mt-4 p-3 bg-[var(--color-neo-error-bg)] text-[var(--color-neo-error-text)] text-sm border-3 border-[var(--color-neo-error-border)]">
                   {error}
                 </div>
               )}
@@ -609,8 +613,11 @@ export function NewProjectModal({
           {/* Step 4: Complete */}
           {step === 'complete' && (
             <div className="text-center py-8">
-              <div className="inline-flex items-center justify-center w-16 h-16 bg-[var(--color-neo-done)] border-3 border-[var(--color-neo-border)] shadow-[4px_4px_0px_rgba(0,0,0,1)] mb-4">
-                <CheckCircle2 size={32} />
+              <div
+                className="inline-flex items-center justify-center w-16 h-16 bg-[var(--color-neo-done)] border-3 border-[var(--color-neo-border)] mb-4"
+                style={{ boxShadow: 'var(--shadow-neo-md)' }}
+              >
+                <CheckCircle2 size={32} className="text-[var(--color-neo-text-on-bright)]" />
               </div>
               <h3 className="font-display font-bold text-xl mb-2">
                 {projectName}
