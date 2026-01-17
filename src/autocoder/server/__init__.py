@@ -14,12 +14,15 @@ import sys
 import threading
 import time
 import webbrowser
+
+from dotenv import load_dotenv
 import uvicorn
 from pathlib import Path
 
 from autocoder.core.port_config import get_ui_port
 from autocoder.server.server_lock import ServerLock
 
+load_dotenv()
 
 def start_server(host: str = "127.0.0.1", port: int | None = None, reload: bool = False) -> None:
     """

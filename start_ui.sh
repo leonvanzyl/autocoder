@@ -7,18 +7,9 @@ if [ -f .env ]; then
 fi
 
 echo ""
-if [ -n "${AUTOCODER_UI_BANNER}" ] && [ "${AUTOCODER_UI_BANNER}" != "0" ]; then
-  echo "===================================="
-  echo "  AUTOCODER // WEB UI"
-  echo "  Modded by Gabi (Booplex)"
-  echo "===================================="
-fi
+echo "  Starting AutoCoder Web UI..."
 UI_PORT="${AUTOCODER_UI_PORT:-8888}"
-echo ""
 echo "  Opening http://127.0.0.1:${UI_PORT}  (set AUTOCODER_OPEN_UI=0 to disable)"
-if [ -n "${AUTOCODER_UI_BANNER}" ] && [ "${AUTOCODER_UI_BANNER}" = "0" ]; then
-  echo "  Banner suppressed via AUTOCODER_UI_BANNER=0"
-fi
 echo ""
 
 # Run autocoder-ui command
