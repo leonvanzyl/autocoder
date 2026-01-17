@@ -11,6 +11,7 @@ def test_load_project_config_missing_returns_empty(tmp_path: Path):
     assert cfg.commands == {}
     assert cfg.review.enabled is False
     assert cfg.worker.provider is None
+    assert cfg.initializer.provider is None
 
 
 def test_load_project_config_with_preset_and_override(tmp_path: Path):
@@ -71,6 +72,29 @@ worker:
     assert cfg.worker.provider == "multi_cli"
     assert cfg.worker.patch_max_iterations == 5
     assert cfg.worker.patch_agents == ["codex", "gemini"]
+
+
+def test_load_project_config_initializer_section(tmp_path: Path):
+    (tmp_path / "autocoder.yaml").write_text(
+        """
+initializer:
+  provider: multi_cli
+  agents: [codex, gemini]
+  synthesizer: claude
+  timeout_s: 400
+  stage_threshold: 120
+  enqueue_count: 25
+""".strip(),
+        encoding="utf-8",
+    )
+
+    cfg = load_project_config(tmp_path)
+    assert cfg.initializer.provider == "multi_cli"
+    assert cfg.initializer.agents == ["codex", "gemini"]
+    assert cfg.initializer.synthesizer == "claude"
+    assert cfg.initializer.timeout_s == 400
+    assert cfg.initializer.stage_threshold == 120
+    assert cfg.initializer.enqueue_count == 25
 
 
 def test_synthesize_node_commands_avoids_missing_test_script(tmp_path: Path):

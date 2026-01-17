@@ -48,6 +48,12 @@ const DEFAULTS: AdvancedSettings = {
   planner_agents: 'codex,gemini',
   planner_synthesizer: 'claude',
   planner_timeout_s: 180,
+  initializer_provider: 'claude',
+  initializer_agents: 'codex,gemini',
+  initializer_synthesizer: 'claude',
+  initializer_timeout_s: 300,
+  initializer_stage_threshold: 120,
+  initializer_enqueue_count: 30,
   logs_keep_days: 7,
   logs_keep_files: 200,
   logs_max_total_mb: 200,
@@ -120,6 +126,12 @@ export function AdvancedSettingsContent() {
       addError('qa_subagent_agents', 'QA provider order is required for multi_cli')
 
     if (draft.planner_enabled && !draft.planner_agents.trim()) addError('planner_agents', 'Planner agents are required when planner is enabled')
+
+    if (draft.initializer_provider === 'multi_cli' && !draft.initializer_agents.trim())
+      addError('initializer_agents', 'Initializer agents are required when provider is multi_cli')
+
+    if (draft.initializer_stage_threshold > 0 && draft.initializer_enqueue_count === 0)
+      addWarning('initializer_enqueue_count', 'Stage threshold is set but enqueue count is 0 (backlog will never start)')
 
     if (draft.allow_no_tests) addWarning('allow_no_tests', 'Allow No Tests can merge without verification (recommended only for YOLO)')
 
@@ -484,6 +496,64 @@ export function AdvancedSettingsContent() {
                 <div className="text-xs text-[var(--color-neo-text-secondary)] mt-2">
                   Generates a short implementation plan per feature and prepends it to the worker prompt. Uses Codex/Gemini CLIs
                   when available, with optional Claude synthesis.
+                </div>
+              </div>
+
+              <div className="neo-card p-4">
+                <div className="font-display font-bold uppercase mb-3">Initializer</div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="neo-card p-3">
+                    <div className="text-xs font-mono text-[var(--color-neo-text-secondary)] mb-1">Provider</div>
+                    <select
+                      value={draft.initializer_provider}
+                      onChange={(e) => setDraft({ ...draft, initializer_provider: e.target.value as AdvancedSettings['initializer_provider'] })}
+                      className="neo-btn text-sm py-2 px-3 bg-white border-3 border-[var(--color-neo-border)] font-display w-full"
+                    >
+                      <option value="claude">claude (Claude Agent SDK)</option>
+                      <option value="codex_cli">codex_cli</option>
+                      <option value="gemini_cli">gemini_cli</option>
+                      <option value="multi_cli">multi_cli</option>
+                    </select>
+                  </div>
+                  <TextField
+                    label="Agents (csv)"
+                    value={draft.initializer_agents}
+                    onChange={(v) => setDraft({ ...draft, initializer_agents: v })}
+                    placeholder="e.g. codex,gemini"
+                    error={validation.fieldErrors.initializer_agents}
+                  />
+                  <div className="neo-card p-3">
+                    <div className="font-display font-bold text-sm mb-2">Synthesizer</div>
+                    <select
+                      value={draft.initializer_synthesizer}
+                      onChange={(e) => setDraft({ ...draft, initializer_synthesizer: e.target.value as AdvancedSettings['initializer_synthesizer'] })}
+                      className="neo-btn text-sm py-2 px-3 bg-white border-3 border-[var(--color-neo-border)] font-display w-full"
+                    >
+                      <option value="claude">claude</option>
+                      <option value="none">none</option>
+                      <option value="codex">codex</option>
+                      <option value="gemini">gemini</option>
+                    </select>
+                  </div>
+                  <Field
+                    label="Timeout (s)"
+                    value={draft.initializer_timeout_s}
+                    onChange={(v) => setDraft({ ...draft, initializer_timeout_s: clampInt(v, 30, 3600) })}
+                  />
+                  <Field
+                    label="Stage threshold"
+                    value={draft.initializer_stage_threshold}
+                    onChange={(v) => setDraft({ ...draft, initializer_stage_threshold: clampInt(v, 0, 100000) })}
+                  />
+                  <Field
+                    label="Enqueue count"
+                    value={draft.initializer_enqueue_count}
+                    onChange={(v) => setDraft({ ...draft, initializer_enqueue_count: clampInt(v, 0, 100000) })}
+                  />
+                </div>
+                <div className="text-xs text-[var(--color-neo-text-secondary)] mt-2">
+                  Controls the initial feature backlog generation. Large backlogs get staged and only the top
+                  <span className="font-mono"> enqueue_count</span> are enabled.
                 </div>
               </div>
             </div>

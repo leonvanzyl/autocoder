@@ -34,6 +34,12 @@ def test_advanced_settings_env_includes_review_and_locks():
         planner_agents="codex,gemini",
         planner_synthesizer="claude",
         planner_timeout_s=123,
+        initializer_provider="multi_cli",
+        initializer_agents="codex,gemini",
+        initializer_synthesizer="claude",
+        initializer_timeout_s=333,
+        initializer_stage_threshold=150,
+        initializer_enqueue_count=40,
         logs_prune_artifacts=True,
         diagnostics_fixtures_dir="C:/tmp/autocoder-e2e",
     )
@@ -69,6 +75,12 @@ def test_advanced_settings_env_includes_review_and_locks():
     assert env["AUTOCODER_PLANNER_AGENTS"] == "codex,gemini"
     assert env["AUTOCODER_PLANNER_SYNTHESIZER"] == "claude"
     assert env["AUTOCODER_PLANNER_TIMEOUT_S"] == "123"
+    assert env["AUTOCODER_INITIALIZER_PROVIDER"] == "multi_cli"
+    assert env["AUTOCODER_INITIALIZER_AGENTS"] == "codex,gemini"
+    assert env["AUTOCODER_INITIALIZER_SYNTHESIZER"] == "claude"
+    assert env["AUTOCODER_INITIALIZER_TIMEOUT_S"] == "333"
+    assert env["AUTOCODER_INITIALIZER_STAGE_THRESHOLD"] == "150"
+    assert env["AUTOCODER_INITIALIZER_ENQUEUE_COUNT"] == "40"
     assert env["AUTOCODER_LOGS_PRUNE_ARTIFACTS"] == "1"
     assert env["AUTOCODER_DIAGNOSTICS_FIXTURES_DIR"] == "C:/tmp/autocoder-e2e"
 

@@ -38,3 +38,8 @@ def test_multi_cli_qa_requires_agents_when_enabled():
     with pytest.raises(ValidationError):
         AdvancedSettingsModel(qa_subagent_enabled=True, qa_subagent_provider="multi_cli", qa_subagent_agents="")
 
+
+def test_multi_cli_initializer_requires_agents():
+    with pytest.raises(ValidationError):
+        AdvancedSettingsModel(initializer_provider="multi_cli", initializer_agents=" ")
+

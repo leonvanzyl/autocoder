@@ -132,6 +132,24 @@ export async function updateFeature(
   })
 }
 
+export async function enqueueFeature(projectName: string, featureId: number): Promise<Feature> {
+  return fetchJSON(`/projects/${encodeURIComponent(projectName)}/features/${featureId}/enqueue`, {
+    method: 'PATCH',
+  })
+}
+
+export interface EnqueueFeaturesResponse {
+  requested: number
+  enabled: number
+}
+
+export async function enqueueFeatures(projectName: string, count: number): Promise<EnqueueFeaturesResponse> {
+  return fetchJSON(`/projects/${encodeURIComponent(projectName)}/features/enqueue`, {
+    method: 'POST',
+    body: JSON.stringify({ count }),
+  })
+}
+
 // ============================================================================
 // Agent API
 // ============================================================================
@@ -476,6 +494,12 @@ export interface AutocoderYamlResponse {
   resolved_commands?: string[]
   resolved_worker_provider?: string | null
   resolved_worker_patch_max_iterations?: number | null
+  resolved_initializer_provider?: string | null
+  resolved_initializer_agents?: string[] | null
+  resolved_initializer_synthesizer?: string | null
+  resolved_initializer_timeout_s?: number | null
+  resolved_initializer_stage_threshold?: number | null
+  resolved_initializer_enqueue_count?: number | null
 }
 
 export async function getAutocoderYaml(projectName: string): Promise<AutocoderYamlResponse> {

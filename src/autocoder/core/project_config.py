@@ -89,11 +89,26 @@ class WorkerSpec:
 
 
 @dataclass(frozen=True)
+class InitializerSpec:
+    """
+    Per-project initializer settings (feature backlog generation).
+    """
+
+    provider: str | None = None  # claude|codex_cli|gemini_cli|multi_cli
+    agents: list[str] | None = None  # order for multi_cli (codex,gemini)
+    synthesizer: str | None = None  # none|claude|codex|gemini
+    timeout_s: int | None = None
+    stage_threshold: int | None = None
+    enqueue_count: int | None = None
+
+
+@dataclass(frozen=True)
 class ResolvedProjectConfig:
     preset: str | None
     commands: dict[str, CommandSpec | None]
     review: ReviewSpec = field(default_factory=ReviewSpec)
     worker: WorkerSpec = field(default_factory=WorkerSpec)
+    initializer: InitializerSpec = field(default_factory=InitializerSpec)
 
     def get_command(self, name: str) -> CommandSpec | None:
         return self.commands.get(name)
@@ -369,7 +384,42 @@ def load_project_config(project_dir: Path) -> ResolvedProjectConfig:
 
         worker = WorkerSpec(provider=provider, patch_max_iterations=patch_max, patch_agents=patch_agents)
 
-    return ResolvedProjectConfig(preset=preset, commands=commands, review=review, worker=worker)
+    initializer = InitializerSpec()
+    init_in = data.get("initializer")
+    if isinstance(init_in, Mapping):
+        provider_raw = str(init_in.get("provider") or "").strip().lower()
+        if provider_raw == "codex":
+            provider_raw = "codex_cli"
+        elif provider_raw == "gemini":
+            provider_raw = "gemini_cli"
+        if provider_raw not in {"", "claude", "codex_cli", "gemini_cli", "multi_cli"}:
+            provider_raw = ""
+
+        agents_val = init_in.get("agents")
+        agents: list[str] | None = None
+        if isinstance(agents_val, list):
+            agents = [str(x).strip().lower() for x in agents_val if str(x).strip()]
+        elif isinstance(agents_val, str):
+            agents = [x.strip().lower() for x in agents_val.replace(";", ",").split(",") if x.strip()]
+
+        synth_raw = str(init_in.get("synthesizer") or "").strip().lower()
+        if synth_raw not in {"", "none", "claude", "codex", "gemini"}:
+            synth_raw = ""
+
+        timeout_s = _as_int(init_in.get("timeout_s"))
+        stage_threshold = _as_int(init_in.get("stage_threshold"))
+        enqueue_count = _as_int(init_in.get("enqueue_count"))
+
+        initializer = InitializerSpec(
+            provider=provider_raw or None,
+            agents=agents or None,
+            synthesizer=synth_raw or None,
+            timeout_s=timeout_s,
+            stage_threshold=stage_threshold,
+            enqueue_count=enqueue_count,
+        )
+
+    return ResolvedProjectConfig(preset=preset, commands=commands, review=review, worker=worker, initializer=initializer)
 
 
 def infer_preset(project_dir: Path) -> str | None:

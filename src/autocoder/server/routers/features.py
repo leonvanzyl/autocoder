@@ -16,9 +16,20 @@ from datetime import datetime
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, Field
 
 from autocoder.core.database import get_database
 from ..schemas import FeatureCreate, FeatureListResponse, FeatureResponse, FeatureUpdate
+
+
+class EnqueueFeaturesRequest(BaseModel):
+    count: int = Field(default=10, ge=1, le=10000)
+
+
+class EnqueueFeaturesResponse(BaseModel):
+    requested: int
+    enabled: int
+
 
 
 logger = logging.getLogger(__name__)
@@ -85,10 +96,13 @@ def _is_retry_eligible(next_attempt_at: object) -> bool:
 
 def _feature_to_response(row: dict, *, deps: list[dict[str, object]] | None = None) -> FeatureResponse:
     status = (row.get("status") or "").upper()
+    enabled = bool(row.get("enabled", True))
+    staged = status == "PENDING" and not enabled
     dep_rows = deps or []
     waiting_on = [int(d["id"]) for d in dep_rows if str(d.get("status") or "").upper() != "DONE" and d.get("id")]
     ready = bool(
         status == "PENDING"
+        and enabled
         and not waiting_on
         and _is_retry_eligible(row.get("next_attempt_at"))
     )
@@ -102,6 +116,8 @@ def _feature_to_response(row: dict, *, deps: list[dict[str, object]] | None = No
         status=status or "PENDING",
         passes=bool(row.get("passes")) or status == "DONE",
         in_progress=status == "IN_PROGRESS",
+        enabled=enabled,
+        staged=staged,
         attempts=int(row.get("attempts") or 0),
         last_error=(str(row.get("last_error")) if row.get("last_error") is not None else None),
         last_artifact_path=(str(row.get("last_artifact_path")) if row.get("last_artifact_path") is not None else None),
@@ -140,6 +156,7 @@ async def list_features(project_name: str):
 
     try:
         pending_rows = db.get_features_by_status("PENDING")
+        staged_rows = db.get_staged_features()
         blocked_rows = db.get_features_by_status("BLOCKED")
         in_progress_rows = db.get_features_by_status("IN_PROGRESS")
         done_rows = db.get_features_by_status("DONE")
@@ -147,6 +164,7 @@ async def list_features(project_name: str):
         dep_map = db.get_dependency_statuses([int(r["id"]) for r in pending_rows])
 
         return FeatureListResponse(
+            staged=[_feature_to_response(r) for r in staged_rows],
             pending=[
                 _feature_to_response(r, deps=dep_map.get(int(r["id"]), [])) for r in pending_rows
             ]
@@ -263,6 +281,49 @@ async def update_feature(project_name: str, feature_id: int, update: FeatureUpda
     except Exception:
         logger.exception("Failed to update feature")
         raise HTTPException(status_code=500, detail="Failed to update feature")
+
+
+@router.patch("/{feature_id}/enqueue", response_model=FeatureResponse)
+async def enqueue_feature(project_name: str, feature_id: int):
+    """Enable a staged feature so it can be claimed by workers."""
+    project_name = validate_project_name(project_name)
+    project_dir = _get_project_path(project_name).resolve()
+
+    if not project_dir.exists():
+        raise HTTPException(status_code=404, detail="Project directory not found")
+
+    db = get_database(str(project_dir))
+    try:
+        row = db.get_feature(int(feature_id))
+        if not row:
+            raise HTTPException(status_code=404, detail=f"Feature {feature_id} not found")
+        if not db.set_feature_enabled(int(feature_id), True):
+            raise HTTPException(status_code=500, detail="Failed to enqueue feature")
+        row = db.get_feature(int(feature_id)) or row
+        return _feature_to_response(row)
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Failed to enqueue feature")
+        raise HTTPException(status_code=500, detail="Failed to enqueue feature")
+
+
+@router.post("/enqueue", response_model=EnqueueFeaturesResponse)
+async def enqueue_features(project_name: str, req: EnqueueFeaturesRequest):
+    """Enable the next N staged features (highest priority first)."""
+    project_name = validate_project_name(project_name)
+    project_dir = _get_project_path(project_name).resolve()
+
+    if not project_dir.exists():
+        raise HTTPException(status_code=404, detail="Project directory not found")
+
+    db = get_database(str(project_dir))
+    try:
+        enabled = db.enqueue_staged_features(int(req.count))
+        return EnqueueFeaturesResponse(requested=int(req.count), enabled=int(enabled))
+    except Exception:
+        logger.exception("Failed to enqueue staged features")
+        raise HTTPException(status_code=500, detail="Failed to enqueue staged features")
 
 
 @router.delete("/{feature_id}")

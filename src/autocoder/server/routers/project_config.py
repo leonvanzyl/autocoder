@@ -47,6 +47,12 @@ class AutocoderYamlResponse(BaseModel):
     resolved_commands: list[str] = Field(default_factory=list)
     resolved_worker_provider: str | None = None
     resolved_worker_patch_max_iterations: int | None = None
+    resolved_initializer_provider: str | None = None
+    resolved_initializer_agents: list[str] | None = None
+    resolved_initializer_synthesizer: str | None = None
+    resolved_initializer_timeout_s: int | None = None
+    resolved_initializer_stage_threshold: int | None = None
+    resolved_initializer_enqueue_count: int | None = None
 
 
 class AutocoderYamlUpdateRequest(BaseModel):
@@ -83,6 +89,12 @@ async def get_autocoder_yaml(project_name: str) -> AutocoderYamlResponse:
         resolved_worker_patch_max_iterations=(
             getattr(getattr(resolved, "worker", None), "patch_max_iterations", None) if resolved else None
         ),
+        resolved_initializer_provider=(getattr(getattr(resolved, "initializer", None), "provider", None) if resolved else None),
+        resolved_initializer_agents=(getattr(getattr(resolved, "initializer", None), "agents", None) if resolved else None),
+        resolved_initializer_synthesizer=(getattr(getattr(resolved, "initializer", None), "synthesizer", None) if resolved else None),
+        resolved_initializer_timeout_s=(getattr(getattr(resolved, "initializer", None), "timeout_s", None) if resolved else None),
+        resolved_initializer_stage_threshold=(getattr(getattr(resolved, "initializer", None), "stage_threshold", None) if resolved else None),
+        resolved_initializer_enqueue_count=(getattr(getattr(resolved, "initializer", None), "enqueue_count", None) if resolved else None),
     )
 
 
@@ -117,4 +129,10 @@ async def put_autocoder_yaml(project_name: str, req: AutocoderYamlUpdateRequest)
         resolved_commands=resolved_names,
         resolved_worker_provider=getattr(getattr(resolved, "worker", None), "provider", None),
         resolved_worker_patch_max_iterations=getattr(getattr(resolved, "worker", None), "patch_max_iterations", None),
+        resolved_initializer_provider=getattr(getattr(resolved, "initializer", None), "provider", None),
+        resolved_initializer_agents=getattr(getattr(resolved, "initializer", None), "agents", None),
+        resolved_initializer_synthesizer=getattr(getattr(resolved, "initializer", None), "synthesizer", None),
+        resolved_initializer_timeout_s=getattr(getattr(resolved, "initializer", None), "timeout_s", None),
+        resolved_initializer_stage_threshold=getattr(getattr(resolved, "initializer", None), "stage_threshold", None),
+        resolved_initializer_enqueue_count=getattr(getattr(resolved, "initializer", None), "enqueue_count", None),
     )

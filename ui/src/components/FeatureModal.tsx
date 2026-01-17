@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
-import { X, CheckCircle2, Circle, SkipForward, Trash2, Loader2, AlertCircle, Pencil } from 'lucide-react'
-import { useSkipFeature, useDeleteFeature } from '../hooks/useProjects'
+import { X, CheckCircle2, Circle, SkipForward, Trash2, Loader2, AlertCircle, Pencil, PauseCircle, Play } from 'lucide-react'
+import { useSkipFeature, useDeleteFeature, useEnqueueFeature } from '../hooks/useProjects'
 import type { Feature } from '../lib/types'
 import { EditFeatureForm } from './EditFeatureForm'
 
@@ -40,9 +40,11 @@ export function FeatureModal({ feature, projectName, onClose }: FeatureModalProp
   const dependsOn = feature.depends_on ?? []
   const waitingOn = feature.waiting_on ?? []
   const ready = !!feature.ready
+  const isStaged = feature.staged || (status === 'PENDING' && feature.enabled === false)
 
   const skipFeature = useSkipFeature(projectName)
   const deleteFeature = useDeleteFeature(projectName)
+  const enqueueFeature = useEnqueueFeature(projectName)
 
   const handleSkip = async () => {
     setError(null)
@@ -61,6 +63,16 @@ export function FeatureModal({ feature, projectName, onClose }: FeatureModalProp
       onClose()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete feature')
+    }
+  }
+
+  const handleEnqueue = async () => {
+    setError(null)
+    try {
+      await enqueueFeature.mutateAsync(feature.id)
+      onClose()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to enqueue feature')
     }
   }
 
@@ -144,6 +156,13 @@ export function FeatureModal({ feature, projectName, onClose }: FeatureModalProp
                   COMPLETE
                 </span>
               </>
+            ) : isStaged ? (
+              <>
+                <PauseCircle size={24} className="text-[var(--color-neo-text-muted)]" />
+                <span className="font-display font-bold text-[var(--color-neo-text-muted)]">
+                  STAGED
+                </span>
+              </>
             ) : (
               <>
                 <Circle size={24} className="text-[var(--color-neo-text-secondary)]" />
@@ -161,7 +180,9 @@ export function FeatureModal({ feature, projectName, onClose }: FeatureModalProp
             <div className="neo-card p-3 bg-[var(--color-neo-bg)] border-3 border-[var(--color-neo-border)]">
               <div className="text-xs font-mono text-[var(--color-neo-text-secondary)] mb-1">Dependency status</div>
               <div className="font-mono text-sm">
-                {ready ? (
+                {isStaged ? (
+                  <span className="text-[var(--color-neo-text-secondary)]">Staged (not queued yet)</span>
+                ) : ready ? (
                   <span className="text-green-700">READY</span>
                 ) : waitingOn.length > 0 ? (
                   <span className="text-[var(--color-neo-text-secondary)]">Waiting on: {waitingOn.join(', ')}</span>
@@ -274,9 +295,25 @@ export function FeatureModal({ feature, projectName, onClose }: FeatureModalProp
                 >
                   <Pencil size={18} />
                 </button>
+                {isStaged && (
+                  <button
+                    onClick={handleEnqueue}
+                    disabled={enqueueFeature.isPending}
+                    className="neo-btn neo-btn-primary flex-1"
+                  >
+                    {enqueueFeature.isPending ? (
+                      <Loader2 size={18} className="animate-spin" />
+                    ) : (
+                      <>
+                        <Play size={18} />
+                        Enqueue
+                      </>
+                    )}
+                  </button>
+                )}
                 <button
                   onClick={handleSkip}
-                  disabled={skipFeature.isPending}
+                  disabled={skipFeature.isPending || isStaged}
                   className="neo-btn neo-btn-warning flex-1"
                 >
                   {skipFeature.isPending ? (
@@ -284,7 +321,7 @@ export function FeatureModal({ feature, projectName, onClose }: FeatureModalProp
                   ) : (
                     <>
                       <SkipForward size={18} />
-                      Skip (Move to End)
+                      {isStaged ? 'Staged' : 'Skip (Move to End)'}
                     </>
                   )}
                 </button>

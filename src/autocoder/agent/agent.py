@@ -278,7 +278,7 @@ async def run_autonomous_agent(
         print()
         print("=" * 70)
         print("  NOTE: First session takes 10-20+ minutes!")
-        print("  The agent is generating 200 detailed test cases.")
+        print("  The agent is generating the initial feature backlog.")
         print("  This may appear to hang - it's working. Watch for [Tool: ...] output.")
         print("=" * 70)
         print()

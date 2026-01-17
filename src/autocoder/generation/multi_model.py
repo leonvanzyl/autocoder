@@ -440,3 +440,105 @@ def generate_multi_model_artifact(
     }
     (drafts_root / "status.json").write_text(json.dumps(status, indent=2), encoding="utf-8")
     return {"output_path": str(output), "drafts_dir": str(drafts_root)}
+
+
+def generate_multi_model_text(
+    *,
+    prompt: str,
+    cfg: MultiModelGenerateConfig,
+    output_path: Path | None = None,
+    drafts_root: Path | None = None,
+    synthesize: bool = True,
+) -> dict[str, str]:
+    """
+    Generate an arbitrary text artifact using Codex/Gemini (and optional synthesizer).
+
+    This mirrors generate_multi_model_artifact but accepts a fully-formed prompt.
+    """
+    output = Path(output_path) if output_path else Path(tempfile.mkdtemp()) / "multi_model_output.txt"
+    output.parent.mkdir(parents=True, exist_ok=True)
+
+    drafts_root = drafts_root or (output.parent / f"drafts_{_now_stamp()}")
+    drafts_root.mkdir(parents=True, exist_ok=True)
+
+    def _synth_text_prompt(user_prompt: str, drafts: dict[str, str]) -> str:
+        header = "You are synthesizing multiple drafts into one final artifact.\n"
+        header += "Output ONLY the final answer, matching the format requested below (no markdown fences).\n\n"
+        header += "User request:\n" + user_prompt.strip() + "\n\n"
+        header += "Drafts:\n\n"
+        for name, content in drafts.items():
+            header += f"--- BEGIN {name.upper()} DRAFT ---\n{content}\n--- END {name.upper()} DRAFT ---\n\n"
+        return header
+
+    requested = cfg.agents or ["codex", "gemini"]  # type: ignore[list-item]
+    agents = _available_agents(requested)
+    if not agents and cfg.synthesizer in {"codex", "gemini"}:
+        raise RuntimeError("No requested generation CLIs found (codex/gemini).")
+
+    drafts: dict[str, str] = {}
+    run_log: dict[str, str] = {}
+    for a in agents:
+        if a == "codex":
+            ok, out, err = _run_codex(prompt, cfg, workdir=drafts_root)
+        else:
+            ok, out, err = _run_gemini(prompt, cfg)
+        run_log[a] = (err or "").strip()
+        if ok and out.strip():
+            drafts[a] = out.strip()
+            (drafts_root / f"{a}.md").write_text(out.strip(), encoding="utf-8")
+        else:
+            (drafts_root / f"{a}.failed.txt").write_text((err or out or "").strip(), encoding="utf-8")
+
+    if not drafts and cfg.synthesizer != "claude":
+        raise RuntimeError("No drafts generated (codex/gemini missing or failed).")
+
+    final_text = ""
+    if not synthesize or cfg.synthesizer == "none":
+        combined = _synth_text_prompt(prompt, drafts)
+        (drafts_root / "combined.md").write_text(combined, encoding="utf-8")
+        final_text = drafts.get(agents[0], "") if agents and agents[0] in drafts else (next(iter(drafts.values()), ""))
+    elif cfg.synthesizer == "codex":
+        ok, out, err = _run_codex(_synth_text_prompt(prompt, drafts), cfg, workdir=drafts_root)
+        if not ok or not out.strip():
+            raise RuntimeError(f"codex synthesizer failed: {(err or out)[:500]}")
+        final_text = out.strip()
+    elif cfg.synthesizer == "gemini":
+        ok, out, err = _run_gemini(_synth_text_prompt(prompt, drafts), cfg)
+        if not ok or not out.strip():
+            raise RuntimeError(f"gemini synthesizer failed: {(err or out)[:500]}")
+        final_text = out.strip()
+    else:
+        model = cfg.claude_model or os.environ.get("AUTOCODER_REVIEW_MODEL") or "sonnet"
+        async_coro = _claude_synthesize(_synth_text_prompt(prompt, drafts), model, drafts_root, cfg.timeout_s)
+        try:
+            asyncio.get_running_loop()
+            in_loop = True
+        except RuntimeError:
+            in_loop = False
+
+        if not in_loop:
+            ok, out, err = asyncio.run(async_coro)
+        else:
+            with ThreadPoolExecutor(max_workers=1) as ex:
+                fut = ex.submit(lambda: asyncio.run(async_coro))
+                ok, out, err = fut.result()
+        if ok and out.strip():
+            final_text = out.strip()
+        else:
+            combined = _synth_text_prompt(prompt, drafts)
+            (drafts_root / "combined.md").write_text(combined, encoding="utf-8")
+            final_text = next(iter(drafts.values()), combined)
+
+    output.write_text(final_text, encoding="utf-8")
+    status = {
+        "status": "complete",
+        "kind": "text",
+        "output_path": str(output),
+        "drafts_dir": str(drafts_root),
+        "agents": list(drafts.keys()),
+        "synthesizer": cfg.synthesizer,
+        "timestamp": datetime.now().isoformat(),
+        "notes": run_log,
+    }
+    (drafts_root / "status.json").write_text(json.dumps(status, indent=2), encoding="utf-8")
+    return {"output_path": str(output), "drafts_dir": str(drafts_root)}

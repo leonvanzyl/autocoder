@@ -5,11 +5,12 @@ interface KanbanColumnProps {
   title: string
   count: number
   features: Feature[]
-  color: 'pending' | 'progress' | 'done'
+  color: 'staged' | 'pending' | 'progress' | 'done'
   onFeatureClick: (feature: Feature) => void
 }
 
 const colorMap = {
+  staged: 'var(--color-neo-neutral-400)',
   pending: 'var(--color-neo-pending)',
   progress: 'var(--color-neo-progress)',
   done: 'var(--color-neo-done)',

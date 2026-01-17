@@ -40,10 +40,16 @@ from .database import Database, get_database
 from .gatekeeper import Gatekeeper
 from .project_config import load_project_config
 from .logs import prune_worker_logs_from_env, prune_gatekeeper_artifacts_from_env
-from autocoder.generation.multi_model import MultiModelGenerateConfig, generate_multi_model_artifact
+from autocoder.generation.multi_model import (
+    MultiModelGenerateConfig,
+    generate_multi_model_artifact,
+    generate_multi_model_text,
+)
+from autocoder.generation.feature_backlog import build_backlog_prompt, parse_feature_backlog, infer_feature_count
 
 # Agent imports (for initializer)
 from autocoder.agent import run_autonomous_agent
+from autocoder.agent.prompts import get_app_spec
 
 # MCP server imports (for agents)
 from autocoder.tools import test_mcp, knowledge_mcp, model_settings_mcp, feature_mcp
@@ -445,27 +451,36 @@ class Orchestrator:
         logger.info("📝 No features found, running initializer agent...")
 
         try:
-            # Select model for initializer (use best available model)
-            model = self.available_models[0] if self.available_models else "opus"
+            init_provider = self._initializer_provider()
+            if init_provider == "claude":
+                # Select model for initializer (use best available model)
+                model = self.available_models[0] if self.available_models else "opus"
 
-            logger.info(f"   Model: {model.upper()}")
-            logger.info(f"   Location: Main branch (no worktree needed)")
+                logger.info(f"   Provider: CLAUDE")
+                logger.info(f"   Model: {model.upper()}")
+                logger.info(f"   Location: Main branch (no worktree needed)")
 
-            # Run initializer with max_iterations=1 (only initializer session)
-            await run_autonomous_agent(
-                project_dir=self.project_dir,
-                model=model,
-                max_iterations=1,  # Only run initializer
-                yolo_mode=False     # Full testing for initializer
-            )
+                # Run initializer with max_iterations=1 (only initializer session)
+                await run_autonomous_agent(
+                    project_dir=self.project_dir,
+                    model=model,
+                    max_iterations=1,  # Only run initializer
+                    yolo_mode=False     # Full testing for initializer
+                )
+            else:
+                logger.info(f"   Provider: {init_provider.upper()} (multi-model backlog)")
+                self._run_initializer_multi_model(provider=init_provider)
 
             # Verify features were created
             stats = self.database.get_stats()
-            total_features = stats["features"]["total"]
+            total_features = stats["features"].get("total_all") or stats["features"]["total"]
 
             if total_features == 0:
                 logger.error("   ❌ Initializer completed but no features were created!")
                 return False
+
+            # Apply staging if the backlog is large
+            self._maybe_stage_initializer_backlog(total_features=int(total_features))
 
             logger.info(f"   ✅ Initializer completed successfully!")
             logger.info(f"   📊 Created {total_features} features")
@@ -474,6 +489,72 @@ class Orchestrator:
         except Exception as e:
             logger.error(f"   ❌ Initializer failed: {e}")
             return False
+
+    def _run_initializer_multi_model(self, *, provider: str) -> None:
+        """
+        Generate a feature backlog using Codex/Gemini CLIs (optionally synthesized).
+        """
+        spec_text = ""
+        try:
+            spec_text = get_app_spec(self.project_dir)
+        except Exception as e:
+            raise RuntimeError(f"Could not load app_spec.txt: {e}") from e
+
+        feature_count = infer_feature_count(self.project_dir)
+        prompt = build_backlog_prompt(spec_text, feature_count)
+
+        agents = self._initializer_agents()
+        if provider == "codex_cli":
+            agents = ["codex"]
+        elif provider == "gemini_cli":
+            agents = ["gemini"]
+
+        cfg = MultiModelGenerateConfig.from_env(
+            agents=agents,
+            synthesizer=self._initializer_synthesizer(),
+            timeout_s=self._initializer_timeout_s(),
+        )
+
+        drafts_root = self.project_dir / ".autocoder" / "drafts" / "initializer"
+        drafts_root.mkdir(parents=True, exist_ok=True)
+        output_path = drafts_root / f"features_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+
+        result = generate_multi_model_text(
+            prompt=prompt,
+            cfg=cfg,
+            output_path=output_path,
+            drafts_root=drafts_root / f"run_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+            synthesize=True,
+        )
+
+        text = Path(result["output_path"]).read_text(encoding="utf-8", errors="replace")
+        backlog = parse_feature_backlog(text)
+        features = backlog.features
+        if not features:
+            raise RuntimeError("Initializer generated no valid features (empty parse)")
+
+        total = len(features)
+        for idx, feature in enumerate(features):
+            if feature.get("priority") is None:
+                feature["priority"] = total - idx
+
+        created = self.database.create_features_bulk(features)
+        if created <= 0:
+            raise RuntimeError("Failed to insert features into database")
+
+        logger.info(f"   ✅ Multi-model initializer created {created} features")
+
+    def _maybe_stage_initializer_backlog(self, *, total_features: int) -> None:
+        stage_threshold = self._initializer_stage_threshold()
+        enqueue_count = self._initializer_enqueue_count()
+        if stage_threshold <= 0 or total_features <= stage_threshold:
+            return
+
+        keep = enqueue_count if enqueue_count > 0 else min(stage_threshold, max(1, stage_threshold // 3))
+        staged = self.database.stage_features_excluding_top(keep)
+        logger.info(
+            f"   🧊 Staged {staged} features (threshold={stage_threshold}, kept_enabled={keep})"
+        )
 
     async def run_parallel_agents(self) -> Dict[str, Any]:
         """
@@ -495,20 +576,41 @@ class Orchestrator:
             # Check if we need to run initializer first
             stats = self.database.get_stats()
             total_features = stats["features"]["total"]
+            staged_features = stats["features"].get("staged", 0)
 
             if total_features == 0:
-                logger.info("📝 No features found, running initializer agent...")
-                initializer_success = await self._run_initializer()
-                if not initializer_success:
-                    logger.error("❌ Initializer failed, cannot continue with parallel execution")
-                    return {
-                        "duration_seconds": 0,
-                        "features_completed": 0,
-                        "features_failed": 0,
-                        "error": "Initializer failed"
-                    }
-                # Refresh stats after initializer
-                stats = self.database.get_stats()
+                if staged_features > 0:
+                    enqueue_count = self._initializer_enqueue_count() or 1
+                    enabled = self.database.enqueue_staged_features(enqueue_count)
+                    logger.info(
+                        f"🧊 Enabled {enabled} staged feature(s) (initial enqueue) out of {staged_features}"
+                    )
+                    stats = self.database.get_stats()
+                    total_features = stats["features"]["total"]
+                    if total_features > 0:
+                        # Continue to normal flow.
+                        pass
+                    else:
+                        logger.error("❌ No active features after enqueueing staged backlog")
+                        return {
+                            "duration_seconds": 0,
+                            "features_completed": 0,
+                            "features_failed": 0,
+                            "error": "No active features after staging enqueue",
+                        }
+                else:
+                    logger.info("📝 No features found, running initializer agent...")
+                    initializer_success = await self._run_initializer()
+                    if not initializer_success:
+                        logger.error("❌ Initializer failed, cannot continue with parallel execution")
+                        return {
+                            "duration_seconds": 0,
+                            "features_completed": 0,
+                            "features_failed": 0,
+                            "error": "Initializer failed"
+                        }
+                    # Refresh stats after initializer
+                    stats = self.database.get_stats()
 
             while True:
                 # Check if there are pending features
@@ -520,6 +622,15 @@ class Orchestrator:
                     break
 
                 if stats["features"]["pending"] == 0 and stats["features"]["in_progress"] == 0:
+                    staged = int(stats["features"].get("staged", 0) or 0)
+                    if staged > 0:
+                        enqueue_count = self._initializer_enqueue_count() or 1
+                        enabled = self.database.enqueue_staged_features(enqueue_count)
+                        logger.info(
+                            f"🧊 Enabled {enabled} staged feature(s) (remaining staged: {staged})"
+                        )
+                        if enabled > 0:
+                            continue
                     logger.info("✅ All features complete!")
                     break
 
@@ -986,6 +1097,75 @@ class Orchestrator:
 
     def _planner_model(self) -> str:
         return str(os.environ.get("AUTOCODER_PLANNER_MODEL", "")).strip().lower()
+
+    def _initializer_provider(self) -> str:
+        cfg_provider = None
+        with contextlib.suppress(Exception):
+            if getattr(self, "project_config", None) is not None:
+                cfg_provider = getattr(getattr(self.project_config, "initializer", None), "provider", None)
+        raw = str(cfg_provider or os.environ.get("AUTOCODER_INITIALIZER_PROVIDER", "") or "claude").strip().lower()
+        if raw == "codex":
+            raw = "codex_cli"
+        elif raw == "gemini":
+            raw = "gemini_cli"
+        if raw not in {"claude", "codex_cli", "gemini_cli", "multi_cli"}:
+            return "claude"
+        return raw
+
+    def _initializer_agents(self) -> list[str]:
+        cfg_agents = None
+        with contextlib.suppress(Exception):
+            if getattr(self, "project_config", None) is not None:
+                cfg_agents = getattr(getattr(self.project_config, "initializer", None), "agents", None)
+        if cfg_agents:
+            return [str(x).strip().lower() for x in cfg_agents if str(x).strip()]
+        raw = str(os.environ.get("AUTOCODER_INITIALIZER_AGENTS", "")).strip().lower()
+        parts = [p.strip() for p in raw.replace(";", ",").split(",") if p.strip()]
+        return [p for p in parts if p in {"codex", "gemini"}] or ["codex", "gemini"]
+
+    def _initializer_synthesizer(self) -> str:
+        cfg_synth = None
+        with contextlib.suppress(Exception):
+            if getattr(self, "project_config", None) is not None:
+                cfg_synth = getattr(getattr(self.project_config, "initializer", None), "synthesizer", None)
+        raw = str(cfg_synth or os.environ.get("AUTOCODER_INITIALIZER_SYNTHESIZER", "")).strip().lower()
+        return raw if raw in {"none", "claude", "codex", "gemini"} else "claude"
+
+    def _initializer_timeout_s(self) -> int:
+        cfg_timeout = None
+        with contextlib.suppress(Exception):
+            if getattr(self, "project_config", None) is not None:
+                cfg_timeout = getattr(getattr(self.project_config, "initializer", None), "timeout_s", None)
+        raw = str(cfg_timeout if cfg_timeout is not None else os.environ.get("AUTOCODER_INITIALIZER_TIMEOUT_S", "")).strip()
+        try:
+            v = int(raw) if raw else 300
+        except Exception:
+            v = 300
+        return max(30, min(3600, v))
+
+    def _initializer_stage_threshold(self) -> int:
+        cfg_stage = None
+        with contextlib.suppress(Exception):
+            if getattr(self, "project_config", None) is not None:
+                cfg_stage = getattr(getattr(self.project_config, "initializer", None), "stage_threshold", None)
+        raw = str(cfg_stage if cfg_stage is not None else os.environ.get("AUTOCODER_INITIALIZER_STAGE_THRESHOLD", "")).strip()
+        try:
+            v = int(raw) if raw else 120
+        except Exception:
+            v = 120
+        return max(0, v)
+
+    def _initializer_enqueue_count(self) -> int:
+        cfg_enqueue = None
+        with contextlib.suppress(Exception):
+            if getattr(self, "project_config", None) is not None:
+                cfg_enqueue = getattr(getattr(self.project_config, "initializer", None), "enqueue_count", None)
+        raw = str(cfg_enqueue if cfg_enqueue is not None else os.environ.get("AUTOCODER_INITIALIZER_ENQUEUE_COUNT", "")).strip()
+        try:
+            v = int(raw) if raw else 30
+        except Exception:
+            v = 30
+        return max(0, v)
 
     def _qa_subagent_enabled(self) -> bool:
         return self._env_truthy("AUTOCODER_QA_SUBAGENT_ENABLED")

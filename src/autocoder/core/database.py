@@ -102,6 +102,9 @@ class Database:
                     passes BOOLEAN DEFAULT FALSE,
                     completed_at TIMESTAMP,
 
+                    -- Staging / queue control
+                    enabled BOOLEAN DEFAULT TRUE,
+
                     -- Attempts
                     attempts INTEGER DEFAULT 0,
                     last_error TEXT,
@@ -127,6 +130,13 @@ class Database:
                 logger.info("Added steps column to existing features table")
             except sqlite3.OperationalError:
                 # Column already exists (or table just created with it)
+                pass
+
+            # Migration: Add enabled column if it doesn't exist (for existing databases)
+            try:
+                cursor.execute("ALTER TABLE features ADD COLUMN enabled BOOLEAN DEFAULT TRUE")
+                logger.info("Added enabled column to existing features table")
+            except sqlite3.OperationalError:
                 pass
 
             # Migration: Add last_error column if it doesn't exist (for existing databases)
@@ -470,14 +480,15 @@ class Database:
         priority: int = 0,
         *,
         depends_on: Optional[List[int]] = None,
+        enabled: bool = True,
     ) -> int:
         """Create a new feature and return its ID."""
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                INSERT INTO features (name, description, category, steps, priority, status)
-                VALUES (?, ?, ?, ?, ?, 'PENDING')
-            """, (name, description, category, steps, priority))
+                INSERT INTO features (name, description, category, steps, priority, status, enabled)
+                VALUES (?, ?, ?, ?, ?, 'PENDING', ?)
+            """, (name, description, category, steps, priority, bool(enabled)))
             feature_id = int(cursor.lastrowid)
             if depends_on:
                 cursor.executemany(
@@ -495,7 +506,7 @@ class Database:
         Create multiple features in a single transaction.
 
         Args:
-            features: List of feature dicts with keys: name, description, category, steps, priority
+            features: List of feature dicts with keys: name, description, category, steps, priority, enabled
 
         Returns:
             Number of features created
@@ -503,15 +514,16 @@ class Database:
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.executemany("""
-                INSERT INTO features (name, description, category, steps, priority, status)
-                VALUES (?, ?, ?, ?, ?, 'PENDING')
+                INSERT INTO features (name, description, category, steps, priority, status, enabled)
+                VALUES (?, ?, ?, ?, ?, 'PENDING', ?)
             """, [
                 (
                     f.get("name"),
                     f.get("description"),
                     f.get("category"),
                     json.dumps(f.get("steps")) if f.get("steps") else None,
-                    f.get("priority", 0)
+                    f.get("priority", 0),
+                    bool(f.get("enabled", True)),
                 )
                 for f in features
             ])
@@ -530,19 +542,112 @@ class Database:
             out["depends_on"] = self._get_depends_on(conn, int(out["id"]))
             return out
 
-    def get_features_by_status(self, status: str) -> List[Dict[str, Any]]:
+    def get_features_by_status(self, status: str, *, include_disabled: bool = False) -> List[Dict[str, Any]]:
         """Get all features with a specific status."""
         normalized = status.upper() if status else status
         with self.get_connection() as conn:
             cursor = conn.cursor()
+            if include_disabled:
+                cursor.execute(
+                    "SELECT * FROM features WHERE status = ? ORDER BY priority DESC, id ASC",
+                    (normalized,),
+                )
+            else:
+                cursor.execute(
+                    "SELECT * FROM features WHERE status = ? AND enabled = 1 ORDER BY priority DESC, id ASC",
+                    (normalized,),
+                )
+            out: list[dict[str, Any]] = [dict(row) for row in cursor.fetchall()]
+            for r in out:
+                r["depends_on"] = self._get_depends_on(conn, int(r["id"]))
+            return out
+
+    def get_staged_features(self) -> List[Dict[str, Any]]:
+        """Get staged features (pending but disabled)."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
             cursor.execute(
-                "SELECT * FROM features WHERE status = ? ORDER BY priority DESC, id ASC",
-                (normalized,)
+                "SELECT * FROM features WHERE status = 'PENDING' AND enabled = 0 ORDER BY priority DESC, id ASC"
             )
             out: list[dict[str, Any]] = [dict(row) for row in cursor.fetchall()]
             for r in out:
                 r["depends_on"] = self._get_depends_on(conn, int(r["id"]))
             return out
+
+    def set_feature_enabled(self, feature_id: int, enabled: bool) -> bool:
+        """Enable or disable a feature for claiming."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                UPDATE features
+                SET enabled = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (1 if enabled else 0, int(feature_id)),
+            )
+            conn.commit()
+            return cursor.rowcount > 0
+
+    def enqueue_staged_features(self, limit: int) -> int:
+        """
+        Enable up to `limit` staged features (highest priority first).
+
+        Returns the number of features enabled.
+        """
+        limit = max(0, int(limit))
+        if limit <= 0:
+            return 0
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT id FROM features
+                WHERE status = 'PENDING' AND enabled = 0
+                ORDER BY priority DESC, id ASC
+                LIMIT ?
+                """,
+                (limit,),
+            )
+            ids = [int(r[0]) for r in cursor.fetchall()]
+            if not ids:
+                return 0
+            placeholders = ",".join(["?"] * len(ids))
+            cursor.execute(
+                f"UPDATE features SET enabled = 1, updated_at = CURRENT_TIMESTAMP WHERE id IN ({placeholders})",
+                ids,
+            )
+            conn.commit()
+            return int(cursor.rowcount or 0)
+
+    def stage_features_excluding_top(self, keep_count: int) -> int:
+        """
+        Disable (stage) pending features except the top `keep_count` by priority.
+
+        Returns the number of features staged.
+        """
+        keep_count = max(0, int(keep_count))
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT id FROM features
+                WHERE status = 'PENDING' AND enabled = 1
+                ORDER BY priority DESC, id ASC
+                """
+            )
+            ids = [int(r[0]) for r in cursor.fetchall()]
+            stage_ids = ids[keep_count:] if keep_count > 0 else ids
+            if not stage_ids:
+                return 0
+            placeholders = ",".join(["?"] * len(stage_ids))
+            cursor.execute(
+                f"UPDATE features SET enabled = 0, updated_at = CURRENT_TIMESTAMP WHERE id IN ({placeholders})",
+                stage_ids,
+            )
+            conn.commit()
+            return int(cursor.rowcount or 0)
 
     def update_feature_details(
         self,
@@ -791,6 +896,7 @@ class Database:
                 f"""
                 SELECT f.* FROM features f
                 WHERE f.status = 'PENDING'
+                  AND f.enabled = 1
                   AND (f.next_attempt_at IS NULL OR f.next_attempt_at <= CURRENT_TIMESTAMP)
                   AND NOT EXISTS (
                     SELECT 1
@@ -844,6 +950,7 @@ class Database:
                     f"""
                     SELECT f.id, f.branch_name FROM features f
                     WHERE f.status = 'PENDING'
+                      AND f.enabled = 1
                       AND (f.next_attempt_at IS NULL OR f.next_attempt_at <= CURRENT_TIMESTAMP)
                       AND NOT EXISTS (
                         SELECT 1
@@ -889,13 +996,14 @@ class Database:
         with self.get_connection() as conn:
             cursor = conn.cursor()
 
-            cursor.execute("SELECT COUNT(1) FROM features WHERE status = 'PENDING'")
+            cursor.execute("SELECT COUNT(1) FROM features WHERE status = 'PENDING' AND enabled = 1")
             pending_total = int(cursor.fetchone()[0] or 0)
 
             cursor.execute(
                 """
                 SELECT COUNT(1) FROM features f
                 WHERE f.status = 'PENDING'
+                  AND f.enabled = 1
                   AND (f.next_attempt_at IS NULL OR f.next_attempt_at <= CURRENT_TIMESTAMP)
                   AND NOT EXISTS (
                     SELECT 1
@@ -911,6 +1019,7 @@ class Database:
                 """
                 SELECT COUNT(1) FROM features f
                 WHERE f.status = 'PENDING'
+                  AND f.enabled = 1
                   AND f.next_attempt_at IS NOT NULL
                   AND f.next_attempt_at > CURRENT_TIMESTAMP
                 """
@@ -924,6 +1033,7 @@ class Database:
                 JOIN feature_dependencies d ON d.feature_id = f.id
                 JOIN features dep ON dep.id = d.depends_on_id
                 WHERE f.status = 'PENDING'
+                  AND f.enabled = 1
                   AND dep.status != 'DONE'
                 """
             )
@@ -931,9 +1041,19 @@ class Database:
 
             cursor.execute(
                 """
+                SELECT COUNT(1) FROM features f
+                WHERE f.status = 'PENDING'
+                  AND f.enabled = 0
+                """
+            )
+            staged_total = int(cursor.fetchone()[0] or 0)
+
+            cursor.execute(
+                """
                 SELECT MIN(f.next_attempt_at)
                 FROM features f
                 WHERE f.status = 'PENDING'
+                  AND f.enabled = 1
                   AND f.next_attempt_at IS NOT NULL
                   AND f.next_attempt_at > CURRENT_TIMESTAMP
                 """
@@ -945,6 +1065,7 @@ class Database:
                 SELECT f.id, f.name, f.next_attempt_at
                 FROM features f
                 WHERE f.status = 'PENDING'
+                  AND f.enabled = 1
                   AND f.next_attempt_at IS NOT NULL
                   AND f.next_attempt_at > CURRENT_TIMESTAMP
                 ORDER BY f.next_attempt_at ASC
@@ -958,6 +1079,7 @@ class Database:
                 SELECT f.id, f.name
                 FROM features f
                 WHERE f.status = 'PENDING'
+                  AND f.enabled = 1
                   AND EXISTS (
                     SELECT 1
                     FROM feature_dependencies d
@@ -975,6 +1097,7 @@ class Database:
                 "claimable_now": claimable_now,
                 "waiting_backoff": waiting_backoff,
                 "waiting_deps": waiting_deps,
+                "staged_total": staged_total,
                 "earliest_next_attempt_at": next_attempt_at,
                 "earliest_retry_feature": (
                     {
@@ -1004,14 +1127,14 @@ class Database:
                 placeholders = ",".join(["?"] * len(excludes))
                 sql = (
                     "INSERT OR IGNORE INTO feature_dependencies (feature_id, depends_on_id) "
-                    f"SELECT id, ? FROM features WHERE status = 'PENDING' AND id NOT IN ({placeholders})"
+                    f"SELECT id, ? FROM features WHERE status = 'PENDING' AND enabled = 1 AND id NOT IN ({placeholders})"
                 )
                 params = [int(depends_on_id), *sorted(excludes)]
                 cursor.execute(sql, params)
             else:
                 cursor.execute(
                     "INSERT OR IGNORE INTO feature_dependencies (feature_id, depends_on_id) "
-                    "SELECT id, ? FROM features WHERE status = 'PENDING'",
+                    "SELECT id, ? FROM features WHERE status = 'PENDING' AND enabled = 1",
                     (int(depends_on_id),),
                 )
             conn.commit()
@@ -1061,7 +1184,7 @@ class Database:
                     assigned_at = CURRENT_TIMESTAMP,
                     branch_name = ?,
                     updated_at = CURRENT_TIMESTAMP
-                WHERE id = ? AND status = 'PENDING'
+                WHERE id = ? AND status = 'PENDING' AND enabled = 1
             """, (agent_id, branch_name, feature_id))
 
             conn.commit()
@@ -1094,6 +1217,7 @@ class Database:
                 cursor.execute("""
                     SELECT id FROM features
                     WHERE status = 'PENDING'
+                      AND enabled = 1
                     ORDER BY priority DESC, id ASC
                     LIMIT 1
                 """)
@@ -1112,7 +1236,7 @@ class Database:
                         assigned_at = CURRENT_TIMESTAMP,
                         branch_name = ?,
                         updated_at = CURRENT_TIMESTAMP
-                    WHERE id = ? AND status = 'PENDING'
+                    WHERE id = ? AND status = 'PENDING' AND enabled = 1
                 """, (agent_id, branch_name, feature_id))
 
                 if cursor.rowcount > 0:
@@ -1557,19 +1681,22 @@ class Database:
             cursor = conn.cursor()
 
             # Feature counts (use uppercase status values)
-            cursor.execute("SELECT COUNT(*) FROM features WHERE status = 'PENDING'")
+            cursor.execute("SELECT COUNT(*) FROM features WHERE status = 'PENDING' AND enabled = 1")
             pending = cursor.fetchone()[0]
 
-            cursor.execute("SELECT COUNT(*) FROM features WHERE status = 'IN_PROGRESS'")
+            cursor.execute("SELECT COUNT(*) FROM features WHERE status = 'IN_PROGRESS' AND enabled = 1")
             in_progress = cursor.fetchone()[0]
 
             cursor.execute(
-                "SELECT COUNT(*) FROM features WHERE review_status = 'READY_FOR_VERIFICATION'"
+                "SELECT COUNT(*) FROM features WHERE review_status = 'READY_FOR_VERIFICATION' AND enabled = 1"
             )
             ready_for_verification = cursor.fetchone()[0]
 
-            cursor.execute("SELECT COUNT(*) FROM features WHERE passes = TRUE")
+            cursor.execute("SELECT COUNT(*) FROM features WHERE passes = TRUE AND enabled = 1")
             completed = cursor.fetchone()[0]
+
+            cursor.execute("SELECT COUNT(*) FROM features WHERE status = 'PENDING' AND enabled = 0")
+            staged = cursor.fetchone()[0]
 
             # Agent counts
             cursor.execute("SELECT COUNT(*) FROM agent_heartbeats WHERE status = 'ACTIVE'")
@@ -1584,7 +1711,9 @@ class Database:
                     "in_progress": in_progress,
                     "ready_for_verification": ready_for_verification,
                     "completed": completed,
-                    "total": pending + in_progress + completed
+                    "staged": staged,
+                    "total": pending + in_progress + completed,
+                    "total_all": pending + in_progress + completed + staged
                 },
                 "agents": {
                     "active": active_agents,

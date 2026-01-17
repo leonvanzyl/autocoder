@@ -67,6 +67,8 @@ export interface Feature {
   passes: boolean
   in_progress: boolean
   status?: string
+  enabled?: boolean
+  staged?: boolean
   attempts?: number
   last_error?: string | null
   last_artifact_path?: string | null
@@ -76,6 +78,7 @@ export interface Feature {
 }
 
 export interface FeatureListResponse {
+  staged: Feature[]
   pending: Feature[]
   in_progress: Feature[]
   done: Feature[]
@@ -169,6 +172,8 @@ export type WorkerProvider = 'claude' | 'codex_cli' | 'gemini_cli' | 'multi_cli'
 export type PlannerSynthesizer = 'none' | 'claude' | 'codex' | 'gemini'
 export type ReviewConsensus = 'any' | 'majority' | 'all'
 export type CodexReasoningEffort = 'low' | 'medium' | 'high'
+export type InitializerProvider = 'claude' | 'codex_cli' | 'gemini_cli' | 'multi_cli'
+export type InitializerSynthesizer = 'none' | 'claude' | 'codex' | 'gemini'
 
 export interface AdvancedSettings {
   review_enabled: boolean
@@ -206,6 +211,13 @@ export interface AdvancedSettings {
   planner_agents: string
   planner_synthesizer: PlannerSynthesizer
   planner_timeout_s: number
+
+  initializer_provider: InitializerProvider
+  initializer_agents: string
+  initializer_synthesizer: InitializerSynthesizer
+  initializer_timeout_s: number
+  initializer_stage_threshold: number
+  initializer_enqueue_count: number
 
   logs_keep_days: number
   logs_keep_files: number
