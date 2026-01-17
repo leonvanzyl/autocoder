@@ -60,7 +60,7 @@ def start_server(host: str = "127.0.0.1", port: int | None = None, reload: bool 
         if not _bool_env("AUTOCODER_UI_BANNER", True):
             return
         def mark(ok: bool) -> str:
-            return "✅" if ok else "⚠️"
+            return "[OK]" if ok else "[WARN]"
 
         cli_command = (os.environ.get("AUTOCODER_CLI_COMMAND") or os.environ.get("CLI_COMMAND") or "claude").strip()
         claude_ok = shutil.which(cli_command) is not None
@@ -91,7 +91,7 @@ def start_server(host: str = "127.0.0.1", port: int | None = None, reload: bool 
         print(f"  {mark(ui_ok)} UI build")
         if os.name == "nt":
             print(f"  {mark(winpty_ok)} Windows terminals (pywinpty)")
-        print(f"  ✅ UI: http://{host}:{port}/")
+        print(f"  [OK] UI: http://{host}:{port}/")
         print("  Tip: set AUTOCODER_OPEN_UI=0 to disable auto-open\n")
 
     disable_lock = _bool_env("AUTOCODER_DISABLE_UI_LOCK", False)

@@ -72,7 +72,7 @@ def _print_banner(title: str, *, subtitle: str | None = None) -> None:
 
 def _print_boot_checklist(setup: dict) -> None:
     def mark(ok: bool) -> str:
-        return "✅" if ok else "⚠️"
+        return "[OK]" if ok else "[WARN]"
 
     ui_port = get_ui_port()
     codex_ok = bool(shutil.which("codex"))
@@ -85,7 +85,7 @@ def _print_boot_checklist(setup: dict) -> None:
     print(f"  {mark(setup.get('npm'))} npm")
     print(f"  {mark(setup.get('ui_built'))} UI build")
     print(f"  {mark(setup.get('in_venv'))} Virtualenv (recommended)")
-    print(f"  ✅ UI port: http://127.0.0.1:{ui_port}")
+    print(f"  [OK] UI: http://127.0.0.1:{ui_port}")
 
 def _is_repo_root(path: Path) -> bool:
     try:

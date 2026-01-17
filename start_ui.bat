@@ -2,15 +2,19 @@
 REM AutoCoder UI Launcher for Windows
 
 echo.
-echo ====================================
-echo   AUTOCODER // WEB UI
-echo   Modded by Gabi (Booplex)
-echo ====================================
-echo.
+if not "%AUTOCODER_UI_BANNER%"=="" if /i not "%AUTOCODER_UI_BANNER%"=="0" (
+  echo ====================================
+  echo   AUTOCODER // WEB UI
+  echo   Modded by Gabi (Booplex)
+  echo ====================================
+  echo.
+)
 set UI_PORT=%AUTOCODER_UI_PORT%
 if "%UI_PORT%"=="" set UI_PORT=8888
 echo   Opening http://127.0.0.1:%UI_PORT%  (set AUTOCODER_OPEN_UI=0 to disable)
-echo   Tip: set AUTOCODER_UI_BANNER=0 to hide this banner
+if not "%AUTOCODER_UI_BANNER%"=="" if /i "%AUTOCODER_UI_BANNER%"=="0" (
+  echo   Banner suppressed via AUTOCODER_UI_BANNER=0
+)
 echo.
 
 REM Load .env file if it exists
