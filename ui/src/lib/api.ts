@@ -6,6 +6,8 @@ import type {
   ProjectSummary,
   ProjectDetail,
   ProjectPrompts,
+  KnowledgeFilesResponse,
+  KnowledgeFile,
   FeatureListResponse,
   Feature,
   FeatureCreate,
@@ -95,6 +97,31 @@ export async function updateProjectPrompts(
   await fetchJSON(`/projects/${encodeURIComponent(name)}/prompts`, {
     method: 'PUT',
     body: JSON.stringify(prompts),
+  })
+}
+
+export async function listKnowledgeFiles(name: string): Promise<KnowledgeFilesResponse> {
+  return fetchJSON(`/projects/${encodeURIComponent(name)}/knowledge`)
+}
+
+export async function getKnowledgeFile(name: string, filename: string): Promise<KnowledgeFile> {
+  return fetchJSON(`/projects/${encodeURIComponent(name)}/knowledge/${encodeURIComponent(filename)}`)
+}
+
+export async function putKnowledgeFile(
+  name: string,
+  filename: string,
+  content: string
+): Promise<KnowledgeFile> {
+  return fetchJSON(`/projects/${encodeURIComponent(name)}/knowledge/${encodeURIComponent(filename)}`, {
+    method: 'PUT',
+    body: JSON.stringify({ content }),
+  })
+}
+
+export async function deleteKnowledgeFile(name: string, filename: string): Promise<void> {
+  await fetchJSON(`/projects/${encodeURIComponent(name)}/knowledge/${encodeURIComponent(filename)}`, {
+    method: 'DELETE',
   })
 }
 

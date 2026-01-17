@@ -197,6 +197,16 @@ Optional multi-model workflows (Codex/Gemini via local CLIs):
 - Review in Gatekeeper: `docs/multi_model_review.md`
 - Spec/plan drafting: `docs/multi_model_generate.md`
 
+### Knowledge Files (project context)
+
+Add project-specific notes in `<project>/knowledge/*.md`. These files are automatically injected into:
+
+- initializer + coding prompts
+- QA patch workers (codex/gemini)
+- assistant chat + expand/spec creation
+
+In the Web UI: click **Knowledge** (shortcut `K`) to create/edit/delete knowledge files.
+
 #### Initializer backlog + staging
 
 You can also control **how the feature backlog is generated and staged**:

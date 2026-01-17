@@ -9,6 +9,13 @@ Start by reading `app_spec.txt` in your working directory. This file contains
 the complete specification for what you need to build. Read it carefully
 before proceeding.
 
+Also read any project knowledge notes if they exist:
+
+```bash
+ls -la knowledge
+cat knowledge/*.md
+```
+
 ### CRITICAL: DYNAMIC PORT CONFIGURATION
 
 **Ports are dynamically assigned per agent instance.** NEVER hardcode port numbers in your code or commands.

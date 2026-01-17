@@ -63,6 +63,30 @@ class ProjectPromptsUpdate(BaseModel):
     coding_prompt: str | None = None
 
 
+class KnowledgeFileSummary(BaseModel):
+    """Metadata for a knowledge file."""
+    name: str
+    size_bytes: int
+    modified_at: str
+
+
+class KnowledgeFilesResponse(BaseModel):
+    """List of knowledge files in a project."""
+    directory: str
+    files: list[KnowledgeFileSummary]
+
+
+class KnowledgeFileUpdate(BaseModel):
+    """Create or update a knowledge file."""
+    content: str
+
+
+class KnowledgeFile(BaseModel):
+    """Knowledge file content."""
+    name: str
+    content: str
+
+
 # ============================================================================
 # Feature Schemas
 # ============================================================================

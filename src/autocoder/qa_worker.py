@@ -34,6 +34,7 @@ from datetime import datetime
 from pathlib import Path
 
 from autocoder.core.database import get_database
+from autocoder.core.knowledge_files import build_knowledge_bundle
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -219,7 +220,8 @@ def _stage_and_commit(repo: Path, message: str) -> tuple[bool, str]:
         return False, str(e)
 
 
-def _fix_prompt(*, provider: str, failure: str, diff: str, attempt: int) -> str:
+def _fix_prompt(*, repo: Path, provider: str, failure: str, diff: str, attempt: int) -> str:
+    knowledge = build_knowledge_bundle(repo, max_total_chars=8000)
     base = (
         "You are a software engineer fixing a CI failure.\n"
         "Return JSON only with keys: patch (string), summary (string).\n"
@@ -234,19 +236,21 @@ def _fix_prompt(*, provider: str, failure: str, diff: str, attempt: int) -> str:
         "Gatekeeper failure excerpt:\n"
         + (failure.strip()[:50_000] if failure else "(missing)")
         + "\n\n"
-        "Current diff from base to HEAD:\n"
+        + (("Project knowledge files:\n" + knowledge + "\n\n") if knowledge else "")
+        + "Current diff from base to HEAD:\n"
         + (diff.strip()[:200_000] if diff else "(empty diff)")
     )
     # Gemini CLI already enforces JSON output mode; Codex uses output schema. Content can be the same.
     return base
 
 
-def _implement_prompt(*, provider: str, feature: dict, files: list[str], hints: dict[str, str], diff: str, attempt: int) -> str:
+def _implement_prompt(*, repo: Path, provider: str, feature: dict, files: list[str], hints: dict[str, str], diff: str, attempt: int) -> str:
     name = str(feature.get("name") or "").strip()
     desc = str(feature.get("description") or "").strip()
     category = str(feature.get("category") or "").strip()
     steps_text = _feature_steps_text(feature)
     hint_block = "\n\n".join(f"{k}:\n{v}" for k, v in hints.items() if v.strip())
+    knowledge = build_knowledge_bundle(repo, max_total_chars=8000)
 
     return (
         "You are a software engineer implementing a feature.\n"
@@ -268,6 +272,7 @@ def _implement_prompt(*, provider: str, feature: dict, files: list[str], hints: 
         "Repository file list (partial):\n"
         + ("\n".join(files) if files else "(unable to list files)")
         + "\n\n"
+        + (("Project knowledge files:\n" + knowledge + "\n\n") if knowledge else "")
         + (hint_block + "\n\n" if hint_block else "")
         + "Current diff from base to HEAD:\n"
         + (diff.strip()[:200_000] if diff else "(empty diff)")
@@ -462,6 +467,7 @@ async def main() -> int:
                 try:
                     if mode == "implement":
                         prompt = _implement_prompt(
+                            repo=repo,
                             provider=p,
                             feature=feature,
                             files=files,
@@ -471,7 +477,7 @@ async def main() -> int:
                         )
                     else:
                         failure_blob = failure + ("\n" + last_err if last_err else "")
-                        prompt = _fix_prompt(provider=p, failure=failure_blob, diff=diff, attempt=attempt)
+                        prompt = _fix_prompt(repo=repo, provider=p, failure=failure_blob, diff=diff, attempt=attempt)
 
                     if p == "codex_cli":
                         ok, patch, err = _run_codex(repo, prompt=prompt, timeout_s=int(args.timeout_s))
@@ -537,4 +543,3 @@ async def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(asyncio.run(main()))
-

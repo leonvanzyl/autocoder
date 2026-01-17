@@ -47,6 +47,12 @@ AutoCoder is a Claude Agent SDK + MCP based coding agent. It supports single-age
   - **Delete**: removes the project from the registry (optional delete-on-disk).
 - Projects with placeholder specs are flagged as **setup required** in the UI.
 
+## Knowledge Files (Project Context)
+
+- Add project-specific notes under `<project>/knowledge/*.md`.
+- These are injected into initializer/coding prompts, assistant chat, and QA patch workers.
+- Web UI: open **Knowledge** (shortcut `K`) to manage files.
+
 ## Settings Persistence
 
 - **Per-project**: model settings are stored in the target project’s `agent_system.db` (so settings travel with the project).

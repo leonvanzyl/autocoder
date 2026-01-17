@@ -20,7 +20,12 @@ from ..schemas import (
     ProjectPrompts,
     ProjectPromptsUpdate,
     ProjectStats,
+    KnowledgeFilesResponse,
+    KnowledgeFileSummary,
+    KnowledgeFileUpdate,
+    KnowledgeFile,
 )
+from ...core.knowledge_files import get_knowledge_dir, list_knowledge_files, knowledge_file_meta
 
 # Lazy imports to avoid circular dependencies
 _imports_initialized = False
@@ -75,6 +80,17 @@ def validate_project_name(name: str) -> str:
             status_code=400,
             detail="Invalid project name. Use only letters, numbers, hyphens, and underscores (1-50 chars)."
         )
+    return name
+
+
+def validate_knowledge_filename(name: str) -> str:
+    """Validate knowledge file names to prevent path traversal."""
+    if "/" in name or "\\" in name:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    if not re.match(r'^[a-zA-Z0-9._-]{1,120}$', name):
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    if not name.lower().endswith(".md"):
+        raise HTTPException(status_code=400, detail="Knowledge files must be .md")
     return name
 
 
@@ -459,6 +475,112 @@ async def update_project_prompts(name: str, prompts: ProjectPromptsUpdate):
     write_file("coding_prompt.md", prompts.coding_prompt)
 
     return {"success": True, "message": "Prompts updated"}
+
+
+@router.get("/{name}/knowledge", response_model=KnowledgeFilesResponse)
+async def list_knowledge_files_endpoint(name: str):
+    """List knowledge files for a project."""
+    _init_imports()
+    _, _, get_project_path, _, _ = _get_registry_functions()
+
+    name = validate_project_name(name)
+    project_dir = get_project_path(name)
+
+    if not project_dir:
+        raise HTTPException(status_code=404, detail=f"Project '{name}' not found")
+
+    if not project_dir.exists():
+        raise HTTPException(status_code=404, detail=f"Project directory not found")
+
+    knowledge_dir = get_knowledge_dir(project_dir)
+    knowledge_dir.mkdir(parents=True, exist_ok=True)
+
+    files = [
+        KnowledgeFileSummary(**knowledge_file_meta(p))
+        for p in list_knowledge_files(project_dir)
+    ]
+
+    return KnowledgeFilesResponse(
+        directory=str(knowledge_dir),
+        files=files,
+    )
+
+
+@router.get("/{name}/knowledge/{filename}", response_model=KnowledgeFile)
+async def get_knowledge_file_endpoint(name: str, filename: str):
+    """Get a knowledge file by name."""
+    _init_imports()
+    _, _, get_project_path, _, _ = _get_registry_functions()
+
+    name = validate_project_name(name)
+    filename = validate_knowledge_filename(filename)
+    project_dir = get_project_path(name)
+
+    if not project_dir:
+        raise HTTPException(status_code=404, detail=f"Project '{name}' not found")
+
+    knowledge_dir = get_knowledge_dir(project_dir)
+    file_path = knowledge_dir / filename
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Knowledge file not found")
+
+    try:
+        content = file_path.read_text(encoding="utf-8")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to read file: {e}")
+
+    return KnowledgeFile(name=filename, content=content)
+
+
+@router.put("/{name}/knowledge/{filename}", response_model=KnowledgeFile)
+async def upsert_knowledge_file_endpoint(name: str, filename: str, payload: KnowledgeFileUpdate):
+    """Create or update a knowledge file."""
+    _init_imports()
+    _, _, get_project_path, _, _ = _get_registry_functions()
+
+    name = validate_project_name(name)
+    filename = validate_knowledge_filename(filename)
+    project_dir = get_project_path(name)
+
+    if not project_dir:
+        raise HTTPException(status_code=404, detail=f"Project '{name}' not found")
+
+    knowledge_dir = get_knowledge_dir(project_dir)
+    knowledge_dir.mkdir(parents=True, exist_ok=True)
+    file_path = knowledge_dir / filename
+
+    try:
+        file_path.write_text(payload.content or "", encoding="utf-8")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to write file: {e}")
+
+    return KnowledgeFile(name=filename, content=payload.content or "")
+
+
+@router.delete("/{name}/knowledge/{filename}")
+async def delete_knowledge_file_endpoint(name: str, filename: str):
+    """Delete a knowledge file."""
+    _init_imports()
+    _, _, get_project_path, _, _ = _get_registry_functions()
+
+    name = validate_project_name(name)
+    filename = validate_knowledge_filename(filename)
+    project_dir = get_project_path(name)
+
+    if not project_dir:
+        raise HTTPException(status_code=404, detail=f"Project '{name}' not found")
+
+    knowledge_dir = get_knowledge_dir(project_dir)
+    file_path = knowledge_dir / filename
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Knowledge file not found")
+
+    try:
+        file_path.unlink()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete file: {e}")
+
+    return {"success": True}
 
 
 @router.get("/{name}/stats", response_model=ProjectStats)

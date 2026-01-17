@@ -24,7 +24,8 @@ import { SettingsModal, type RunSettings } from './components/SettingsModal'
 import { SettingsPage } from './pages/SettingsPage'
 import { ProjectSetupRequired } from './components/ProjectSetupRequired'
 import { SpecCreationChat } from './components/SpecCreationChat'
-import { Plus, Loader2, FileText, Settings as SettingsIcon, Sparkles } from 'lucide-react'
+import { KnowledgeFilesModal } from './components/KnowledgeFilesModal'
+import { Plus, Loader2, FileText, Settings as SettingsIcon, Sparkles, BookOpen } from 'lucide-react'
 import type { Feature } from './lib/types'
 import { startAgent } from './lib/api'
 
@@ -55,6 +56,7 @@ function App() {
   const [specInitializerStatus, setSpecInitializerStatus] = useState<'idle' | 'starting' | 'error'>('idle')
   const [specInitializerError, setSpecInitializerError] = useState<string | null>(null)
   const [specYoloSelected, setSpecYoloSelected] = useState(false)
+  const [showKnowledgeModal, setShowKnowledgeModal] = useState(false)
   const [setupBannerDismissedUntil, setSetupBannerDismissedUntil] = useState<number | null>(null)
 
   const [yoloEnabled, setYoloEnabled] = useState(false)
@@ -173,6 +175,12 @@ function App() {
         setShowSettings(true)
       }
 
+      // K : Knowledge files
+      if ((e.key === 'k' || e.key === 'K') && selectedProject) {
+        e.preventDefault()
+        setShowKnowledgeModal(true)
+      }
+
       // P : Quick access to run settings (back-compat shortcut)
       if ((e.key === 'p' || e.key === 'P') && selectedProject) {
         e.preventDefault()
@@ -206,6 +214,8 @@ function App() {
           setIsSpecCreating(false)
           setSpecInitializerStatus('idle')
           setSpecInitializerError(null)
+        } else if (showKnowledgeModal) {
+          setShowKnowledgeModal(false)
         } else if (showSettings) {
           setShowSettings(false)
         } else if (assistantOpen) {
@@ -224,7 +234,7 @@ function App() {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [selectedProject, showAddFeature, showExpandProject, selectedFeature, debugOpen, assistantOpen, showSettings, showSpecChat, route])
+  }, [selectedProject, showAddFeature, showExpandProject, selectedFeature, debugOpen, assistantOpen, showSettings, showSpecChat, showKnowledgeModal, route])
 
   // Hash-based routing (no router dependency)
   useEffect(() => {
@@ -404,6 +414,19 @@ function App() {
                     <span className="hidden sm:inline">Settings</span>
                     <kbd className="hidden md:inline ml-1.5 px-1.5 py-0.5 text-xs bg-black/20 rounded font-mono">
                       S
+                    </kbd>
+                  </button>
+
+                  <button
+                    onClick={() => setShowKnowledgeModal(true)}
+                    className="neo-btn text-sm bg-[var(--color-neo-card)] text-[var(--color-neo-text)] flex items-center gap-2"
+                    title="Knowledge Files (Press K)"
+                    aria-label="Knowledge files"
+                  >
+                    <BookOpen size={18} />
+                    <span className="hidden sm:inline">Knowledge</span>
+                    <kbd className="hidden md:inline ml-1.5 px-1.5 py-0.5 text-xs bg-black/20 rounded font-mono">
+                      K
                     </kbd>
                   </button>
 
@@ -621,6 +644,15 @@ function App() {
             setShowSettings(false)
             window.location.hash = '#/settings'
           }}
+        />
+      )}
+
+      {/* Knowledge Files Modal */}
+      {showKnowledgeModal && selectedProject && (
+        <KnowledgeFilesModal
+          projectName={selectedProject}
+          isOpen={showKnowledgeModal}
+          onClose={() => setShowKnowledgeModal(false)}
         />
       )}
 

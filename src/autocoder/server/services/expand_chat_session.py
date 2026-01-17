@@ -30,6 +30,7 @@ from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
 from autocoder.core.database import get_database
 from ..schemas import ImageAttachment
 from ...core.model_settings import ModelSettings, get_full_model_id
+from ...core.knowledge_files import build_knowledge_bundle
 
 logger = logging.getLogger(__name__)
 
@@ -272,6 +273,13 @@ class ExpandChatSession:
 
         project_path = str(self.project_dir.resolve())
         system_prompt = skill_content.replace("$ARGUMENTS", project_path)
+        knowledge_bundle = build_knowledge_bundle(self.project_dir, max_total_chars=8000)
+        if knowledge_bundle:
+            system_prompt += (
+                "\n\n## Project Knowledge Files\n"
+                "The following notes are provided by the project owner. Treat them as authoritative context.\n\n"
+                + knowledge_bundle
+            )
 
         claude_md_path = self.project_dir / "CLAUDE.md"
         if claude_md_path.exists():

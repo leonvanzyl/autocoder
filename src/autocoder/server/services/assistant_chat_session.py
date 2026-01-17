@@ -21,6 +21,7 @@ from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
 
 from ...core.port_config import get_api_port, get_web_port
 from ...core.model_settings import ModelSettings, get_full_model_id
+from ...core.knowledge_files import build_knowledge_bundle
 from .assistant_database import (
     create_conversation,
     add_message,
@@ -113,6 +114,8 @@ def get_system_prompt(project_name: str, project_dir: Path) -> str:
         except Exception as e:
             logger.warning(f"Failed to read app_spec.txt: {e}")
 
+    knowledge_bundle = build_knowledge_bundle(project_dir, max_total_chars=8000)
+
     return f"""You are a helpful project assistant for the "{project_name}" project.
 
 Your role is to help users plan features, understand the codebase, answer questions, and organize work into features.
@@ -138,6 +141,10 @@ IMPORTANT CAPABILITIES:
 ## Project Specification
 
 {app_spec_content if app_spec_content else "(No app specification found)"}
+
+## Project Knowledge Files
+
+{knowledge_bundle if knowledge_bundle else "(No knowledge files found)"}
 
 ## Available Tools
 

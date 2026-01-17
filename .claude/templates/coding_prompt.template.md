@@ -53,20 +53,24 @@ ls -la
 # 3. Read the project specification to understand what you're building
 cat app_spec.txt
 
-# 4. Read progress notes from previous sessions
+# 4. Read any project knowledge notes (if present)
+ls -la knowledge
+cat knowledge/*.md
+
+# 5. Read progress notes from previous sessions
 cat claude-progress.txt
 
-# 5. Check recent git history
+# 6. Check recent git history
 git log --oneline -20
 ```
 
 Then use MCP tools to check feature status:
 
 ```
-# 6. Get progress statistics (passing/total counts)
+# 7. Get progress statistics (passing/total counts)
 Use the feature_get_stats tool
 
-# 7. Claim the next feature to work on (atomic)
+# 8. Claim the next feature to work on (atomic)
 Use the feature_claim_next tool
 ```
 

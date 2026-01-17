@@ -12,6 +12,8 @@ Fallback chain:
 import shutil
 from pathlib import Path
 
+from autocoder.core.knowledge_files import build_knowledge_bundle
+
 
 # Base templates location (generic templates)
 # Go up from src/autocoder/agent/ to root, then to .claude/templates
@@ -68,17 +70,36 @@ def load_prompt(name: str, project_dir: Path | None = None) -> str:
 
 def get_initializer_prompt(project_dir: Path | None = None) -> str:
     """Load the initializer prompt (project-specific if available)."""
-    return load_prompt("initializer_prompt", project_dir)
+    prompt = load_prompt("initializer_prompt", project_dir)
+    return _append_knowledge(prompt, project_dir)
 
 
 def get_coding_prompt(project_dir: Path | None = None) -> str:
     """Load the coding agent prompt (project-specific if available)."""
-    return load_prompt("coding_prompt", project_dir)
+    prompt = load_prompt("coding_prompt", project_dir)
+    return _append_knowledge(prompt, project_dir)
 
 
 def get_coding_prompt_yolo(project_dir: Path | None = None) -> str:
     """Load the YOLO mode coding agent prompt (project-specific if available)."""
-    return load_prompt("coding_prompt_yolo", project_dir)
+    prompt = load_prompt("coding_prompt_yolo", project_dir)
+    return _append_knowledge(prompt, project_dir)
+
+
+def _append_knowledge(prompt: str, project_dir: Path | None) -> str:
+    """Append knowledge file bundle to a prompt."""
+    if not project_dir:
+        return prompt
+    bundle = build_knowledge_bundle(project_dir)
+    if not bundle:
+        return prompt
+    return (
+        prompt
+        + "\n\n"
+        + "## PROJECT KNOWLEDGE FILES\n"
+        + "The following notes are provided by the project owner. Treat them as authoritative context.\n\n"
+        + bundle
+    )
 
 
 def get_app_spec(project_dir: Path) -> str:

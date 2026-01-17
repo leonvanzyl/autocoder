@@ -57,6 +57,23 @@ export interface ProjectPrompts {
   coding_prompt: string
 }
 
+// Knowledge files
+export interface KnowledgeFileSummary {
+  name: string
+  size_bytes: number
+  modified_at: string
+}
+
+export interface KnowledgeFilesResponse {
+  directory: string
+  files: KnowledgeFileSummary[]
+}
+
+export interface KnowledgeFile {
+  name: string
+  content: string
+}
+
 // Feature types
 export interface Feature {
   id: number
