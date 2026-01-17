@@ -14,12 +14,14 @@ import sys
 import threading
 import time
 import webbrowser
+import subprocess
 
 from dotenv import load_dotenv
 import uvicorn
 from pathlib import Path
 
 from autocoder.core.port_config import get_ui_port
+from autocoder.core.ui_build import find_ui_root, is_ui_build_stale
 from autocoder.server.server_lock import ServerLock
 
 load_dotenv()
@@ -97,6 +99,31 @@ def start_server(host: str = "127.0.0.1", port: int | None = None, reload: bool 
         print(f"  [OK] UI: http://{host}:{port}/")
         print("  Tip: set AUTOCODER_OPEN_UI=0 to disable auto-open\n")
 
+    def _maybe_rebuild_ui() -> None:
+        if not _bool_env("AUTOCODER_UI_AUTO_BUILD", True):
+            return
+
+        ui_root = find_ui_root(Path(__file__).resolve())
+        if not ui_root:
+            return
+        if not is_ui_build_stale(ui_root):
+            return
+
+        node_ok = shutil.which("node") is not None
+        npm_ok = shutil.which("npm") is not None
+        if not (node_ok and npm_ok):
+            print("⚠️  UI source is newer than dist, but Node/npm is missing. Skipping rebuild.")
+            return
+
+        print("🎨 UI sources changed — rebuilding ui/dist …")
+        try:
+            if not (ui_root / "node_modules").exists():
+                subprocess.run(["npm", "install"], cwd=str(ui_root), check=True)
+            subprocess.run(["npm", "run", "build"], cwd=str(ui_root), check=True)
+            print("✅ UI rebuild complete.")
+        except Exception as exc:
+            print(f"⚠️  UI rebuild failed: {exc}")
+
     disable_lock = _bool_env("AUTOCODER_DISABLE_UI_LOCK", False)
 
     def should_open_browser() -> bool:
@@ -122,6 +149,7 @@ def start_server(host: str = "127.0.0.1", port: int | None = None, reload: bool 
                 webbrowser.open(url, new=2)
 
         threading.Thread(target=_worker, daemon=True).start()
+    _maybe_rebuild_ui()
     _print_ui_banner()
     _print_boot_checklist()
 

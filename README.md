@@ -145,6 +145,7 @@ autocoder-ui
 - The UI auto-opens your browser on launch (disable with `AUTOCODER_OPEN_UI=0`).
 - On Windows, terminal sessions auto-install `pywinpty` (disable with `AUTOCODER_AUTO_INSTALL_WINPTY=0`).
 - Hide the startup banner/checklist with `AUTOCODER_UI_BANNER=0` (set it before running `autocoder-ui`/`start_ui`).
+- If `ui/src` is newer than `ui/dist`, AutoCoder will auto-rebuild the UI on launch (disable with `AUTOCODER_UI_AUTO_BUILD=0`).
 
 ### Project Setup & Reset (Web UI)
 

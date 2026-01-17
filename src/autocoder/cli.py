@@ -54,6 +54,7 @@ from autocoder.core import Orchestrator
 from autocoder.server import start_server
 from autocoder.core.port_config import get_ui_port
 from autocoder.core.logs import prune_worker_logs, prune_gatekeeper_artifacts
+from autocoder.core.ui_build import find_ui_root, is_ui_build_stale
 
 
 # Default configuration
@@ -205,9 +206,14 @@ def check_setup() -> dict:
     if not npm:
         issues.append("❌ npm not found (required for UI). Install Node.js to get npm")
 
-    # Check if UI is built
-    ROOT_DIR = Path(__file__).parent.parent.parent
-    ui_dist = ROOT_DIR / "ui" / "dist"
+    # Check if UI is built (and not stale)
+    ui_root = find_ui_root(Path(__file__).resolve())
+    ui_dist = ui_root / "dist" if ui_root else (Path(__file__).parent.parent.parent / "ui" / "dist")
+    ui_stale = False
+    if ui_root and ui_dist.exists():
+        ui_stale = is_ui_build_stale(ui_root)
+        if ui_stale:
+            issues.append("⚠️  UI build is stale (source newer than dist)")
     if not ui_dist.exists():
         issues.append("⚠️  UI not built")
 
@@ -224,7 +230,7 @@ def check_setup() -> dict:
         "claude_cli": claude_cli is not None,
         "node": node is not None,
         "npm": npm is not None,
-        "ui_built": ui_dist.exists(),
+        "ui_built": ui_dist.exists() and not ui_stale,
         "package_installed": True,  # We're running, so it's installed
     }
 

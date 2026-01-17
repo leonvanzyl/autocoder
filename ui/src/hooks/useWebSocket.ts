@@ -32,6 +32,8 @@ export function useProjectWebSocket(projectName: string | null) {
   const reconnectTimeoutRef = useRef<number | null>(null)
   const reconnectAttempts = useRef(0)
   const isManualCloseRef = useRef(false)
+  const isUnmountingRef = useRef(false)
+  const lastLogKeyRef = useRef<string | null>(null)
   const projectRef = useRef<string | null>(projectName)
 
   const connect = useCallback(() => {
@@ -39,6 +41,7 @@ export function useProjectWebSocket(projectName: string | null) {
     if (wsRef.current && (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING)) {
       return
     }
+    isUnmountingRef.current = false
     isManualCloseRef.current = false
 
     // Build WebSocket URL
@@ -80,6 +83,13 @@ export function useProjectWebSocket(projectName: string | null) {
               break
 
             case 'log':
+              {
+                const logKey = `${message.timestamp}|${message.line}`
+                if (lastLogKeyRef.current === logKey) {
+                  break
+                }
+                lastLogKeyRef.current = logKey
+              }
               setState(prev => ({
                 ...prev,
                 logs: [
@@ -105,7 +115,7 @@ export function useProjectWebSocket(projectName: string | null) {
       ws.onclose = () => {
         setState(prev => ({ ...prev, isConnected: false }))
         wsRef.current = null
-        if (isManualCloseRef.current) return
+        if (isManualCloseRef.current || isUnmountingRef.current) return
         if (projectRef.current !== projectName) return
 
         // Exponential backoff reconnection
@@ -137,10 +147,12 @@ export function useProjectWebSocket(projectName: string | null) {
     projectRef.current = projectName
     // Reset state on project switch so progress/logs don't leak across projects.
     setState(INITIAL_STATE)
+    lastLogKeyRef.current = null
 
     if (!projectName) {
       // Disconnect if no project
       if (wsRef.current) {
+        isUnmountingRef.current = true
         isManualCloseRef.current = true
         wsRef.current.close()
         wsRef.current = null
@@ -154,6 +166,7 @@ export function useProjectWebSocket(projectName: string | null) {
     const pingInterval = setInterval(sendPing, 30000)
 
     return () => {
+      isUnmountingRef.current = true
       clearInterval(pingInterval)
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current)
@@ -168,6 +181,7 @@ export function useProjectWebSocket(projectName: string | null) {
 
   // Clear logs function
   const clearLogs = useCallback(() => {
+    lastLogKeyRef.current = null
     setState(prev => ({ ...prev, logs: [] }))
   }, [])
 
