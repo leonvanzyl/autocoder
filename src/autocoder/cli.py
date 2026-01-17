@@ -60,6 +60,28 @@ DEFAULT_MODEL = "claude-opus-4-5-20251101"
 DEFAULT_PARALLEL = 3
 DEFAULT_PRESET = "balanced"
 
+def _print_banner(title: str, *, subtitle: str | None = None) -> None:
+    line = "=" * 44
+    print("\n" + line)
+    print(f"  {title}")
+    if subtitle:
+        print(f"  {subtitle}")
+    print(line)
+
+
+def _print_boot_checklist(setup: dict) -> None:
+    def mark(ok: bool) -> str:
+        return "✅" if ok else "⚠️"
+
+    ui_port = get_ui_port()
+    print("\nBoot Checklist")
+    print(f"  {mark(setup.get('claude_cli'))} Claude CLI")
+    print(f"  {mark(setup.get('node'))} Node")
+    print(f"  {mark(setup.get('npm'))} npm")
+    print(f"  {mark(setup.get('ui_built'))} UI build")
+    print(f"  {mark(setup.get('in_venv'))} Virtualenv (recommended)")
+    print(f"  ✅ UI port: http://127.0.0.1:{ui_port}")
+
 def _is_repo_root(path: Path) -> bool:
     try:
         p = path.resolve()
@@ -290,9 +312,7 @@ def auto_setup(setup: dict) -> bool:
 
 def print_setup_check(setup: dict) -> None:
     """Print setup check results."""
-    print("\n" + "=" * 60)
-    print("  🔍 AutoCoder Setup Check")
-    print("=" * 60)
+    _print_banner("AutoCoder Setup Check", subtitle="Modded by Gabi (Booplex)")
 
     if setup["has_issues"]:
         print("\n⚠️  Issues found:\n")
@@ -307,9 +327,7 @@ def print_setup_check(setup: dict) -> None:
 
 def ask_cli_or_ui() -> str:
     """Ask user if they want CLI or Web UI."""
-    print("\n" + "=" * 60)
-    print("  🚀 AutoCoder")
-    print("=" * 60)
+    _print_banner("AutoCoder", subtitle="Modded by Gabi (Booplex)")
     print("\nWhat would you like to launch?")
     print("\n[1] Command-Line Interface (CLI)")
     print("    - Interactive menu for project management")
@@ -883,6 +901,7 @@ Examples:
             setup = check_setup()
 
         print_setup_check(setup)
+        _print_boot_checklist(setup)
 
         # Ask user what they want to launch
         choice = ask_cli_or_ui()

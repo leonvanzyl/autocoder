@@ -8,12 +8,13 @@ fi
 
 echo ""
 echo "===================================="
-echo "  AutoCoder - Web UI"
+echo "  AUTOCODER // WEB UI"
 echo "  Modded by Gabi (Booplex)"
 echo "===================================="
 UI_PORT="${AUTOCODER_UI_PORT:-8888}"
 echo ""
 echo "  Opening http://127.0.0.1:${UI_PORT}  (set AUTOCODER_OPEN_UI=0 to disable)"
+echo "  Tip: set AUTOCODER_UI_BANNER=0 to hide this banner"
 echo ""
 
 # Run autocoder-ui command

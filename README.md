@@ -144,6 +144,7 @@ autocoder-ui
 - Diagnostics: open `http://127.0.0.1:8888/#/settings/diagnostics` (system status, configurable fixtures dir, deterministic E2E fixtures, recent run logs).
 - The UI auto-opens your browser on launch (disable with `AUTOCODER_OPEN_UI=0`).
 - On Windows, terminal sessions auto-install `pywinpty` (disable with `AUTOCODER_AUTO_INSTALL_WINPTY=0`).
+- Hide the startup banner/checklist with `AUTOCODER_UI_BANNER=0`.
 
 If the agent fails due to missing authentication, the UI log stream will emit a short fix-it hint (e.g. `claude login` or env var guidance).
 
