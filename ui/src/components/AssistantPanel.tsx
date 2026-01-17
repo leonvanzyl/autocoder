@@ -20,17 +20,20 @@ interface AssistantPanelProps {
 export function AssistantPanel({ projectName, isOpen, onClose }: AssistantPanelProps) {
   const [showHistory, setShowHistory] = useState(false)
   const [loadConversationId, setLoadConversationId] = useState<number | null>(null)
+  const [activeConversationId, setActiveConversationId] = useState<number | null>(null)
   const { conversations, isLoading, deleteConversation, refetch } = useAssistantConversations(
     isOpen ? projectName : null
   )
 
   const handleLoadConversation = (id: number) => {
     setLoadConversationId(id)
+    setActiveConversationId(id)
     setShowHistory(false)
   }
 
   const handleNewConversation = () => {
     setLoadConversationId(null)
+    setActiveConversationId(null)
     setShowHistory(false)
   }
 
@@ -121,7 +124,7 @@ export function AssistantPanel({ projectName, isOpen, onClose }: AssistantPanelP
               <ConversationHistory
                 conversations={conversations}
                 isLoading={isLoading}
-                currentConversationId={loadConversationId}
+                currentConversationId={activeConversationId}
                 onLoadConversation={handleLoadConversation}
                 onDeleteConversation={deleteConversation}
                 onNewConversation={handleNewConversation}
@@ -135,7 +138,7 @@ export function AssistantPanel({ projectName, isOpen, onClose }: AssistantPanelP
               <AssistantChat
                 projectName={projectName}
                 conversationId={loadConversationId}
-                onConversationChange={setLoadConversationId}
+                onConversationChange={setActiveConversationId}
               />
             )}
           </div>

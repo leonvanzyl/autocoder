@@ -393,7 +393,7 @@ class AssistantChatSession:
                     async for _ in self.client.receive_response():
                         pass
 
-                    logger.info(f"Loaded {len(history)} messages into context for conversation {self.conversation_id}")
+                    logger.debug(f"Loaded {len(history)} messages into context for conversation {self.conversation_id}")
             except Exception as e:
                 logger.exception(f"Failed to load conversation history: {e}")
                 yield {"type": "error", "content": f"Warning: Could not load full conversation history: {str(e)}"}

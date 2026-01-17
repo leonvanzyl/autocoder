@@ -33,6 +33,7 @@ export function AssistantChat({ projectName, conversationId: externalConversatio
   const {
     messages,
     isLoading,
+    isLoadingConversation,
     connectionStatus,
     conversationId: internalConversationId,
     start,
@@ -74,7 +75,7 @@ export function AssistantChat({ projectName, conversationId: externalConversatio
 
   const handleSend = () => {
     const content = inputValue.trim()
-    if ((!content && attachments.length === 0) || isLoading) return
+    if ((!content && attachments.length === 0) || isLoading || isLoadingConversation) return
 
     sendMessage(content, attachments)
     setInputValue('')
@@ -165,6 +166,11 @@ export function AssistantChat({ projectName, conversationId: externalConversatio
                 <Loader2 size={16} className="animate-spin" />
                 <span>Connecting to assistant...</span>
               </div>
+            ) : isLoadingConversation ? (
+              <div className="flex items-center gap-2">
+                <Loader2 size={16} className="animate-spin" />
+                <span>Loading conversation...</span>
+              </div>
             ) : (
               <span>Ask me anything about the codebase</span>
             )}
@@ -232,7 +238,7 @@ export function AssistantChat({ projectName, conversationId: externalConversatio
           />
           <button
             onClick={() => fileInputRef.current?.click()}
-            disabled={isLoading || connectionStatus !== 'connected'}
+            disabled={isLoading || isLoadingConversation || connectionStatus !== 'connected'}
             className="
               neo-btn
               px-3
@@ -248,7 +254,7 @@ export function AssistantChat({ projectName, conversationId: externalConversatio
             onChange={(e) => setInputValue(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Ask about the codebase..."
-            disabled={isLoading || connectionStatus !== 'connected'}
+            disabled={isLoading || isLoadingConversation || connectionStatus !== 'connected'}
             className="
               flex-1
               neo-input
@@ -261,7 +267,7 @@ export function AssistantChat({ projectName, conversationId: externalConversatio
           />
           <button
             onClick={handleSend}
-            disabled={(!inputValue.trim() && attachments.length === 0) || isLoading || connectionStatus !== 'connected'}
+            disabled={(!inputValue.trim() && attachments.length === 0) || isLoading || isLoadingConversation || connectionStatus !== 'connected'}
             className="
               neo-btn neo-btn-primary
               px-4

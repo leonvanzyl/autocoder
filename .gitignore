@@ -108,6 +108,8 @@ ui/dist/
 ui/.vite/
 .vite/
 *.tsbuildinfo
+ui/playwright-report/
+ui/test-results/
 
 # ===================
 # Environment files

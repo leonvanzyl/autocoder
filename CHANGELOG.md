@@ -12,6 +12,7 @@ All notable changes to this fork will be listed here.
 - Regression selection now prioritizes least-tested features (tracks `regression_count`)
 - UI auto-build now detects stale `ui/dist` and rebuilds when sources are newer
 - WebSocket debug logs deduplicate consecutive identical lines (prevents StrictMode double-connect noise)
+- Assistant chat: avoid history loss on conversation switch, disable input while loading, and reduce server log noise
 
 ## 2026-01-17
 

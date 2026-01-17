@@ -16,6 +16,7 @@ interface UseAssistantChatOptions {
 interface UseAssistantChatReturn {
   messages: ChatMessage[]
   isLoading: boolean
+  isLoadingConversation: boolean
   connectionStatus: ConnectionStatus
   conversationId: number | null
   start: (conversationId?: number | null) => void
@@ -34,6 +35,7 @@ export function useAssistantChat({
 }: UseAssistantChatOptions): UseAssistantChatReturn {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isLoading, setIsLoading] = useState(false)
+  const [isLoadingConversation, setIsLoadingConversation] = useState(false)
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('disconnected')
   const [conversationId, setConversationId] = useState<number | null>(null)
 
@@ -207,6 +209,15 @@ export function useAssistantChat({
     }
   }, [projectName, onError])
 
+  const mergeMessages = useCallback((base: ChatMessage[], incoming: ChatMessage[]) => {
+    if (incoming.length === 0) return base
+    if (base.length === 0) return incoming
+    const map = new Map<string, ChatMessage>()
+    base.forEach((m) => map.set(m.id, m))
+    incoming.forEach((m) => map.set(m.id, m))
+    return Array.from(map.values())
+  }, [])
+
   const start = useCallback(async (existingConversationId?: number | null) => {
     // Disconnect existing connection if any
     if (wsRef.current && (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING)) {
@@ -222,11 +233,11 @@ export function useAssistantChat({
     // Clear messages and reset state when switching conversations
     setMessages([])
     setConnectionStatus('disconnected')
-
-    connect()
+    setConversationId(null)
 
     // Load conversation history if resuming
     if (existingConversationId) {
+      setIsLoadingConversation(true)
       try {
         const conversation = await getAssistantConversation(projectName, existingConversationId)
         const historyMessages: ChatMessage[] = conversation.messages.map((m) => ({
@@ -235,12 +246,18 @@ export function useAssistantChat({
           content: m.content,
           timestamp: m.timestamp ? new Date(m.timestamp) : new Date(),
         }))
-        setMessages(historyMessages)
+        setMessages((prev) => mergeMessages(prev, historyMessages))
         setConversationId(existingConversationId)
       } catch (error) {
         console.error('Failed to load conversation:', error)
+      } finally {
+        setIsLoadingConversation(false)
       }
+    } else {
+      setIsLoadingConversation(false)
     }
+
+    connect()
 
     // Wait for connection then send start message
     const checkAndSend = () => {
@@ -258,11 +275,14 @@ export function useAssistantChat({
     }
 
     setTimeout(checkAndSend, 100)
-  }, [connect, projectName])
+  }, [connect, mergeMessages, projectName])
 
   const sendMessage = useCallback((content: string, attachments: ImageAttachment[] = []) => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
       onError?.('Not connected')
+      return
+    }
+    if (isLoadingConversation) {
       return
     }
 
@@ -288,7 +308,7 @@ export function useAssistantChat({
         attachments: attachments.length > 0 ? attachments : undefined,
       })
     )
-  }, [onError])
+  }, [isLoadingConversation, onError])
 
   const disconnect = useCallback(() => {
     reconnectAttempts.current = maxReconnectAttempts // Prevent reconnection
@@ -311,6 +331,7 @@ export function useAssistantChat({
   return {
     messages,
     isLoading,
+    isLoadingConversation,
     connectionStatus,
     conversationId,
     start,
