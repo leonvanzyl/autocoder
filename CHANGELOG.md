@@ -8,6 +8,7 @@ All notable changes to this fork will be listed here.
 - Project reset endpoint (runtime reset + full reset) and UI Danger Zone controls
 - Knowledge files (`/knowledge/*.md`) injected into prompts + UI editor modal
 - Single-agent loop exits when no pending/staged/verification features remain
+- Clarified prompt guidance that refactor/cleanup features are not skippable
 
 ## 2026-01-17
 

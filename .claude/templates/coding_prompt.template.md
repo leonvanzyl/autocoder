@@ -169,8 +169,11 @@ It's ok if you only complete one feature in this session, as there will be more 
 | "Component not built" | Skip | Build the component |
 | "No data to test with" | Skip | Create test data or build data entry flow |
 | "Feature X needs to be done first" | Skip | Build feature X as part of this feature |
+| "Feature is refactor/cleanup/tech debt" | Skip | Implement the refactor/cleanup and verify it |
 
 If a feature requires building other functionality first, **build that functionality**. You are the coding agent - your job is to make the feature work, not to defer it.
+
+Refactor/cleanup features are **first-class requirements**. Do not skip them just because they are non-functional or "maintenance" work.
 
 If you must skip (truly external blocker only):
 

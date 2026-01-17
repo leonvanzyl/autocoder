@@ -38,6 +38,7 @@ AutoCoder is a Claude Agent SDK + MCP based coding agent. It supports single-age
 - Use `features.last_error` and Gatekeeper artifacts under `.autocoder/features/<id>/gatekeeper/` to debug retries.
  - Feature implementation worker is configurable: `AUTOCODER_WORKER_PROVIDER=claude|codex_cli|gemini_cli|multi_cli` (patch workers use `src/autocoder/qa_worker.py --mode implement`).
 - Large backlogs may be **staged** (disabled) to keep active queues manageable; staged features can be enqueued from the UI or via `POST /features/enqueue`.
+- Skipping is for **external blockers only**; refactor/cleanup features are required work and should not be skipped.
 
 ## Project Maintenance (UI)
 

@@ -118,6 +118,7 @@ Use the feature_create_bulk tool with features=[
 - Order features by priority: fundamental features first (the API assigns priority based on order)
 - All features start with `passes: false` automatically
 - Cover every feature in the spec exhaustively
+- **Refactor/cleanup/tech-debt items are still required features** (do not treat them as skippable or optional)
 - **MUST include tests from ALL 20 mandatory categories below**
 
 ---
