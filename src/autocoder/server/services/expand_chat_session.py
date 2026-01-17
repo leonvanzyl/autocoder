@@ -58,8 +58,22 @@ async def _make_multimodal_message(content_blocks: list[dict]) -> AsyncGenerator
     }
 
 
-# Root directory of the repository's `src/` (server/services -> server -> autocoder -> src)
-ROOT_DIR = Path(__file__).resolve().parents[3]
+def _find_repo_root(start: Path) -> Path | None:
+    """
+    Locate the repo root by finding .claude/commands/expand-project.md.
+
+    This supports running from source checkouts where .claude/ lives at the repo root
+    (not inside src/).
+    """
+    target = Path(".claude") / "commands" / "expand-project.md"
+    for parent in [start, *start.parents]:
+        candidate = parent / target
+        if candidate.exists():
+            return parent
+    return None
+
+
+ROOT_DIR = _find_repo_root(Path(__file__).resolve())
 
 
 def _extract_features_to_create(text: str) -> list[dict[str, Any]]:
@@ -214,6 +228,12 @@ class ExpandChatSession:
 
     async def start(self) -> AsyncGenerator[dict, None]:
         """Initialize session and stream the initial greeting."""
+        if ROOT_DIR is None:
+            yield {
+                "type": "error",
+                "content": "Expand project skill not found (missing .claude/commands/expand-project.md at repo root).",
+            }
+            return
         skill_path = ROOT_DIR / ".claude" / "commands" / "expand-project.md"
         if not skill_path.exists():
             yield {"type": "error", "content": f"Expand project skill not found at {skill_path}"}
