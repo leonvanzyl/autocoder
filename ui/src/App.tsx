@@ -49,6 +49,7 @@ function App() {
   const [assistantOpen, setAssistantOpen] = useState(false)
   const [isSpecCreating, setIsSpecCreating] = useState(false)
   const [logsTab, setLogsTab] = useState<'live' | 'workers' | 'devserver' | 'terminal'>('live')
+  const [workerLogFocus, setWorkerLogFocus] = useState<string | null>(null)
   const [showSettings, setShowSettings] = useState(false)
   const [route, setRoute] = useState<'main' | 'settings'>(() =>
     window.location.hash.startsWith('#/settings') ? 'settings' : 'main'
@@ -635,7 +636,16 @@ function App() {
             />
 
             {/* Agent Status Grid - show when parallel agents are running */}
-            {selectedProject && <AgentStatusGrid projectName={selectedProject} />}
+            {selectedProject && (
+              <AgentStatusGrid
+                projectName={selectedProject}
+                onViewLogs={(agentId) => {
+                  setWorkerLogFocus(`${agentId}.log`)
+                  setLogsTab('workers')
+                  setDebugOpen(true)
+                }}
+              />
+            )}
 
             {/* Agent Thought - shows latest agent narrative */}
             <AgentThought
@@ -752,6 +762,8 @@ function App() {
           onHeightChange={setDebugPanelHeight}
           projectName={selectedProject}
           openTab={logsTab}
+          workerLogFile={workerLogFocus}
+          onWorkerLogFileChange={setWorkerLogFocus}
         />
       )}
 

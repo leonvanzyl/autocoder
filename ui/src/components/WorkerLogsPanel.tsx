@@ -6,7 +6,7 @@
  * Designed to be embedded (e.g., inside the bottom Logs drawer).
  */
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { RefreshCw, Trash2, Scissors } from 'lucide-react'
 import { useDeleteWorkerLog, usePruneWorkerLogs, useWorkerLogTail, useWorkerLogs } from '../hooks/useWorkerLogs'
 
@@ -22,8 +22,16 @@ function formatBytes(bytes: number): string {
   return `${v.toFixed(i === 0 ? 0 : 1)} ${units[i]}`
 }
 
-export function WorkerLogsPanel({ projectName }: { projectName: string }) {
-  const [selected, setSelected] = useState<string | null>(null)
+export function WorkerLogsPanel({
+  projectName,
+  selectedFile,
+  onSelectedFileChange,
+}: {
+  projectName: string
+  selectedFile?: string | null
+  onSelectedFileChange?: (name: string | null) => void
+}) {
+  const [selected, setSelected] = useState<string | null>(selectedFile ?? null)
   const [tail, setTail] = useState(400)
 
   const [keepDays, setKeepDays] = useState(7)
@@ -39,6 +47,12 @@ export function WorkerLogsPanel({ projectName }: { projectName: string }) {
 
   const selectedText = useMemo(() => (tailQuery.data?.lines ?? []).join('\n'), [tailQuery.data])
   const files = logsQuery.data?.files ?? []
+
+  useEffect(() => {
+    if (selectedFile !== undefined && selectedFile !== selected) {
+      setSelected(selectedFile)
+    }
+  }, [selectedFile, selected])
 
   return (
     <div className="h-full overflow-hidden grid grid-cols-1 lg:grid-cols-3 gap-3">
@@ -68,7 +82,10 @@ export function WorkerLogsPanel({ projectName }: { projectName: string }) {
               <button
                 key={f.name}
                 className={`neo-card p-2 text-left w-full ${selected === f.name ? 'ring-4 ring-[var(--color-neo-accent)]' : ''}`}
-                onClick={() => setSelected(f.name)}
+                onClick={() => {
+                  setSelected(f.name)
+                  onSelectedFileChange?.(f.name)
+                }}
               >
                 <div className="font-mono text-[11px] break-all">{f.name}</div>
                 <div className="text-[11px] text-[var(--color-neo-text-secondary)] flex justify-between mt-1 gap-2">

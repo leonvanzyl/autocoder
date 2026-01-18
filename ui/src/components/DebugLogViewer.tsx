@@ -25,6 +25,8 @@ interface DebugLogViewerProps {
   onHeightChange?: (height: number) => void
   projectName?: string | null
   openTab?: 'live' | 'workers' | 'devserver' | 'terminal'
+  workerLogFile?: string | null
+  onWorkerLogFileChange?: (name: string | null) => void
 }
 
 type LogLevel = 'error' | 'warn' | 'debug' | 'info'
@@ -37,6 +39,8 @@ export function DebugLogViewer({
   onHeightChange,
   projectName,
   openTab = 'live',
+  workerLogFile,
+  onWorkerLogFileChange,
 }: DebugLogViewerProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const [autoScroll, setAutoScroll] = useState(true)
@@ -322,7 +326,11 @@ export function DebugLogViewer({
           ) : tab === 'workers' ? (
             <div className="h-full p-2 overflow-hidden">
               {projectName ? (
-                <WorkerLogsPanel projectName={projectName} />
+                <WorkerLogsPanel
+                  projectName={projectName}
+                  selectedFile={workerLogFile}
+                  onSelectedFileChange={onWorkerLogFileChange}
+                />
               ) : (
                 <div className="flex items-center justify-center h-full text-gray-500 font-mono text-sm">
                   Select a project to view worker logs.

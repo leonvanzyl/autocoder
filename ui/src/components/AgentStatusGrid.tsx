@@ -6,13 +6,14 @@
  */
 
 import { useParallelAgentsStatus } from '../hooks/useParallelAgents'
-import { Loader2, Bot } from 'lucide-react'
+import { Loader2, Bot, FileText } from 'lucide-react'
 
 interface AgentStatusGridProps {
   projectName: string
+  onViewLogs?: (agentId: string) => void
 }
 
-export function AgentStatusGrid({ projectName }: AgentStatusGridProps) {
+export function AgentStatusGrid({ projectName, onViewLogs }: AgentStatusGridProps) {
   const { data: status, isLoading } = useParallelAgentsStatus(projectName)
 
   if (isLoading) {
@@ -44,7 +45,7 @@ export function AgentStatusGrid({ projectName }: AgentStatusGridProps) {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
         {activeAgents.map((agent) => (
-          <AgentCard key={agent.agent_id} agent={agent} />
+          <AgentCard key={agent.agent_id} agent={agent} onViewLogs={onViewLogs} />
         ))}
       </div>
 
@@ -73,6 +74,7 @@ export function AgentStatusGrid({ projectName }: AgentStatusGridProps) {
 
 function AgentCard({
   agent,
+  onViewLogs,
 }: {
   agent: {
     agent_id: string
@@ -84,6 +86,7 @@ function AgentCard({
     web_port: number | null
     last_ping: string | null
   }
+  onViewLogs?: (agentId: string) => void
 }) {
   const config =
     agent.status === 'ACTIVE'
@@ -116,7 +119,19 @@ function AgentCard({
             {agent.feature_id ? `Feature #${agent.feature_id}` : 'No feature assigned'}
           </div>
         </div>
-        <span className={`neo-badge font-mono text-xs font-bold ${config.textColor}`}>{config.badge}</span>
+        <div className="flex items-center gap-2">
+          {onViewLogs && (
+            <button
+              className="neo-btn neo-btn-secondary neo-btn-icon text-xs p-1.5"
+              onClick={() => onViewLogs(agent.agent_id)}
+              title="View agent logs"
+              aria-label={`View logs for ${agent.agent_id}`}
+            >
+              <FileText size={14} />
+            </button>
+          )}
+          <span className={`neo-badge font-mono text-xs font-bold ${config.textColor}`}>{config.badge}</span>
+        </div>
       </div>
 
       <div className="font-semibold text-sm mb-3 line-clamp-2">{agent.feature_name || '(unknown feature)'}</div>
@@ -142,4 +157,3 @@ function AgentCard({
     </div>
   )
 }
-
