@@ -61,6 +61,9 @@ const DEFAULTS: AdvancedSettings = {
   diagnostics_fixtures_dir: '',
   ui_host: '',
   ui_allow_remote: false,
+  agent_color_running: '#00b4d8',
+  agent_color_done: '#70e000',
+  agent_color_retry: '#f59e0b',
   sdk_max_attempts: 3,
   sdk_initial_delay_s: 1,
   sdk_rate_limit_initial_delay_s: 30,
@@ -82,7 +85,7 @@ export function AdvancedSettingsContent() {
   const update = useUpdateAdvancedSettings()
 
   const [draft, setDraft] = useState<AdvancedSettings>(DEFAULTS)
-  const [tab, setTab] = useState<'automation' | 'gatekeeper' | 'logs' | 'retry' | 'ports'>('automation')
+  const [tab, setTab] = useState<'automation' | 'gatekeeper' | 'logs' | 'retry' | 'ports' | 'ui'>('automation')
 
   useEffect(() => {
     if (data) setDraft(data)
@@ -103,6 +106,8 @@ export function AdvancedSettingsContent() {
       warnings.push(message)
       fieldWarnings[field] = message
     }
+
+    const isHexColor = (value: string) => /^#[0-9a-fA-F]{6}$/.test(value.trim())
 
     if (draft.api_port_range_end <= draft.api_port_range_start) addError('api_port_range_end', 'API port range end must be > start')
     if (draft.web_port_range_end <= draft.web_port_range_start) addError('web_port_range_end', 'WEB port range end must be > start')
@@ -139,6 +144,10 @@ export function AdvancedSettingsContent() {
     if (draft.allow_no_tests) addWarning('allow_no_tests', 'Allow No Tests can merge without verification (recommended only for YOLO)')
     if (draft.ui_allow_remote && !draft.ui_host.trim())
       addWarning('ui_host', 'Set UI bind host (e.g. 0.0.0.0) to allow LAN access')
+
+    if (!isHexColor(draft.agent_color_running)) addError('agent_color_running', 'Running color must be a 6-digit hex (e.g. #00b4d8)')
+    if (!isHexColor(draft.agent_color_done)) addError('agent_color_done', 'Done color must be a 6-digit hex (e.g. #70e000)')
+    if (!isHexColor(draft.agent_color_retry)) addError('agent_color_retry', 'Retry color must be a 6-digit hex (e.g. #f59e0b)')
 
     return { errors, warnings, fieldErrors, fieldWarnings }
   }, [draft])
@@ -211,6 +220,12 @@ export function AdvancedSettingsContent() {
             onClick={() => setTab('ports')}
           >
             Ports
+          </button>
+          <button
+            className={`neo-btn text-sm ${tab === 'ui' ? 'bg-[var(--color-neo-accent)] text-white' : 'neo-btn-secondary'}`}
+            onClick={() => setTab('ui')}
+          >
+            UI
           </button>
         </div>
       </div>
@@ -702,6 +717,35 @@ export function AdvancedSettingsContent() {
               </div>
             </div>
           )}
+
+          {tab === 'ui' && (
+            <div className="neo-card p-4">
+              <div className="font-display font-bold uppercase mb-3">Agent Status Colors</div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <ColorField
+                  label="Running"
+                  value={draft.agent_color_running}
+                  onChange={(v) => setDraft({ ...draft, agent_color_running: v })}
+                  error={validation.fieldErrors.agent_color_running}
+                />
+                <ColorField
+                  label="Done"
+                  value={draft.agent_color_done}
+                  onChange={(v) => setDraft({ ...draft, agent_color_done: v })}
+                  error={validation.fieldErrors.agent_color_done}
+                />
+                <ColorField
+                  label="Retrying"
+                  value={draft.agent_color_retry}
+                  onChange={(v) => setDraft({ ...draft, agent_color_retry: v })}
+                  error={validation.fieldErrors.agent_color_retry}
+                />
+              </div>
+              <div className="text-xs text-[var(--color-neo-text-secondary)] mt-2">
+                These update the Agent Status cards and summary colors. Use hex values (e.g. <span className="font-mono">#00b4d8</span>).
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>
@@ -767,6 +811,40 @@ function TextField({
       />
       {error && <div className="text-xs mt-1 text-[var(--color-neo-danger)]">{error}</div>}
       {!error && warning && <div className="text-xs mt-1 text-yellow-800">{warning}</div>}
+    </div>
+  )
+}
+
+function ColorField({
+  label,
+  value,
+  onChange,
+  error,
+}: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+  error?: string
+}) {
+  const border = error ? 'border-[var(--color-neo-danger)]' : 'border-[var(--color-neo-border)]'
+  return (
+    <div>
+      <div className="text-xs font-mono text-[var(--color-neo-text-secondary)] mb-1">{label}</div>
+      <div className="flex items-center gap-2">
+        <input
+          type="color"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className={`h-10 w-12 border-2 ${border} bg-white`}
+        />
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className={`neo-btn text-sm py-2 px-3 bg-white border-3 ${border} font-mono w-full`}
+        />
+      </div>
+      {error && <div className="text-xs mt-1 text-[var(--color-neo-danger)]">{error}</div>}
     </div>
   )
 }

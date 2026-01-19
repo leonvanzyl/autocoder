@@ -260,6 +260,9 @@ export interface AdvancedSettings {
   diagnostics_fixtures_dir: string
   ui_host: string
   ui_allow_remote: boolean
+  agent_color_running: string
+  agent_color_done: string
+  agent_color_retry: string
 
   sdk_max_attempts: number
   sdk_initial_delay_s: number

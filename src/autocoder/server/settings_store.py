@@ -93,6 +93,11 @@ class AdvancedSettings:
     ui_host: str = ""
     ui_allow_remote: bool = False
 
+    # UI theme overrides (optional)
+    agent_color_running: str = "#00b4d8"
+    agent_color_done: str = "#70e000"
+    agent_color_retry: str = "#f59e0b"
+
     # Retry/backoff for Claude Agent SDK queries
     sdk_max_attempts: int = 3
     sdk_initial_delay_s: int = 1

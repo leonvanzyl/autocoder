@@ -5,7 +5,9 @@
  * Displays status of parallel agents (from `agent_system.db` heartbeats).
  */
 
+import { useMemo } from 'react'
 import { useParallelAgentsStatus } from '../hooks/useParallelAgents'
+import { useWorkerLogTail } from '../hooks/useWorkerLogs'
 import { Loader2, Bot, FileText } from 'lucide-react'
 
 interface AgentStatusGridProps {
@@ -45,7 +47,7 @@ export function AgentStatusGrid({ projectName, onViewLogs }: AgentStatusGridProp
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
         {activeAgents.map((agent) => (
-          <AgentCard key={agent.agent_id} agent={agent} onViewLogs={onViewLogs} />
+          <AgentCard key={agent.agent_id} agent={agent} projectName={projectName} onViewLogs={onViewLogs} />
         ))}
       </div>
 
@@ -53,17 +55,17 @@ export function AgentStatusGrid({ projectName, onViewLogs }: AgentStatusGridProp
       <div className="neo-card p-4 bg-[var(--color-neo-bg)]">
         <div className="grid grid-cols-3 gap-4 text-center">
           <div>
-            <div className="font-display font-bold text-2xl text-[var(--color-neo-progress)]">
+            <div className="font-display font-bold text-2xl text-[var(--color-agent-running)]">
               {activeAgents.length}
             </div>
             <div className="text-xs uppercase text-[var(--color-neo-text-secondary)]">Running</div>
           </div>
           <div>
-            <div className="font-display font-bold text-2xl text-[var(--color-neo-done)]">{completedCount}</div>
+            <div className="font-display font-bold text-2xl text-[var(--color-agent-done)]">{completedCount}</div>
             <div className="text-xs uppercase text-[var(--color-neo-text-secondary)]">Done</div>
           </div>
           <div>
-            <div className="font-display font-bold text-2xl text-[var(--color-neo-danger)]">{crashedCount}</div>
+            <div className="font-display font-bold text-2xl text-[var(--color-agent-retry)]">{crashedCount}</div>
             <div className="text-xs uppercase text-[var(--color-neo-text-secondary)]">Retrying</div>
           </div>
         </div>
@@ -74,6 +76,7 @@ export function AgentStatusGrid({ projectName, onViewLogs }: AgentStatusGridProp
 
 function AgentCard({
   agent,
+  projectName,
   onViewLogs,
 }: {
   agent: {
@@ -86,31 +89,40 @@ function AgentCard({
     web_port: number | null
     last_ping: string | null
   }
+  projectName: string
   onViewLogs?: (agentId: string) => void
 }) {
+  const logFilename = `${agent.agent_id}.log`
+  const tailQuery = useWorkerLogTail(projectName, logFilename, 8)
+  const activityLines = useMemo(() => {
+    const lines = tailQuery.data?.lines ?? []
+    const cleaned = lines.map((line) => line.trim()).filter(Boolean)
+    return cleaned.slice(-3)
+  }, [tailQuery.data])
+
   const config =
     agent.status === 'ACTIVE'
       ? {
-          bgColor: 'bg-[var(--color-neo-progress)]/10',
-          borderColor: 'border-[var(--color-neo-progress)]',
-          textColor: 'text-[var(--color-neo-progress)]',
+          bgColor: 'bg-[var(--color-agent-running)]/10',
+          borderColor: 'border-[var(--color-agent-running)]',
+          textColor: 'text-[var(--color-agent-running)]',
           badge: 'RUN',
           label: 'Running',
           subtitle: 'On it.',
         }
       : agent.status === 'COMPLETED'
         ? {
-            bgColor: 'bg-[var(--color-neo-done)]/10',
-            borderColor: 'border-[var(--color-neo-done)]',
-            textColor: 'text-[var(--color-neo-done)]',
+            bgColor: 'bg-[var(--color-agent-done)]/10',
+            borderColor: 'border-[var(--color-agent-done)]',
+            textColor: 'text-[var(--color-agent-done)]',
             badge: 'OK',
             label: 'Done',
             subtitle: 'All good.',
           }
         : {
-            bgColor: 'bg-[var(--color-neo-danger)]/10',
-            borderColor: 'border-[var(--color-neo-danger)]',
-            textColor: 'text-[var(--color-neo-danger)]',
+            bgColor: 'bg-[var(--color-agent-retry)]/10',
+            borderColor: 'border-[var(--color-agent-retry)]',
+            textColor: 'text-[var(--color-agent-retry)]',
             badge: 'RETRY',
             label: 'Trying plan B...',
             subtitle: 'Recovering.',
@@ -155,6 +167,26 @@ function AgentCard({
           <span>WEB</span>
           <span className="font-bold">{agent.web_port ?? '—'}</span>
         </div>
+      </div>
+
+      <div className="mt-3">
+        <div className="text-xs font-display font-bold uppercase text-[var(--color-neo-text-secondary)] mb-1">
+          Recent activity
+        </div>
+        {activityLines.length === 0 ? (
+          <div className="text-[11px] text-[var(--color-neo-text-muted)]">
+            {tailQuery.isFetching ? 'Loading…' : tailQuery.isError ? 'No activity yet.' : 'No activity yet.'}
+          </div>
+        ) : (
+          <ul className="space-y-1 text-[11px] font-mono text-[var(--color-neo-text)]">
+            {activityLines.map((line, idx) => (
+              <li key={`${agent.agent_id}-${idx}`} className="flex gap-2">
+                <span className="text-[var(--color-neo-text-muted)]">•</span>
+                <span className="line-clamp-2">{line}</span>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
       <div className="mt-2 flex items-center justify-between text-xs font-display font-bold uppercase tracking-wide">

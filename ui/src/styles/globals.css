@@ -73,6 +73,11 @@
   --color-neo-category-purple: #8338ec;
   --color-neo-category-blue: #3a86ff;
 
+  /* Agent status accents (configurable via Advanced Settings) */
+  --color-agent-running: var(--color-neo-progress);
+  --color-agent-done: var(--color-neo-done);
+  --color-agent-retry: #f59e0b;
+
   /* -------------------------------------------------------------------------
      Typography - Font stacks with proper fallbacks
      ------------------------------------------------------------------------- */
@@ -190,6 +195,11 @@
 
   /* GLM/Alternative API badge for dark mode */
   --color-neo-glm: #a78bfa;
+
+  /* Agent status accents (dark mode overrides) */
+  --color-agent-running: var(--color-neo-progress);
+  --color-agent-done: var(--color-neo-done);
+  --color-agent-retry: #fbbf24;
 
   /* Shadows - lighter for dark mode with subtle glow */
   --shadow-neo-sm: 1px 1px 0px rgba(224, 224, 224, 0.55);

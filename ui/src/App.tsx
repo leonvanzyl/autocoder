@@ -4,6 +4,7 @@ import { useProjects, useProject, useFeatures, useAgentStatus, useSetupStatus } 
 import { useProjectWebSocket } from './hooks/useWebSocket'
 import { useFeatureSound } from './hooks/useFeatureSound'
 import { useCelebration } from './hooks/useCelebration'
+import { useAdvancedSettings } from './hooks/useAdvancedSettings'
 
 const STORAGE_KEY = 'autonomous-coder-selected-project'
 import { ProjectSelector } from './components/ProjectSelector'
@@ -76,6 +77,7 @@ function App() {
   const { data: features } = useFeatures(selectedProject)
   const { data: agentStatusData } = useAgentStatus(selectedProject)
   const { data: setupStatus } = useSetupStatus()
+  const { data: advancedSettings } = useAdvancedSettings()
   const wsState = useProjectWebSocket(selectedProject)
   const selectedProjectData = projects?.find((p) => p.name === selectedProject) ?? null
   const setupRequired = Boolean(
@@ -105,6 +107,22 @@ function App() {
       // ignore
     }
   }, [selectedProject, setupRequired])
+
+  useEffect(() => {
+    if (!advancedSettings) return
+    const root = document.documentElement.style
+    const setVar = (name: string, value: string | null | undefined) => {
+      const v = (value ?? '').trim()
+      if (v) {
+        root.setProperty(name, v)
+      } else {
+        root.removeProperty(name)
+      }
+    }
+    setVar('--color-agent-running', advancedSettings.agent_color_running)
+    setVar('--color-agent-done', advancedSettings.agent_color_done)
+    setVar('--color-agent-retry', advancedSettings.agent_color_retry)
+  }, [advancedSettings])
 
   const showSetupBanner = setupRequired && (!setupBannerDismissedUntil || setupBannerDismissedUntil < Date.now())
 

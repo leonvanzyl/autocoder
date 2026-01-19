@@ -8,6 +8,7 @@ Server-side "advanced settings" used by the Web UI to configure spawned agent/or
 from __future__ import annotations
 
 from typing import Literal
+import re
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, ValidationError, model_validator
@@ -81,6 +82,9 @@ class AdvancedSettingsModel(BaseModel):
     diagnostics_fixtures_dir: str = Field(default="", max_length=2000)
     ui_host: str = Field(default="", max_length=255)
     ui_allow_remote: bool = False
+    agent_color_running: str = Field(default="#00b4d8", max_length=16)
+    agent_color_done: str = Field(default="#70e000", max_length=16)
+    agent_color_retry: str = Field(default="#f59e0b", max_length=16)
 
     sdk_max_attempts: int = Field(default=3, ge=1, le=20)
     sdk_initial_delay_s: int = Field(default=1, ge=0, le=600)
@@ -137,6 +141,21 @@ class AdvancedSettingsModel(BaseModel):
 
         if self.initializer_enqueue_count < 0:
             raise ValueError("initializer_enqueue_count must be >= 0")
+
+        color_fields = {
+            "agent_color_running": "agent_color_running",
+            "agent_color_done": "agent_color_done",
+            "agent_color_retry": "agent_color_retry",
+        }
+        for field_name, label in color_fields.items():
+            value = getattr(self, field_name, "")
+            if not value:
+                continue
+            if not value.startswith("#"):
+                value = f"#{value}"
+                setattr(self, field_name, value)
+            if not re.match(r"^#[0-9a-fA-F]{6}$", value):
+                raise ValueError(f"{label} must be a 6-digit hex color (e.g. #00b4d8)")
 
         return self
 
