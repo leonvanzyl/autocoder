@@ -421,7 +421,8 @@ class Gatekeeper:
 
             try:
                 base_ref = f"origin/{detected_main}" if (fetch_remote and has_origin) else detected_main
-                verify_branch = f"verify/{branch_name.replace(' ', '-').replace('\\\\', '-').replace(':', '-')}"
+                safe_branch_name = branch_name.replace(" ", "-").replace("\\", "-").replace(":", "-")
+                verify_branch = f"verify/{safe_branch_name}"
                 # Create temp worktree on base ref
                 subprocess.run(
                     ["git", "worktree", "add", "-b", verify_branch, str(temp_worktree_path), base_ref],

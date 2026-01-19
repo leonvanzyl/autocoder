@@ -17,6 +17,7 @@ Architecture:
 - Timeout protection prevents hangs
 """
 
+import json
 import os
 import subprocess
 import asyncio
