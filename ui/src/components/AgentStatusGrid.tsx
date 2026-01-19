@@ -56,15 +56,15 @@ export function AgentStatusGrid({ projectName, onViewLogs }: AgentStatusGridProp
             <div className="font-display font-bold text-2xl text-[var(--color-neo-progress)]">
               {activeAgents.length}
             </div>
-            <div className="text-xs uppercase text-[var(--color-neo-text-secondary)]">Active</div>
+            <div className="text-xs uppercase text-[var(--color-neo-text-secondary)]">Running</div>
           </div>
           <div>
             <div className="font-display font-bold text-2xl text-[var(--color-neo-done)]">{completedCount}</div>
-            <div className="text-xs uppercase text-[var(--color-neo-text-secondary)]">Completed</div>
+            <div className="text-xs uppercase text-[var(--color-neo-text-secondary)]">Done</div>
           </div>
           <div>
             <div className="font-display font-bold text-2xl text-[var(--color-neo-danger)]">{crashedCount}</div>
-            <div className="text-xs uppercase text-[var(--color-neo-text-secondary)]">Crashed</div>
+            <div className="text-xs uppercase text-[var(--color-neo-text-secondary)]">Retrying</div>
           </div>
         </div>
       </div>
@@ -95,6 +95,8 @@ function AgentCard({
           borderColor: 'border-[var(--color-neo-progress)]',
           textColor: 'text-[var(--color-neo-progress)]',
           badge: 'RUN',
+          label: 'Running',
+          subtitle: 'On it.',
         }
       : agent.status === 'COMPLETED'
         ? {
@@ -102,12 +104,16 @@ function AgentCard({
             borderColor: 'border-[var(--color-neo-done)]',
             textColor: 'text-[var(--color-neo-done)]',
             badge: 'OK',
+            label: 'Done',
+            subtitle: 'All good.',
           }
         : {
             bgColor: 'bg-[var(--color-neo-danger)]/10',
             borderColor: 'border-[var(--color-neo-danger)]',
             textColor: 'text-[var(--color-neo-danger)]',
-            badge: 'ERR',
+            badge: 'RETRY',
+            label: 'Trying plan B...',
+            subtitle: 'Recovering.',
           }
 
   return (
@@ -151,8 +157,9 @@ function AgentCard({
         </div>
       </div>
 
-      <div className="mt-2 text-xs font-display font-bold uppercase tracking-wide">
-        <span className={config.textColor}>{agent.status}</span>
+      <div className="mt-2 flex items-center justify-between text-xs font-display font-bold uppercase tracking-wide">
+        <span className={config.textColor} title={agent.status}>{config.label}</span>
+        <span className="text-[var(--color-neo-text-secondary)]">{config.subtitle}</span>
       </div>
     </div>
   )
