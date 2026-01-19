@@ -63,6 +63,8 @@ const DEFAULTS: AdvancedSettings = {
   logs_keep_files: 200,
   logs_max_total_mb: 200,
   logs_prune_artifacts: false,
+  activity_keep_days: 14,
+  activity_keep_rows: 5000,
   diagnostics_fixtures_dir: '',
   ui_host: '',
   ui_allow_remote: false,
@@ -692,6 +694,25 @@ export function AdvancedSettingsContent() {
                 </label>
                 <div className="text-xs text-[var(--color-neo-text-secondary)] self-center">
                   Prunes <span className="font-mono">.autocoder/**/gatekeeper/*.json</span> periodically during runs.
+                </div>
+              </div>
+
+              <div className="mt-4 border-t-2 border-[var(--color-neo-border)] pt-3">
+                <div className="font-display font-bold text-sm mb-2">Mission Control feed</div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <Field
+                    label="Keep days"
+                    value={draft.activity_keep_days}
+                    onChange={(v) => setDraft({ ...draft, activity_keep_days: clampInt(v, 0, 3650) })}
+                  />
+                  <Field
+                    label="Max events"
+                    value={draft.activity_keep_rows}
+                    onChange={(v) => setDraft({ ...draft, activity_keep_rows: clampInt(v, 0, 200000) })}
+                  />
+                </div>
+                <div className="text-xs text-[var(--color-neo-text-secondary)] mt-2">
+                  Stored in <span className="font-mono">agent_system.db</span>. Pruned periodically during runs.
                 </div>
               </div>
             </div>

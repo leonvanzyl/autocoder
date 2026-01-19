@@ -21,13 +21,14 @@ import { AgentThought } from './components/AgentThought'
 import { AssistantFAB } from './components/AssistantFAB'
 import { AssistantPanel } from './components/AssistantPanel'
 import { AgentStatusGrid } from './components/AgentStatusGrid'
+import { RecentActivityCard } from './components/RecentActivityCard'
 import { SettingsModal, type RunSettings } from './components/SettingsModal'
 import { SettingsPage } from './pages/SettingsPage'
 import { ProjectSetupRequired } from './components/ProjectSetupRequired'
 import { SpecCreationChat } from './components/SpecCreationChat'
 import { KnowledgeFilesModal } from './components/KnowledgeFilesModal'
 import { ConfirmationDialog } from './components/ConfirmationDialog'
-  import { Plus, Loader2, FileText, Settings as SettingsIcon, Sparkles, BookOpen, ChevronDown } from 'lucide-react'
+  import { Plus, Loader2, FileText, Settings as SettingsIcon, Sparkles, BookOpen, ChevronDown, List } from 'lucide-react'
 import type { Feature } from './lib/types'
 import { startAgent } from './lib/api'
 
@@ -49,7 +50,7 @@ function App() {
   const [debugPanelHeight, setDebugPanelHeight] = useState(288) // Default height
   const [assistantOpen, setAssistantOpen] = useState(false)
   const [isSpecCreating, setIsSpecCreating] = useState(false)
-  const [logsTab, setLogsTab] = useState<'live' | 'workers' | 'devserver' | 'terminal'>('live')
+  const [logsTab, setLogsTab] = useState<'live' | 'workers' | 'devserver' | 'terminal' | 'activity'>('live')
   const [workerLogFocus, setWorkerLogFocus] = useState<string | null>(null)
   const [showSettings, setShowSettings] = useState(false)
   const [route, setRoute] = useState<'main' | 'settings'>(() =>
@@ -202,6 +203,13 @@ function App() {
         e.preventDefault()
         setLogsTab('live')
         setDebugOpen(prev => !prev)
+      }
+
+      // M : Mission Control (activity feed)
+      if ((e.key === 'm' || e.key === 'M') && selectedProject) {
+        e.preventDefault()
+        setLogsTab('activity')
+        setDebugOpen(true)
       }
 
       // N : Add new feature (when project selected)
@@ -574,6 +582,17 @@ function App() {
                           <FileText size={16} />
                           Logs
                         </button>
+                        <button
+                          onClick={() => {
+                            setToolsOpen(false)
+                            setLogsTab('activity')
+                            setDebugOpen(true)
+                          }}
+                          className="neo-btn w-full text-sm mt-2 flex items-center gap-2"
+                        >
+                          <List size={16} />
+                          Mission Control
+                        </button>
                       </div>
                     )}
                   </div>
@@ -695,6 +714,16 @@ function App() {
               percentage={progress.percentage}
               isConnected={wsState.isConnected}
             />
+
+            {selectedProject && (
+              <RecentActivityCard
+                projectName={selectedProject}
+                onOpen={() => {
+                  setLogsTab('activity')
+                  setDebugOpen(true)
+                }}
+              />
+            )}
 
             {/* Agent Status Grid - show when parallel agents are running */}
             {selectedProject && (
@@ -834,6 +863,7 @@ function App() {
           <AssistantFAB
             onClick={() => setAssistantOpen(!assistantOpen)}
             isOpen={assistantOpen}
+            bottomOffsetPx={(debugOpen ? debugPanelHeight : 40) + 24}
           />
           <AssistantPanel
             projectName={selectedProject}

@@ -7,10 +7,11 @@
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { ChevronUp, ChevronDown, Trash2, Terminal, GripHorizontal, FileText, Server } from 'lucide-react'
+import { ChevronUp, ChevronDown, Trash2, Terminal, GripHorizontal, FileText, Server, List } from 'lucide-react'
 import { WorkerLogsPanel } from './WorkerLogsPanel'
 import { DevServerControl } from './DevServerControl'
 import { TerminalTabsPanel } from './TerminalTabsPanel'
+import { ActivityFeedPanel } from './ActivityFeedPanel'
 
 const MIN_HEIGHT = 150
 const MAX_HEIGHT = 600
@@ -24,7 +25,7 @@ interface DebugLogViewerProps {
   onClear: () => void
   onHeightChange?: (height: number) => void
   projectName?: string | null
-  openTab?: 'live' | 'workers' | 'devserver' | 'terminal'
+  openTab?: 'live' | 'workers' | 'devserver' | 'terminal' | 'activity'
   workerLogFile?: string | null
   onWorkerLogFileChange?: (name: string | null) => void
 }
@@ -45,7 +46,7 @@ export function DebugLogViewer({
   const scrollRef = useRef<HTMLDivElement>(null)
   const [autoScroll, setAutoScroll] = useState(true)
   const [isResizing, setIsResizing] = useState(false)
-  const [tab, setTab] = useState<'live' | 'workers' | 'devserver' | 'terminal'>(openTab)
+  const [tab, setTab] = useState<'live' | 'workers' | 'devserver' | 'terminal' | 'activity'>(openTab)
   const [panelHeight, setPanelHeight] = useState(() => {
     // Load saved height from localStorage
     const saved = localStorage.getItem(STORAGE_KEY)
@@ -188,6 +189,8 @@ export function DebugLogViewer({
             <FileText size={16} className="text-cyan-300" />
           ) : tab === 'devserver' ? (
             <Server size={16} className="text-yellow-300" />
+          ) : tab === 'activity' ? (
+            <List size={16} className="text-purple-300" />
           ) : (
             <Terminal size={16} className="text-green-400" />
           )}
@@ -202,6 +205,9 @@ export function DebugLogViewer({
           </span>
           <span className="px-1.5 py-0.5 text-xs font-mono bg-[#333] text-gray-500 rounded" title="Open terminal tab">
             T
+          </span>
+          <span className="px-1.5 py-0.5 text-xs font-mono bg-[#333] text-gray-500 rounded" title="Open Mission Control activity feed">
+            M
           </span>
 
           {tab === 'live' && logs.length > 0 && (
@@ -251,21 +257,33 @@ export function DebugLogViewer({
               >
                 Dev
               </button>
-              <button
-                className={`px-2 py-1 text-xs font-mono rounded border border-[#333] ${
-                  tab === 'terminal' ? 'bg-[#333] text-white' : 'text-gray-400 hover:bg-[#222]'
-                }`}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setTab('terminal')
-                }}
-                title="Interactive terminal"
-              >
-                Term
-              </button>
-            </div>
-          )}
-        </div>
+               <button
+                 className={`px-2 py-1 text-xs font-mono rounded border border-[#333] ${
+                   tab === 'terminal' ? 'bg-[#333] text-white' : 'text-gray-400 hover:bg-[#222]'
+                 }`}
+                 onClick={(e) => {
+                   e.stopPropagation()
+                   setTab('terminal')
+                 }}
+                 title="Interactive terminal"
+               >
+                 Term
+               </button>
+               <button
+                 className={`px-2 py-1 text-xs font-mono rounded border border-[#333] ${
+                   tab === 'activity' ? 'bg-[#333] text-white' : 'text-gray-400 hover:bg-[#222]'
+                 }`}
+                 onClick={(e) => {
+                   e.stopPropagation()
+                   setTab('activity')
+                 }}
+                 title="Mission Control activity feed"
+               >
+                 Activity
+               </button>
+             </div>
+           )}
+         </div>
 
         <div className="flex items-center gap-2">
           {isOpen && tab === 'live' && (
@@ -347,9 +365,17 @@ export function DebugLogViewer({
                 </div>
               )}
             </div>
-          ) : (
-            <div className="h-full p-2 overflow-hidden">
-              {projectName ? (
+           ) : (
+             <div className="h-full p-2 overflow-hidden">
+              {tab === 'activity' ? (
+                projectName ? (
+                  <ActivityFeedPanel projectName={projectName} isActive={isOpen} />
+                ) : (
+                  <div className="flex items-center justify-center h-full text-gray-500 font-mono text-sm">
+                    Select a project to view activity.
+                  </div>
+                )
+              ) : projectName ? (
                 <TerminalTabsPanel projectName={projectName} />
               ) : (
                 <div className="flex items-center justify-center h-full text-gray-500 font-mono text-sm">

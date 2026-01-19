@@ -242,6 +242,7 @@
     background: var(--color-neo-card);
     border: 2px solid var(--color-neo-border);
     box-shadow: var(--shadow-neo-md);
+    border-radius: var(--radius-lg);
     transition: transform var(--transition-neo-fast), box-shadow var(--transition-neo-fast);
   }
 
@@ -289,19 +290,26 @@
     color: var(--color-neo-text);
     background-color: var(--color-neo-card);
     border: 2px solid var(--color-neo-border);
+    border-radius: var(--radius-md);
     box-shadow: var(--shadow-neo-md);
     transition: transform var(--transition-neo-fast), box-shadow var(--transition-neo-fast);
     cursor: pointer;
   }
 
   .neo-btn:hover {
-    transform: translate(-1px, -1px);
     box-shadow: var(--shadow-neo-lg);
   }
 
   .neo-btn:active {
-    transform: translate(1px, 1px);
     box-shadow: var(--shadow-neo-sm);
+  }
+
+  .neo-btn.neo-hover-lift:hover {
+    transform: translate(-1px, -1px);
+  }
+
+  .neo-btn.neo-hover-lift:active {
+    transform: translate(1px, 1px);
   }
 
   .neo-btn:disabled {

@@ -23,6 +23,8 @@ import type {
   AssistantConversationDetail,
   WorkerLogsListResponse,
   WorkerLogTailResponse,
+  ActivityEvent,
+  ActivityClearResponse,
   PruneWorkerLogsRequest,
   PruneWorkerLogsResponse,
   AdvancedSettings,
@@ -280,6 +282,27 @@ export async function pruneWorkerLogs(
 export async function deleteWorkerLog(projectName: string, filename: string): Promise<void> {
   await fetchJSON(`/projects/${encodeURIComponent(projectName)}/logs/worker/${encodeURIComponent(filename)}`, {
     method: 'DELETE',
+  })
+}
+
+// ============================================================================
+// Activity API (Mission Control)
+// ============================================================================
+
+export async function listActivityEvents(
+  projectName: string,
+  opts: { limit?: number; afterId?: number } = {}
+): Promise<ActivityEvent[]> {
+  const params = new URLSearchParams()
+  params.set('limit', String(opts.limit ?? 200))
+  if (opts.afterId) params.set('after_id', String(opts.afterId))
+  const qs = params.toString()
+  return fetchJSON(`/projects/${encodeURIComponent(projectName)}/activity${qs ? `?${qs}` : ''}`)
+}
+
+export async function clearActivityEvents(projectName: string): Promise<ActivityClearResponse> {
+  return fetchJSON(`/projects/${encodeURIComponent(projectName)}/activity/clear`, {
+    method: 'POST',
   })
 }
 

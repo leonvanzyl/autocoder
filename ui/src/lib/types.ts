@@ -183,6 +183,22 @@ export interface WorkerLogTailResponse {
   lines: string[]
 }
 
+// Mission Control activity feed
+export interface ActivityEvent {
+  id: number
+  created_at: string
+  level: string
+  event_type: string
+  message: string
+  agent_id?: string | null
+  feature_id?: number | null
+  data?: Record<string, unknown> | null
+}
+
+export interface ActivityClearResponse {
+  deleted: number
+}
+
 export interface PruneWorkerLogsRequest {
   keep_days: number
   keep_files: number
@@ -262,6 +278,8 @@ export interface AdvancedSettings {
   logs_keep_files: number
   logs_max_total_mb: number
   logs_prune_artifacts: boolean
+  activity_keep_days: number
+  activity_keep_rows: number
 
   diagnostics_fixtures_dir: string
   ui_host: string
