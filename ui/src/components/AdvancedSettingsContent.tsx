@@ -1226,8 +1226,12 @@ export function AdvancedSettingsContent() {
                     >
                       <option value="claude">claude</option>
                       <option value="none">none</option>
-                      <option value="codex">codex</option>
-                      <option value="gemini">gemini</option>
+                      <option value="codex" disabled={setupStatus ? !setupStatus.codex_cli : false}>
+                        codex
+                      </option>
+                      <option value="gemini" disabled={setupStatus ? !setupStatus.gemini_cli : false}>
+                        gemini
+                      </option>
                     </select>
                   </div>
                   <SelectField
@@ -1281,7 +1285,7 @@ export function AdvancedSettingsContent() {
                         disabled={setupStatus ? !setupStatus.codex_cli && !setupStatus.gemini_cli : false}
                       >
                         {labelProvider('multi_cli')}
-                  </option>
+                      </option>
                     </select>
                   </div>
                   {draft.initializer_provider === 'multi_cli' ? (
@@ -1294,24 +1298,41 @@ export function AdvancedSettingsContent() {
                       rawPlaceholder="e.g. codex,gemini"
                     />
                   ) : null}
-                  <div className="neo-card p-3">
-                    <div className="font-display font-bold text-sm mb-2">Synthesizer</div>
-                    <select
-                      value={draft.initializer_synthesizer}
-                      onChange={(e) => setDraft({ ...draft, initializer_synthesizer: e.target.value as AdvancedSettings['initializer_synthesizer'] })}
-                      className="neo-btn text-sm py-2 px-3 bg-white border-3 border-[var(--color-neo-border)] font-display w-full"
-                    >
-                      <option value="claude">claude</option>
-                      <option value="none">none</option>
-                      <option value="codex">codex</option>
-                      <option value="gemini">gemini</option>
-                    </select>
-                  </div>
-                  <Field
-                    label="Timeout (s)"
-                    value={draft.initializer_timeout_s}
-                    onChange={(v) => setDraft({ ...draft, initializer_timeout_s: clampInt(v, 30, 3600) })}
-                  />
+                  {draft.initializer_provider === 'claude' ? (
+                    <div className="neo-card p-3 bg-[var(--color-neo-bg)] self-start">
+                      <div className="font-display font-bold text-sm mb-1">Multi-model settings</div>
+                      <div className="text-xs text-[var(--color-neo-text-secondary)]">
+                        Claude initializer runs inside the main agent loop. Synthesizer/timeout/agent-order only apply to Codex/Gemini providers.
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="neo-card p-3">
+                      <div className="font-display font-bold text-sm mb-2">Synthesizer</div>
+                      <select
+                        value={draft.initializer_synthesizer}
+                        onChange={(e) =>
+                          setDraft({ ...draft, initializer_synthesizer: e.target.value as AdvancedSettings['initializer_synthesizer'] })
+                        }
+                        className="neo-btn text-sm py-2 px-3 bg-white border-3 border-[var(--color-neo-border)] font-display w-full"
+                      >
+                        <option value="claude">claude</option>
+                        <option value="none">none</option>
+                        <option value="codex" disabled={setupStatus ? !setupStatus.codex_cli : false}>
+                          codex
+                        </option>
+                        <option value="gemini" disabled={setupStatus ? !setupStatus.gemini_cli : false}>
+                          gemini
+                        </option>
+                      </select>
+                    </div>
+                  )}
+                  {draft.initializer_provider !== 'claude' ? (
+                    <Field
+                      label="Timeout (s)"
+                      value={draft.initializer_timeout_s}
+                      onChange={(v) => setDraft({ ...draft, initializer_timeout_s: clampInt(v, 30, 3600) })}
+                    />
+                  ) : null}
                   <Field
                     label="Stage threshold"
                     value={draft.initializer_stage_threshold}

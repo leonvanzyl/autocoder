@@ -17,7 +17,9 @@ export function GsdToSpecPanel({ projectName }: { projectName: string }) {
     if (!setup) return
     if (!setup.codex_cli) setUseCodex(false)
     if (!setup.gemini_cli) setUseGemini(false)
-  }, [setup])
+    if (!setup.codex_cli && synthesizer === 'codex') setSynthesizer('claude')
+    if (!setup.gemini_cli && synthesizer === 'gemini') setSynthesizer('claude')
+  }, [setup, synthesizer])
 
   const agentsCsv = useMemo(() => {
     const a: string[] = []
@@ -89,8 +91,12 @@ export function GsdToSpecPanel({ projectName }: { projectName: string }) {
           >
             <option value="claude">claude (default)</option>
             <option value="none">none</option>
-            <option value="codex">codex</option>
-            <option value="gemini">gemini</option>
+            <option value="codex" disabled={setup ? !setup.codex_cli : false}>
+              codex
+            </option>
+            <option value="gemini" disabled={setup ? !setup.gemini_cli : false}>
+              gemini
+            </option>
           </select>
         </div>
 

@@ -30,7 +30,9 @@ export function MultiModelGeneratePanel({
     if (!setupStatus) return
     if (!setupStatus.codex_cli) setUseCodex(false)
     if (!setupStatus.gemini_cli) setUseGemini(false)
-  }, [setupStatus])
+    if (!setupStatus.codex_cli && synthesizer === 'codex') setSynthesizer('claude')
+    if (!setupStatus.gemini_cli && synthesizer === 'gemini') setSynthesizer('claude')
+  }, [setupStatus, synthesizer])
 
   const agentsCsv = useMemo(() => {
     const agents: string[] = []
@@ -98,8 +100,12 @@ export function MultiModelGeneratePanel({
           >
             <option value="claude">claude (default)</option>
             <option value="none">none</option>
-            <option value="codex">codex</option>
-            <option value="gemini">gemini</option>
+            <option value="codex" disabled={setupStatus ? !setupStatus.codex_cli : false}>
+              codex
+            </option>
+            <option value="gemini" disabled={setupStatus ? !setupStatus.gemini_cli : false}>
+              gemini
+            </option>
           </select>
         </div>
 
