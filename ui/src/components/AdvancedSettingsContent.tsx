@@ -976,26 +976,41 @@ export function AdvancedSettingsContent() {
                     </div>
                   </div>
 
-                  <Field
-                    label="Patch iterations"
-                    value={draft.worker_patch_max_iterations}
-                    onChange={(v) => setDraft({ ...draft, worker_patch_max_iterations: clampInt(v, 1, 20) })}
-                  />
+                  {draft.worker_provider === 'claude' ? (
+                    <div className="neo-card p-3 bg-[var(--color-neo-bg)] self-start">
+                      <div className="font-display font-bold text-sm mb-1">Patch settings</div>
+                      <div className="text-xs text-[var(--color-neo-text-secondary)]">
+                        You’re using the Claude Agent SDK worker. Patch iterations/order only apply to Codex/Gemini providers.
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <Field
+                        label="Patch iterations"
+                        value={draft.worker_patch_max_iterations}
+                        onChange={(v) => setDraft({ ...draft, worker_patch_max_iterations: clampInt(v, 1, 20) })}
+                      />
 
-                  <CsvAgentOrderField
-                    label="Patch provider order"
-                    value={draft.worker_patch_agents}
-                    onChange={(v) => setDraft({ ...draft, worker_patch_agents: v })}
-                    error={validation.fieldErrors.worker_patch_agents}
-                    availability={{ codex: Boolean(setupStatus?.codex_cli), gemini: Boolean(setupStatus?.gemini_cli) }}
-                    rawPlaceholder="e.g. codex,gemini"
-                  />
+                      {draft.worker_provider === 'multi_cli' ? (
+                        <CsvAgentOrderField
+                          label="Patch provider order"
+                          value={draft.worker_patch_agents}
+                          onChange={(v) => setDraft({ ...draft, worker_patch_agents: v })}
+                          error={validation.fieldErrors.worker_patch_agents}
+                          availability={{ codex: Boolean(setupStatus?.codex_cli), gemini: Boolean(setupStatus?.gemini_cli) }}
+                          rawPlaceholder="e.g. codex,gemini"
+                        />
+                      ) : null}
+                    </>
+                  )}
                 </div>
-                <div className="text-xs text-[var(--color-neo-text-secondary)] mt-2">
-                  <span className="block">
-                    Note: <span className="font-mono">multi_cli</span> uses the order above. Single providers ignore it.
-                  </span>
-                </div>
+                {draft.worker_provider === 'multi_cli' ? (
+                  <div className="text-xs text-[var(--color-neo-text-secondary)] mt-2">
+                    <span className="block">
+                      Note: <span className="font-mono">multi_cli</span> uses the order above.
+                    </span>
+                  </div>
+                ) : null}
               </div>
 
               <details
@@ -1070,15 +1085,16 @@ export function AdvancedSettingsContent() {
                           </option>
                         </select>
                       </div>
-                      <CsvAgentOrderField
-                        label="Order"
-                        value={draft.qa_subagent_agents}
-                        onChange={(v) => setDraft({ ...draft, qa_subagent_agents: v })}
-                        error={validation.fieldErrors.qa_subagent_agents}
-                        availability={{ codex: Boolean(setupStatus?.codex_cli), gemini: Boolean(setupStatus?.gemini_cli) }}
-                        rawPlaceholder="e.g. codex,gemini"
-                        disabled={draft.qa_subagent_provider !== 'multi_cli'}
-                      />
+                      {draft.qa_subagent_provider === 'multi_cli' ? (
+                        <CsvAgentOrderField
+                          label="Order"
+                          value={draft.qa_subagent_agents}
+                          onChange={(v) => setDraft({ ...draft, qa_subagent_agents: v })}
+                          error={validation.fieldErrors.qa_subagent_agents}
+                          availability={{ codex: Boolean(setupStatus?.codex_cli), gemini: Boolean(setupStatus?.gemini_cli) }}
+                          rawPlaceholder="e.g. codex,gemini"
+                        />
+                      ) : null}
                     </div>
                     <div className="text-xs text-[var(--color-neo-text-secondary)] mt-2">
                       Spawns a short-lived fixer after Gatekeeper rejects a feature (reuses the same branch; no new scope).
@@ -1264,18 +1280,19 @@ export function AdvancedSettingsContent() {
                         disabled={setupStatus ? !setupStatus.codex_cli && !setupStatus.gemini_cli : false}
                       >
                         {labelProvider('multi_cli')}
-                      </option>
+                  </option>
                     </select>
                   </div>
-                  <CsvAgentOrderField
-                    label="Agents"
-                    value={draft.initializer_agents}
-                    onChange={(v) => setDraft({ ...draft, initializer_agents: v })}
-                    error={validation.fieldErrors.initializer_agents}
-                    availability={{ codex: Boolean(setupStatus?.codex_cli), gemini: Boolean(setupStatus?.gemini_cli) }}
-                    rawPlaceholder="e.g. codex,gemini"
-                    disabled={draft.initializer_provider !== 'multi_cli'}
-                  />
+                  {draft.initializer_provider === 'multi_cli' ? (
+                    <CsvAgentOrderField
+                      label="Agents"
+                      value={draft.initializer_agents}
+                      onChange={(v) => setDraft({ ...draft, initializer_agents: v })}
+                      error={validation.fieldErrors.initializer_agents}
+                      availability={{ codex: Boolean(setupStatus?.codex_cli), gemini: Boolean(setupStatus?.gemini_cli) }}
+                      rawPlaceholder="e.g. codex,gemini"
+                    />
+                  ) : null}
                   <div className="neo-card p-3">
                     <div className="font-display font-bold text-sm mb-2">Synthesizer</div>
                     <select
