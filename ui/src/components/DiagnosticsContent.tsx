@@ -5,7 +5,7 @@
  * Runs deterministic end-to-end fixtures to validate core reliability pipelines.
  */
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Activity, CheckCircle2, Copy, Play, RefreshCcw, Save, XCircle } from 'lucide-react'
 import { useAdvancedSettings, useUpdateAdvancedSettings } from '../hooks/useAdvancedSettings'
 import {
@@ -18,6 +18,7 @@ import {
 import { useHealthCheck, useProjects, useSetupStatus } from '../hooks/useProjects'
 import { useCleanupQueue, useClearCleanupQueue, useProcessCleanupQueue } from '../hooks/useWorktrees'
 import type { EngineId } from '../lib/types'
+import { InlineNotice, type InlineNoticeType } from './InlineNotice'
 
 export function DiagnosticsContent() {
   const advanced = useAdvancedSettings()
@@ -41,6 +42,8 @@ export function DiagnosticsContent() {
   const [tailMaxChars, setTailMaxChars] = useState<number>(8000)
   const [selectedProject, setSelectedProject] = useState<string | null>(null)
   const [cleanupMaxItems, setCleanupMaxItems] = useState<number>(5)
+  const [notice, setNotice] = useState<{ type: InlineNoticeType; message: string } | null>(null)
+  const noticeTimer = useRef<number | null>(null)
 
   const tail = useDiagnosticsRunTail(selectedRunName, tailMaxChars)
   const cleanup = useCleanupQueue(selectedProject)
@@ -53,23 +56,38 @@ export function DiagnosticsContent() {
   }
 
   const canSave = !!advanced.data && !updateAdvanced.isPending
+  const flash = (type: InlineNoticeType, message: string) => {
+    setNotice({ type, message })
+    if (noticeTimer.current) window.clearTimeout(noticeTimer.current)
+    noticeTimer.current = window.setTimeout(() => setNotice(null), 2500)
+  }
   const onSaveOutDir = async () => {
     if (!advanced.data) return
-    await updateAdvanced.mutateAsync({
-      ...advanced.data,
-      diagnostics_fixtures_dir: outDirDraft,
-    })
-    fixtures.refetch()
+    try {
+      await updateAdvanced.mutateAsync({
+        ...advanced.data,
+        diagnostics_fixtures_dir: outDirDraft,
+      })
+      fixtures.refetch()
+      flash('success', 'Diagnostics directory saved.')
+    } catch (e: any) {
+      flash('error', String(e?.message || e))
+    }
   }
 
   const onUseDefault = async () => {
     setOutDirDraft('')
     if (!advanced.data) return
-    await updateAdvanced.mutateAsync({
-      ...advanced.data,
-      diagnostics_fixtures_dir: '',
-    })
-    fixtures.refetch()
+    try {
+      await updateAdvanced.mutateAsync({
+        ...advanced.data,
+        diagnostics_fixtures_dir: '',
+      })
+      fixtures.refetch()
+      flash('success', 'Diagnostics directory reset to default.')
+    } catch (e: any) {
+      flash('error', String(e?.message || e))
+    }
   }
 
   // Keep the draft in sync with server settings (first load).
@@ -91,6 +109,12 @@ export function DiagnosticsContent() {
     const first = projects.data?.[0]
     if (first?.name) setSelectedProject(first.name)
   }, [projects.data, selectedProject])
+
+  useEffect(() => {
+    return () => {
+      if (noticeTimer.current) window.clearTimeout(noticeTimer.current)
+    }
+  }, [])
 
 
   // Auto-select the newest run when a run completes.
@@ -148,6 +172,10 @@ export function DiagnosticsContent() {
           </button>
         </div>
       </div>
+
+      {notice && (
+        <InlineNotice type={notice.type} message={notice.message} onClose={() => setNotice(null)} />
+      )}
 
       <div className="neo-card p-4">
         <div className="font-display font-bold uppercase mb-3">System Status</div>

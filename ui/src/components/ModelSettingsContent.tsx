@@ -6,9 +6,10 @@
  * (Wrapped by `ModelSettingsPanel` and also embedded in the unified Settings modal.)
  */
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Brain, Info } from 'lucide-react'
 import { useApplyPreset, useModelSettings, usePresets, useUpdateModelSettings } from '../hooks/useModelSettings'
+import { InlineNotice, type InlineNoticeType } from './InlineNotice'
 import { HelpModal } from './HelpModal'
 
 export function ModelSettingsContent({
@@ -33,6 +34,8 @@ export function ModelSettingsContent({
   })
   const [assistantModel, setAssistantModel] = useState<'auto' | 'opus' | 'sonnet' | 'haiku'>('auto')
   const [showHelp, setShowHelp] = useState(false)
+  const [notice, setNotice] = useState<{ type: InlineNoticeType; message: string } | null>(null)
+  const noticeTimer = useRef<number | null>(null)
 
   useEffect(() => {
     if (settings?.preset) setSelectedPreset(settings.preset)
@@ -54,10 +57,27 @@ export function ModelSettingsContent({
     }
   }, [settings])
 
-  const handlePresetChange = (preset: string) => {
+  useEffect(() => {
+    return () => {
+      if (noticeTimer.current) window.clearTimeout(noticeTimer.current)
+    }
+  }, [])
+
+  const flash = (type: InlineNoticeType, message: string) => {
+    setNotice({ type, message })
+    if (noticeTimer.current) window.clearTimeout(noticeTimer.current)
+    noticeTimer.current = window.setTimeout(() => setNotice(null), 2500)
+  }
+
+  const handlePresetChange = async (preset: string) => {
     setSelectedPreset(preset)
-    applyPreset.mutate({ projectName, preset })
-    onPresetApplied?.(preset)
+    try {
+      await applyPreset.mutateAsync({ projectName, preset })
+      onPresetApplied?.(preset)
+      flash('success', 'Preset applied.')
+    } catch (e: any) {
+      flash('error', String(e?.message || e))
+    }
   }
 
   const selectedCustomModels = useMemo(() => {
@@ -71,20 +91,36 @@ export function ModelSettingsContent({
   const applyCustomModels = async () => {
     if (selectedCustomModels.length === 0) return
     setMode('custom')
-    await updateSettings.mutateAsync({ projectName, settings: { available_models: selectedCustomModels } })
-    // The backend will set preset to "custom" unless it matches a known preset.
-    onPresetApplied?.('custom')
+    try {
+      await updateSettings.mutateAsync({ projectName, settings: { available_models: selectedCustomModels } })
+      // The backend will set preset to "custom" unless it matches a known preset.
+      onPresetApplied?.('custom')
+      flash('success', 'Custom model selection saved.')
+    } catch (e: any) {
+      flash('error', String(e?.message || e))
+    }
   }
 
   const handleAutoDetectToggle = () => {
     const newValue = !autoDetect
     setAutoDetect(newValue)
-    updateSettings.mutate({ projectName, settings: { auto_detect_simple: newValue } })
+    updateSettings.mutate(
+      { projectName, settings: { auto_detect_simple: newValue } },
+      {
+        onSuccess: () => flash('success', 'Auto-detect updated.'),
+        onError: (e: any) => flash('error', String(e?.message || e)),
+      }
+    )
   }
 
   const applyAssistantModel = async (next: 'auto' | 'opus' | 'sonnet' | 'haiku') => {
     setAssistantModel(next)
-    await updateSettings.mutateAsync({ projectName, settings: { assistant_model: next === 'auto' ? null : next } })
+    try {
+      await updateSettings.mutateAsync({ projectName, settings: { assistant_model: next === 'auto' ? null : next } })
+      flash('success', 'Assistant model saved.')
+    } catch (e: any) {
+      flash('error', String(e?.message || e))
+    }
   }
 
   if (isLoading) {
@@ -97,6 +133,9 @@ export function ModelSettingsContent({
 
   return (
     <div className="space-y-6">
+      {notice && (
+        <InlineNotice type={notice.type} message={notice.message} onClose={() => setNotice(null)} />
+      )}
       {/* Mode toggle (compact) */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="font-display font-bold uppercase">Models</div>

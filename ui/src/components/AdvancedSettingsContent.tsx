@@ -6,12 +6,13 @@
  * Intended to be embedded in a page (not a modal).
  */
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Info, RotateCcw, Save, SlidersHorizontal } from 'lucide-react'
 import { useAdvancedSettings, useUpdateAdvancedSettings } from '../hooks/useAdvancedSettings'
 import { useSetupStatus } from '../hooks/useProjects'
 import type { AdvancedSettings } from '../lib/types'
 import { ConfirmationDialog } from './ConfirmationDialog'
+import { InlineNotice, type InlineNoticeType } from './InlineNotice'
 import { HelpModal } from './HelpModal'
 
 function clampInt(v: number, min: number, max: number): number {
@@ -322,6 +323,8 @@ export function AdvancedSettingsContent() {
   const [draft, setDraft] = useState<AdvancedSettings>(DEFAULTS)
   const [tab, setTab] = useState<'automation' | 'gatekeeper' | 'logs' | 'retry' | 'ports' | 'ui'>('automation')
   const [helpTopic, setHelpTopic] = useState<HelpTopic | null>(null)
+  const [notice, setNotice] = useState<{ type: InlineNoticeType; message: string } | null>(null)
+  const noticeTimer = useRef<number | null>(null)
   const [confirmToggle, setConfirmToggle] = useState<{
     field: keyof AdvancedSettings
     next: boolean
@@ -334,6 +337,12 @@ export function AdvancedSettingsContent() {
   useEffect(() => {
     if (data) setDraft(data)
   }, [data])
+
+  useEffect(() => {
+    return () => {
+      if (noticeTimer.current) window.clearTimeout(noticeTimer.current)
+    }
+  }, [])
 
   const requestDangerToggle = (
     field: keyof AdvancedSettings,
@@ -413,9 +422,20 @@ export function AdvancedSettingsContent() {
 
   const saveDisabled = isLoading || update.isPending || validation.errors.length > 0
 
+  const flash = (type: InlineNoticeType, message: string) => {
+    setNotice({ type, message })
+    if (noticeTimer.current) window.clearTimeout(noticeTimer.current)
+    noticeTimer.current = window.setTimeout(() => setNotice(null), 2500)
+  }
+
   const onSave = async () => {
     if (validation.errors.length > 0) return
-    await update.mutateAsync(draft)
+    try {
+      await update.mutateAsync(draft)
+      flash('success', 'Advanced settings saved.')
+    } catch (e: any) {
+      flash('error', String(e?.message || e))
+    }
   }
 
   return (
@@ -496,6 +516,10 @@ export function AdvancedSettingsContent() {
           </button>
         </div>
       </div>
+
+      {notice && (
+        <InlineNotice type={notice.type} message={notice.message} onClose={() => setNotice(null)} />
+      )}
 
       {validation.errors.length > 0 && (
         <div className="neo-card p-4 bg-[var(--color-neo-danger)]/10 border-[var(--color-neo-danger)]">

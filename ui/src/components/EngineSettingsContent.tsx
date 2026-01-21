@@ -5,11 +5,12 @@
  * Per-project engine chains for workers, QA, review, and spec workflows.
  */
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowDown, ArrowUp, Info, RefreshCcw, Save, Wrench } from 'lucide-react'
 import { useEngineSettings, useUpdateEngineSettings } from '../hooks/useEngineSettings'
 import { useSetupStatus } from '../hooks/useProjects'
 import type { EngineId, EngineSettings, EngineStage } from '../lib/types'
+import { InlineNotice, type InlineNoticeType } from './InlineNotice'
 import { HelpModal } from './HelpModal'
 
 type StageMeta = {
@@ -87,10 +88,20 @@ export function EngineSettingsContent({ projectName }: { projectName: string }) 
 
   const [draft, setDraft] = useState<EngineSettings | null>(null)
   const [showHelp, setShowHelp] = useState(false)
+  const [notice, setNotice] = useState<{ type: InlineNoticeType; message: string } | null>(null)
+  const noticeTimer = useRef<number | null>(null)
 
   useEffect(() => {
     if (data) setDraft(data)
   }, [data])
+
+  useEffect(() => {
+    return () => {
+      if (noticeTimer.current) {
+        window.clearTimeout(noticeTimer.current)
+      }
+    }
+  }, [])
 
   const availability = useMemo(() => {
     const hasCodex = Boolean(setup?.codex_cli)
@@ -144,9 +155,20 @@ export function EngineSettingsContent({ projectName }: { projectName: string }) 
     updateChain(stage, (chain) => ({ ...chain, engines: chain.engines.includes(engine) ? chain.engines : [...chain.engines, engine] }))
   }
 
+  const flash = (type: InlineNoticeType, message: string) => {
+    setNotice({ type, message })
+    if (noticeTimer.current) window.clearTimeout(noticeTimer.current)
+    noticeTimer.current = window.setTimeout(() => setNotice(null), 2500)
+  }
+
   const onSave = async () => {
     if (!draft) return
-    await update.mutateAsync({ projectName, settings: draft })
+    try {
+      await update.mutateAsync({ projectName, settings: draft })
+      flash('success', 'Engine settings saved.')
+    } catch (e: any) {
+      flash('error', String(e?.message || e))
+    }
   }
 
   return (
@@ -192,6 +214,10 @@ export function EngineSettingsContent({ projectName }: { projectName: string }) 
           </div>
         </div>
       </div>
+
+      {notice && (
+        <InlineNotice type={notice.type} message={notice.message} onClose={() => setNotice(null)} />
+      )}
 
       {validation.errors.length > 0 && (
         <div className="neo-card p-4 bg-[var(--color-neo-danger)]/10 border-[var(--color-neo-danger)]">

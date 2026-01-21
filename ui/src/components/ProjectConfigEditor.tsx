@@ -5,11 +5,12 @@
  * Edits the target project's `autocoder.yaml` (Gatekeeper verification commands + review config).
  */
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { FileText, RefreshCw, Save } from 'lucide-react'
 import { useAutocoderYaml, useUpdateAutocoderYaml } from '../hooks/useProjectConfig'
 import { useProjects } from '../hooks/useProjects'
 import * as api from '../lib/api'
+import { InlineNotice, type InlineNoticeType } from './InlineNotice'
 
 const TEMPLATE = `# autocoder.yaml
 # Controls Gatekeeper verification for this project.
@@ -47,6 +48,8 @@ export function ProjectConfigEditor({ projectName }: { projectName: string }) {
   const [dirty, setDirty] = useState(false)
   const [importFrom, setImportFrom] = useState('')
   const [importError, setImportError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<{ type: InlineNoticeType; message: string } | null>(null)
+  const noticeTimer = useRef<number | null>(null)
 
   useEffect(() => {
     if (!q.data) return
@@ -63,6 +66,18 @@ export function ProjectConfigEditor({ projectName }: { projectName: string }) {
       exists: q.data.exists,
     }
   }, [q.data])
+
+  useEffect(() => {
+    return () => {
+      if (noticeTimer.current) window.clearTimeout(noticeTimer.current)
+    }
+  }, [])
+
+  const flash = (type: InlineNoticeType, message: string) => {
+    setNotice({ type, message })
+    if (noticeTimer.current) window.clearTimeout(noticeTimer.current)
+    noticeTimer.current = window.setTimeout(() => setNotice(null), 2500)
+  }
 
   return (
     <div className="neo-card p-4">
@@ -89,8 +104,13 @@ export function ProjectConfigEditor({ projectName }: { projectName: string }) {
           <button
             className="neo-btn neo-btn-primary text-sm"
             onClick={async () => {
-              await save.mutateAsync(draft)
-              setDirty(false)
+              try {
+                await save.mutateAsync(draft)
+                setDirty(false)
+                flash('success', 'Project config saved.')
+              } catch (e: any) {
+                flash('error', String(e?.message || e))
+              }
             }}
             disabled={save.isPending || !dirty}
             title={!dirty ? 'No changes' : 'Save autocoder.yaml'}
@@ -100,6 +120,10 @@ export function ProjectConfigEditor({ projectName }: { projectName: string }) {
           </button>
         </div>
       </div>
+
+      {notice && (
+        <InlineNotice type={notice.type} message={notice.message} onClose={() => setNotice(null)} />
+      )}
 
       {q.isLoading ? (
         <div className="mt-4 text-sm text-[var(--color-neo-text-secondary)]">Loading…</div>
