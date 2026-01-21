@@ -240,6 +240,7 @@ app.include_router(settings_router)
 app.include_router(terminal_router)
 app.include_router(import_project_router)
 app.include_router(logs_router)
+app.include_router(security_router)
 
 
 # ============================================================================
