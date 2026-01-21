@@ -9,6 +9,55 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - Fork documentation (FORK_README.md, FORK_CHANGELOG.md)
 - Configuration system via `.autocoder/config.json`
 
+## [2025-01-21] Security Scanning
+
+### Added
+- New module: `security_scanner.py` - Vulnerability detection for code and dependencies
+- New router: `server/routers/security.py` - REST API for security scanning
+
+### Vulnerability Types Detected
+| Type | Description |
+|------|-------------|
+| Dependency | Vulnerable packages via npm audit / pip-audit |
+| Secret | Hardcoded API keys, passwords, tokens |
+| SQL Injection | String formatting in SQL queries |
+| XSS | innerHTML, document.write, dangerouslySetInnerHTML |
+| Command Injection | shell=True, exec/eval with concatenation |
+| Path Traversal | File operations with string concatenation |
+| Insecure Crypto | MD5/SHA1, random.random() |
+
+### API Endpoints
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/security/scan` | POST | Run security scan |
+| `/api/security/reports/{project}` | GET | List scan reports |
+| `/api/security/reports/{project}/{filename}` | GET | Get specific report |
+| `/api/security/latest/{project}` | GET | Get latest report |
+
+### Secret Patterns Detected
+- AWS Access Keys and Secret Keys
+- GitHub Tokens
+- Slack Tokens
+- Private Keys (RSA, EC, DSA)
+- Generic API keys and tokens
+- Database connection strings with credentials
+- JWT tokens
+
+### Usage
+```python
+from security_scanner import scan_project
+
+result = scan_project(project_dir)
+print(f"Found {result.summary['total_issues']} issues")
+print(f"Critical: {result.summary['critical']}")
+print(f"High: {result.summary['high']}")
+```
+
+### Reports
+Reports are saved to `.autocoder/security-reports/security_scan_YYYYMMDD_HHMMSS.json`
+
+---
+
 ## [2025-01-21] Enhanced Logging System
 
 ### Added
@@ -245,7 +294,7 @@ The following features are planned for implementation:
 ### Phase 1: Foundation (Quick Wins)
 - [x] Enhanced Logging - Structured logs with filtering ✅
 - [x] Quality Gates - Lint/type-check before marking passing ✅
-- [ ] Security Scanning - Detect vulnerabilities
+- [x] Security Scanning - Detect vulnerabilities ✅
 
 ### Phase 2: Import Projects
 - [x] Stack Detector - Detect React, Next.js, Express, FastAPI, Django, Vue.js ✅
