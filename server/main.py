@@ -33,6 +33,7 @@ from .routers import (
     import_project_router,
     logs_router,
     projects_router,
+    review_router,
     security_router,
     settings_router,
     spec_creation_router,
@@ -129,6 +130,7 @@ app.include_router(security_router)
 app.include_router(git_workflow_router)
 app.include_router(cicd_router)
 app.include_router(templates_router)
+app.include_router(review_router)
 
 
 # ============================================================================

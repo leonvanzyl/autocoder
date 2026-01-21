@@ -21,6 +21,7 @@ from .security import router as security_router
 from .git_workflow import router as git_workflow_router
 from .cicd import router as cicd_router
 from .templates import router as templates_router
+from .review import router as review_router
 
 __all__ = [
     "projects_router",
@@ -39,4 +40,5 @@ __all__ = [
     "git_workflow_router",
     "cicd_router",
     "templates_router",
+    "review_router",
 ]
