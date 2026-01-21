@@ -9,6 +9,98 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - Fork documentation (FORK_README.md, FORK_CHANGELOG.md)
 - Configuration system via `.autocoder/config.json`
 
+## [2025-01-21] Review Agent
+
+### Added
+- New module: `review_agent.py` - Automatic code review with AST-based analysis
+- New router: `server/routers/review.py` - REST API for code review operations
+
+### Issue Categories
+| Category | Description |
+|----------|-------------|
+| `dead_code` | Unused imports, variables, functions |
+| `naming` | Naming convention violations |
+| `error_handling` | Bare except, silent exception swallowing |
+| `security` | eval(), exec(), shell=True, pickle |
+| `complexity` | Long functions, too many parameters |
+| `documentation` | TODO/FIXME comments |
+| `style` | Code style issues |
+
+### Issue Severities
+- **error** - Critical issues that must be fixed
+- **warning** - Issues that should be addressed
+- **info** - Informational findings
+- **style** - Style suggestions
+
+### API Endpoints
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/review/run` | POST | Run code review |
+| `/api/review/reports/{project}` | GET | List review reports |
+| `/api/review/reports/{project}/{filename}` | GET | Get specific report |
+| `/api/review/create-features` | POST | Create features from issues |
+| `/api/review/reports/{project}/{filename}` | DELETE | Delete a report |
+
+### Python Checks
+- Unused imports (AST-based)
+- Class naming (PascalCase)
+- Function naming (snake_case)
+- Bare except clauses
+- Empty exception handlers
+- Long functions (>50 lines)
+- Too many parameters (>7)
+- Security patterns (eval, exec, pickle, shell=True)
+
+### JavaScript/TypeScript Checks
+- console.log statements
+- TODO/FIXME comments
+- Security patterns (eval, innerHTML, dangerouslySetInnerHTML)
+
+### Usage
+```python
+from review_agent import ReviewAgent, run_review
+
+# Quick review
+report = run_review(project_dir)
+
+# Custom review
+agent = ReviewAgent(
+    project_dir,
+    check_dead_code=True,
+    check_naming=True,
+    check_security=True,
+)
+report = agent.review(commits=["abc123"])
+features = agent.get_issues_as_features()
+```
+
+### Reports
+Reports are saved to `.autocoder/review-reports/review_YYYYMMDD_HHMMSS.json`
+
+### Configuration
+```json
+{
+  "review": {
+    "enabled": true,
+    "trigger_after_features": 5,
+    "checks": {
+      "dead_code": true,
+      "naming": true,
+      "error_handling": true,
+      "security": true,
+      "complexity": true
+    }
+  }
+}
+```
+
+### How to Disable
+```json
+{"review": {"enabled": false}}
+```
+
+---
+
 ## [2025-01-21] Import Wizard UI
 
 ### Added
@@ -524,7 +616,7 @@ The following features are planned for implementation:
 ### Phase 3: Workflow Improvements
 - [x] Feature Branches - Git workflow with feature branches ✅
 - [x] Error Recovery - Handle stuck features, auto-clear on startup ✅
-- [ ] Review Agent - Automatic code review
+- [x] Review Agent - Automatic code review ✅
 - [x] CI/CD Integration - GitHub Actions generation ✅
 
 ### Phase 4: Polish & Ecosystem
