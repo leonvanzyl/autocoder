@@ -9,6 +9,46 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - Fork documentation (FORK_README.md, FORK_CHANGELOG.md)
 - Configuration system via `.autocoder/config.json`
 
+## [2025-01-21] Import Project API (Import Projects - Phase 2)
+
+### Added
+- New router: `server/routers/import_project.py` - REST API for project import
+- New module: `analyzers/feature_extractor.py` - Transform routes to features
+
+### API Endpoints
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/import/analyze` | POST | Analyze directory, detect stack |
+| `/api/import/extract-features` | POST | Generate features from analysis |
+| `/api/import/create-features` | POST | Create features in database |
+| `/api/import/quick-detect` | GET | Quick stack preview |
+
+### Feature Extraction
+- Routes -> "View X page" navigation features
+- API endpoints -> "API: Create/List/Update/Delete X" features
+- Infrastructure -> Startup, health check features
+- Each feature includes category, name, description, steps
+
+### Usage
+```bash
+# 1. Analyze project
+curl -X POST http://localhost:8888/api/import/analyze \
+  -H "Content-Type: application/json" \
+  -d '{"path": "/path/to/existing/project"}'
+
+# 2. Extract features
+curl -X POST http://localhost:8888/api/import/extract-features \
+  -H "Content-Type: application/json" \
+  -d '{"path": "/path/to/existing/project"}'
+
+# 3. Create features in registered project
+curl -X POST http://localhost:8888/api/import/create-features \
+  -H "Content-Type: application/json" \
+  -d '{"project_name": "my-project", "features": [...]}'
+```
+
+---
+
 ## [2025-01-21] Stack Detector (Import Projects - Phase 1)
 
 ### Added
