@@ -450,6 +450,10 @@ function App() {
                     onSelectProject={requestSelectProject}
                     isLoading={projectsLoading}
                     onNewProject={() => setShowNewProjectModal(true)}
+                    onManageProject={(name) => {
+                      requestSelectProject(name)
+                      window.location.hash = '#/settings/config'
+                    }}
                   />
                 </div>
               </div>

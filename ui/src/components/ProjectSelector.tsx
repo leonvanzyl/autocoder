@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ChevronDown, Plus, FolderOpen, Loader2, LayoutGrid } from 'lucide-react'
+import { ChevronDown, Plus, FolderOpen, Loader2, LayoutGrid, Settings } from 'lucide-react'
 import type { ProjectSummary } from '../lib/types'
 
 interface ProjectSelectorProps {
@@ -8,6 +8,7 @@ interface ProjectSelectorProps {
   onSelectProject: (name: string | null) => void
   isLoading: boolean
   onNewProject?: () => void
+  onManageProject?: (name: string) => void
 }
 
 export function ProjectSelector({
@@ -16,6 +17,7 @@ export function ProjectSelector({
   onSelectProject,
   isLoading,
   onNewProject,
+  onManageProject,
 }: ProjectSelectorProps) {
   const [isOpen, setIsOpen] = useState(false)
 
@@ -73,6 +75,16 @@ export function ProjectSelector({
                 >
                   <LayoutGrid size={16} />
                   Dashboard
+                </button>
+                <button
+                  onClick={() => {
+                    onManageProject?.(selectedProject)
+                    setIsOpen(false)
+                  }}
+                  className="w-full neo-dropdown-item flex items-center gap-2"
+                >
+                  <Settings size={16} />
+                  Manage Project
                 </button>
                 <div className="border-t-2 border-[var(--color-neo-border)]" />
               </>
