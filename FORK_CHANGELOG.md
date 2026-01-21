@@ -9,6 +9,44 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - Fork documentation (FORK_README.md, FORK_CHANGELOG.md)
 - Configuration system via `.autocoder/config.json`
 
+## [2025-01-21] Import Wizard UI
+
+### Added
+- New hook: `ui/src/hooks/useImportProject.ts` - State management for import workflow
+- New component: `ui/src/components/ImportProjectModal.tsx` - Multi-step import wizard
+
+### Wizard Steps
+1. **Folder Selection** - Browse and select existing project folder
+2. **Stack Detection** - View detected technologies and confidence scores
+3. **Feature Extraction** - Extract features from routes and endpoints
+4. **Feature Review** - Select which features to import (toggle individual features)
+5. **Registration** - Name and register the project
+6. **Completion** - Features created in database
+
+### Features
+- Category-based feature grouping with expand/collapse
+- Individual feature selection with checkboxes
+- Select All / Deselect All buttons
+- Shows source type (route, endpoint, component)
+- Shows source file location
+- Displays detection confidence scores
+- Progress indicators for each step
+
+### UI Integration
+- Added "Import Existing Project" option to NewProjectModal
+- Users can choose between "Create New" and "Import Existing"
+
+### Usage
+1. Click "New Project" in the UI
+2. Select "Import Existing Project"
+3. Browse and select your project folder
+4. Review detected tech stack
+5. Click "Extract Features"
+6. Select features to import
+7. Enter project name and complete import
+
+---
+
 ## [2025-01-21] Template Library
 
 ### Added
@@ -481,7 +519,7 @@ The following features are planned for implementation:
 - [x] Stack Detector - Detect React, Next.js, Express, FastAPI, Django, Vue.js ✅
 - [x] Feature Extractor - Reverse-engineer features from routes/endpoints ✅
 - [x] Import Wizard API - REST endpoints for import flow ✅
-- [ ] Import Wizard UI - Chat-based project import (UI component)
+- [x] Import Wizard UI - Chat-based project import (UI component) ✅
 
 ### Phase 3: Workflow Improvements
 - [x] Feature Branches - Git workflow with feature branches ✅
