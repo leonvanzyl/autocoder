@@ -39,6 +39,7 @@ from .routers import (
     expand_project_router,
     features_router,
     filesystem_router,
+    import_project_router,
     projects_router,
     schedules_router,
     settings_router,
@@ -236,6 +237,7 @@ app.include_router(filesystem_router)
 app.include_router(assistant_chat_router)
 app.include_router(settings_router)
 app.include_router(terminal_router)
+app.include_router(import_project_router)
 
 
 # ============================================================================
