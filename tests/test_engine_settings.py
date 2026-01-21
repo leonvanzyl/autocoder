@@ -7,6 +7,14 @@ def test_engine_settings_defaults_are_valid():
     settings = EngineSettings.defaults()
     assert settings.chains["implement"].engines
     assert settings.chains["review"].engines
+    assert settings.chains["implement"].engines[0].startswith("claude")
+
+
+def test_engine_settings_legacy_defaults_detectable():
+    legacy = EngineSettings.legacy_defaults()
+    current = EngineSettings.defaults()
+    assert EngineSettings.chains_equal(legacy, legacy)
+    assert not EngineSettings.chains_equal(legacy, current)
 
 
 def test_engine_settings_rejects_invalid_engine():

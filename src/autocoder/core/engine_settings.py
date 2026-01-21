@@ -49,7 +49,7 @@ class EngineChain(BaseModel):
 
 
 class EngineSettings(BaseModel):
-    version: int = 1
+    version: int = 2
     chains: dict[StageId, EngineChain]
 
     @model_validator(mode="after")
@@ -80,7 +80,7 @@ class EngineSettings(BaseModel):
     @staticmethod
     def defaults() -> "EngineSettings":
         return EngineSettings(
-            version=1,
+            version=2,
             chains={
                 "implement": EngineChain(
                     enabled=True,
@@ -115,6 +115,63 @@ class EngineSettings(BaseModel):
             },
         )
 
+    @staticmethod
+    def legacy_defaults() -> "EngineSettings":
+        """
+        Legacy defaults (v1) that ran Codex/Gemini before Claude.
+        Used only for one-time migration detection.
+        """
+        return EngineSettings(
+            version=1,
+            chains={
+                "implement": EngineChain(
+                    enabled=True,
+                    max_iterations=2,
+                    engines=["codex_cli", "gemini_cli", "claude_patch"],
+                ),
+                "qa_fix": EngineChain(
+                    enabled=True,
+                    max_iterations=2,
+                    engines=["codex_cli", "gemini_cli", "claude_patch"],
+                ),
+                "review": EngineChain(
+                    enabled=True,
+                    max_iterations=1,
+                    engines=["claude_review", "codex_cli", "gemini_cli"],
+                ),
+                "spec_draft": EngineChain(
+                    enabled=True,
+                    max_iterations=1,
+                    engines=["codex_cli", "gemini_cli", "claude_spec"],
+                ),
+                "spec_synthesize": EngineChain(
+                    enabled=True,
+                    max_iterations=1,
+                    engines=["claude_spec"],
+                ),
+                "initializer": EngineChain(
+                    enabled=True,
+                    max_iterations=1,
+                    engines=["claude_spec"],
+                ),
+            },
+        )
+
+    @staticmethod
+    def chains_equal(a: "EngineSettings", b: "EngineSettings") -> bool:
+        for stage in ALLOWED_ENGINES_BY_STAGE.keys():
+            ca = a.chains.get(stage)
+            cb = b.chains.get(stage)
+            if ca is None or cb is None:
+                return False
+            if ca.enabled != cb.enabled:
+                return False
+            if ca.max_iterations != cb.max_iterations:
+                return False
+            if list(ca.engines) != list(cb.engines):
+                return False
+        return True
+
 
 ENGINE_SETTINGS_KEY = "engine_settings_v1"
 
@@ -124,7 +181,18 @@ def load_engine_settings(project_dir: str) -> EngineSettings:
     stored = db.get_project_setting(ENGINE_SETTINGS_KEY)
     if stored and isinstance(stored, dict):
         try:
-            return EngineSettings.model_validate(stored)
+            parsed = EngineSettings.model_validate(stored)
+            legacy = EngineSettings.legacy_defaults()
+            if parsed.version < 2 and EngineSettings.chains_equal(parsed, legacy):
+                upgraded = EngineSettings.defaults()
+                save_engine_settings(project_dir, upgraded)
+                return upgraded
+            if parsed.version < 2:
+                # Preserve custom chains, just bump version.
+                upgraded = EngineSettings(version=2, chains=parsed.chains)
+                save_engine_settings(project_dir, upgraded)
+                return upgraded
+            return parsed
         except ValidationError:
             pass
     return EngineSettings.defaults()

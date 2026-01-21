@@ -320,7 +320,7 @@ Feature implementation, QA fixers, review, spec/plan drafts, and initializer dra
 - Configure in **Settings → Engines** or via `GET/PUT /api/engine-settings?project=...`.
 - Order matters: engines run in sequence until a patch/decision succeeds.
 - Patch workers use `src/autocoder/qa_worker.py --mode implement --engines '["codex_cli","gemini_cli","claude_patch"]'`.
- - Defaults are Claude‑first; add Codex/Gemini only when the CLIs are detected and you explicitly enable them.
+- Defaults are Claude‑first; add Codex/Gemini only when the CLIs are detected and you explicitly enable them.
 
 **Codex defaults (nice quality-of-life):** if you leave Codex model settings blank, AutoCoder will try to read Codex CLI defaults from `~/.codex/config.toml` (`model` and `model_reasoning_effort`). You can still override via env (`AUTOCODER_CODEX_MODEL`, `AUTOCODER_CODEX_REASONING_EFFORT`) or in the Web UI (Advanced Settings).
 
