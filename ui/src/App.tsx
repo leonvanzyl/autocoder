@@ -455,6 +455,17 @@ function App() {
                       window.location.hash = '#/settings/config'
                     }}
                   />
+                  {selectedProject && route !== 'settings' && (
+                    <button
+                      onClick={() => {
+                        window.location.hash = '#/settings/config'
+                      }}
+                      className="neo-btn neo-btn-secondary text-xs"
+                      title="Manage project settings"
+                    >
+                      Manage
+                    </button>
+                  )}
                 </div>
               </div>
 
