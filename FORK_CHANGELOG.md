@@ -190,17 +190,18 @@ The following features are planned for implementation:
 
 ### Phase 1: Foundation (Quick Wins)
 - [ ] Enhanced Logging - Structured logs with filtering
-- [ ] Quality Gates - Lint/type-check before marking passing
+- [x] Quality Gates - Lint/type-check before marking passing ✅
 - [ ] Security Scanning - Detect vulnerabilities
 
 ### Phase 2: Import Projects
-- [ ] Stack Detector - Detect React, Next.js, Express, FastAPI, Django, Vue.js
-- [ ] Feature Extractor - Reverse-engineer features from routes/endpoints
-- [ ] Import Wizard UI - Chat-based project import
+- [x] Stack Detector - Detect React, Next.js, Express, FastAPI, Django, Vue.js ✅
+- [x] Feature Extractor - Reverse-engineer features from routes/endpoints ✅
+- [x] Import Wizard API - REST endpoints for import flow ✅
+- [ ] Import Wizard UI - Chat-based project import (UI component)
 
 ### Phase 3: Workflow Improvements
 - [ ] Feature Branches - Git workflow with feature branches
-- [ ] Error Recovery - Handle stuck features, auto-clear on startup
+- [x] Error Recovery - Handle stuck features, auto-clear on startup ✅
 - [ ] Review Agent - Automatic code review
 - [ ] CI/CD Integration - GitHub Actions generation
 
