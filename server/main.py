@@ -36,6 +36,7 @@ from .routers import (
     security_router,
     settings_router,
     spec_creation_router,
+    templates_router,
     terminal_router,
 )
 from .schemas import SetupStatus
@@ -127,6 +128,7 @@ app.include_router(logs_router)
 app.include_router(security_router)
 app.include_router(git_workflow_router)
 app.include_router(cicd_router)
+app.include_router(templates_router)
 
 
 # ============================================================================

@@ -20,6 +20,7 @@ from .logs import router as logs_router
 from .security import router as security_router
 from .git_workflow import router as git_workflow_router
 from .cicd import router as cicd_router
+from .templates import router as templates_router
 
 __all__ = [
     "projects_router",
@@ -37,4 +38,5 @@ __all__ = [
     "security_router",
     "git_workflow_router",
     "cicd_router",
+    "templates_router",
 ]

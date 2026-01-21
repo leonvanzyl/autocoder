@@ -1,0 +1,83 @@
+name: "Admin Dashboard"
+description: "Full-featured admin panel with CRUD operations, charts, and data tables"
+
+tech_stack:
+  frontend: "React"
+  backend: "FastAPI"
+  database: "PostgreSQL"
+  auth: "JWT"
+  styling: "Tailwind CSS"
+
+feature_categories:
+  authentication:
+    - "Admin login"
+    - "Password reset"
+    - "Role-based access control"
+    - "Session management"
+
+  dashboard:
+    - "Overview page"
+    - "Statistics cards"
+    - "Charts (line, bar, pie)"
+    - "Recent activity"
+    - "Quick actions"
+
+  user_management:
+    - "User list with pagination"
+    - "User search and filter"
+    - "Create new user"
+    - "Edit user"
+    - "Delete user"
+    - "User roles management"
+    - "User activity log"
+
+  content_management:
+    - "Content list"
+    - "Create content"
+    - "Edit content"
+    - "Delete content"
+    - "Publish/unpublish"
+    - "Content categories"
+
+  data_tables:
+    - "Sortable columns"
+    - "Filterable columns"
+    - "Pagination"
+    - "Bulk actions"
+    - "Export to CSV"
+    - "Column visibility toggle"
+
+  settings:
+    - "General settings"
+    - "Email templates"
+    - "Notification settings"
+    - "Backup management"
+    - "System logs"
+
+  notifications:
+    - "In-app notifications"
+    - "Notification center"
+    - "Mark as read"
+    - "Notification preferences"
+
+design_tokens:
+  colors:
+    primary: "#3B82F6"
+    secondary: "#8B5CF6"
+    accent: "#F59E0B"
+    background: "#F3F4F6"
+    sidebar: "#1F2937"
+    text: "#111827"
+    muted: "#6B7280"
+  spacing: [4, 8, 12, 16, 24, 32]
+  fonts:
+    heading: "Inter"
+    body: "Inter"
+  border_radius:
+    small: "4px"
+    medium: "6px"
+    large: "8px"
+
+estimated_features: 40
+tags: ["admin", "dashboard", "crud", "management"]
+difficulty: "intermediate"

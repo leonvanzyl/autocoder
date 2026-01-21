@@ -1,0 +1,316 @@
+"""
+Templates Router
+================
+
+REST API endpoints for project templates.
+
+Endpoints:
+- GET /api/templates - List all available templates
+- GET /api/templates/{template_id} - Get template details
+- POST /api/templates/preview - Preview app_spec.txt generation
+- POST /api/templates/apply - Apply template to new project
+"""
+
+import logging
+from pathlib import Path
+from typing import Optional
+
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, Field
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/api/templates", tags=["templates"])
+
+
+# ============================================================================
+# Request/Response Models
+# ============================================================================
+
+
+class TechStackInfo(BaseModel):
+    """Technology stack information."""
+
+    frontend: Optional[str] = None
+    backend: Optional[str] = None
+    database: Optional[str] = None
+    auth: Optional[str] = None
+    styling: Optional[str] = None
+    hosting: Optional[str] = None
+
+
+class DesignTokensInfo(BaseModel):
+    """Design tokens information."""
+
+    colors: dict[str, str] = {}
+    spacing: list[int] = []
+    fonts: dict[str, str] = {}
+    border_radius: dict[str, str] = {}
+
+
+class TemplateInfo(BaseModel):
+    """Template summary information."""
+
+    id: str
+    name: str
+    description: str
+    estimated_features: int
+    tags: list[str] = []
+    difficulty: str = "intermediate"
+
+
+class TemplateDetail(BaseModel):
+    """Full template details."""
+
+    id: str
+    name: str
+    description: str
+    tech_stack: TechStackInfo
+    feature_categories: dict[str, list[str]]
+    design_tokens: DesignTokensInfo
+    estimated_features: int
+    tags: list[str] = []
+    difficulty: str = "intermediate"
+
+
+class TemplateListResponse(BaseModel):
+    """Response with list of templates."""
+
+    templates: list[TemplateInfo]
+    count: int
+
+
+class PreviewRequest(BaseModel):
+    """Request to preview app_spec.txt."""
+
+    template_id: str = Field(..., description="Template identifier")
+    app_name: str = Field(..., description="Application name")
+    customizations: Optional[dict] = Field(None, description="Optional customizations")
+
+
+class PreviewResponse(BaseModel):
+    """Response with app_spec.txt preview."""
+
+    template_id: str
+    app_name: str
+    app_spec_content: str
+    feature_count: int
+
+
+class ApplyRequest(BaseModel):
+    """Request to apply template to a project."""
+
+    template_id: str = Field(..., description="Template identifier")
+    project_name: str = Field(..., description="Name for the new project")
+    project_dir: str = Field(..., description="Directory for the project")
+    customizations: Optional[dict] = Field(None, description="Optional customizations")
+
+
+class ApplyResponse(BaseModel):
+    """Response from applying template."""
+
+    success: bool
+    project_name: str
+    project_dir: str
+    app_spec_path: str
+    feature_count: int
+    message: str
+
+
+# ============================================================================
+# REST Endpoints
+# ============================================================================
+
+
+@router.get("", response_model=TemplateListResponse)
+async def list_templates():
+    """
+    List all available templates.
+
+    Returns basic information about each template.
+    """
+    try:
+        from templates import list_templates as get_templates
+
+        templates = get_templates()
+
+        return TemplateListResponse(
+            templates=[
+                TemplateInfo(
+                    id=t.id,
+                    name=t.name,
+                    description=t.description,
+                    estimated_features=t.estimated_features,
+                    tags=t.tags,
+                    difficulty=t.difficulty,
+                )
+                for t in templates
+            ],
+            count=len(templates),
+        )
+
+    except Exception as e:
+        logger.exception(f"Error listing templates: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to list templates: {str(e)}")
+
+
+@router.get("/{template_id}", response_model=TemplateDetail)
+async def get_template(template_id: str):
+    """
+    Get detailed information about a specific template.
+    """
+    try:
+        from templates import get_template as load_template
+
+        template = load_template(template_id)
+
+        if not template:
+            raise HTTPException(status_code=404, detail=f"Template not found: {template_id}")
+
+        return TemplateDetail(
+            id=template.id,
+            name=template.name,
+            description=template.description,
+            tech_stack=TechStackInfo(
+                frontend=template.tech_stack.frontend,
+                backend=template.tech_stack.backend,
+                database=template.tech_stack.database,
+                auth=template.tech_stack.auth,
+                styling=template.tech_stack.styling,
+                hosting=template.tech_stack.hosting,
+            ),
+            feature_categories=template.feature_categories,
+            design_tokens=DesignTokensInfo(
+                colors=template.design_tokens.colors,
+                spacing=template.design_tokens.spacing,
+                fonts=template.design_tokens.fonts,
+                border_radius=template.design_tokens.border_radius,
+            ),
+            estimated_features=template.estimated_features,
+            tags=template.tags,
+            difficulty=template.difficulty,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"Error getting template: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get template: {str(e)}")
+
+
+@router.post("/preview", response_model=PreviewResponse)
+async def preview_template(request: PreviewRequest):
+    """
+    Preview the app_spec.txt that would be generated from a template.
+
+    Does not create any files - just returns the content.
+    """
+    try:
+        from templates import get_template, generate_app_spec, generate_features
+
+        template = get_template(request.template_id)
+        if not template:
+            raise HTTPException(status_code=404, detail=f"Template not found: {request.template_id}")
+
+        app_spec_content = generate_app_spec(
+            template,
+            request.app_name,
+            request.customizations,
+        )
+
+        features = generate_features(template)
+
+        return PreviewResponse(
+            template_id=request.template_id,
+            app_name=request.app_name,
+            app_spec_content=app_spec_content,
+            feature_count=len(features),
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"Error previewing template: {e}")
+        raise HTTPException(status_code=500, detail=f"Preview failed: {str(e)}")
+
+
+@router.post("/apply", response_model=ApplyResponse)
+async def apply_template(request: ApplyRequest):
+    """
+    Apply a template to create a new project.
+
+    Creates the project directory, prompts folder, and app_spec.txt.
+    Does NOT register the project or create features - use the projects API for that.
+    """
+    try:
+        from templates import get_template, generate_app_spec, generate_features
+
+        template = get_template(request.template_id)
+        if not template:
+            raise HTTPException(status_code=404, detail=f"Template not found: {request.template_id}")
+
+        # Create project directory
+        project_dir = Path(request.project_dir)
+        prompts_dir = project_dir / "prompts"
+        prompts_dir.mkdir(parents=True, exist_ok=True)
+
+        # Generate and save app_spec.txt
+        app_spec_content = generate_app_spec(
+            template,
+            request.project_name,
+            request.customizations,
+        )
+
+        app_spec_path = prompts_dir / "app_spec.txt"
+        with open(app_spec_path, "w") as f:
+            f.write(app_spec_content)
+
+        features = generate_features(template)
+
+        return ApplyResponse(
+            success=True,
+            project_name=request.project_name,
+            project_dir=str(project_dir),
+            app_spec_path=str(app_spec_path),
+            feature_count=len(features),
+            message=f"Template '{template.name}' applied successfully. Register the project and run the initializer to create features.",
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"Error applying template: {e}")
+        raise HTTPException(status_code=500, detail=f"Apply failed: {str(e)}")
+
+
+@router.get("/{template_id}/features")
+async def get_template_features(template_id: str):
+    """
+    Get the features that would be created from a template.
+
+    Returns features in bulk_create format.
+    """
+    try:
+        from templates import get_template, generate_features
+
+        template = get_template(template_id)
+        if not template:
+            raise HTTPException(status_code=404, detail=f"Template not found: {template_id}")
+
+        features = generate_features(template)
+
+        return {
+            "template_id": template_id,
+            "features": features,
+            "count": len(features),
+            "by_category": {
+                category: len(feature_names)
+                for category, feature_names in template.feature_categories.items()
+            },
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"Error getting template features: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get features: {str(e)}")
