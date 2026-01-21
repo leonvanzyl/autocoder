@@ -9,6 +9,60 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - Fork documentation (FORK_README.md, FORK_CHANGELOG.md)
 - Configuration system via `.autocoder/config.json`
 
+## [2025-01-21] Enhanced Logging System
+
+### Added
+- New module: `structured_logging.py` - Structured JSON logging with SQLite storage
+- New router: `server/routers/logs.py` - REST API for log querying and export
+
+### Log Format
+```json
+{
+  "timestamp": "2025-01-21T10:30:00.000Z",
+  "level": "info|warn|error",
+  "agent_id": "coding-42",
+  "feature_id": 42,
+  "tool_name": "feature_mark_passing",
+  "duration_ms": 150,
+  "message": "Feature marked as passing"
+}
+```
+
+### API Endpoints
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/logs/{project_name}` | GET | Query logs with filters |
+| `/api/logs/{project_name}/timeline` | GET | Get activity timeline |
+| `/api/logs/{project_name}/stats` | GET | Get per-agent statistics |
+| `/api/logs/export` | POST | Export logs to file |
+| `/api/logs/{project_name}/download/{filename}` | GET | Download exported file |
+
+### Features
+- Filter by level, agent, feature, tool
+- Full-text search in messages
+- Timeline view bucketed by configurable intervals
+- Per-agent statistics (info/warn/error counts)
+- Export to JSON, JSONL, CSV formats
+- Auto-cleanup old logs (configurable max entries)
+
+### Usage
+```python
+from structured_logging import get_logger, get_log_query
+
+# Create logger for an agent
+logger = get_logger(project_dir, agent_id="coding-1")
+logger.info("Starting feature", feature_id=42)
+logger.error("Test failed", feature_id=42, tool_name="playwright")
+
+# Query logs
+query = get_log_query(project_dir)
+logs = query.query(level="error", agent_id="coding-1", limit=50)
+timeline = query.get_timeline(since_hours=24)
+stats = query.get_agent_stats()
+```
+
+---
+
 ## [2025-01-21] Import Project API (Import Projects - Phase 2)
 
 ### Added
@@ -189,7 +243,7 @@ When adding a new feature, use this template:
 The following features are planned for implementation:
 
 ### Phase 1: Foundation (Quick Wins)
-- [ ] Enhanced Logging - Structured logs with filtering
+- [x] Enhanced Logging - Structured logs with filtering ✅
 - [x] Quality Gates - Lint/type-check before marking passing ✅
 - [ ] Security Scanning - Detect vulnerabilities
 
