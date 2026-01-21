@@ -9,6 +9,71 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - Fork documentation (FORK_README.md, FORK_CHANGELOG.md)
 - Configuration system via `.autocoder/config.json`
 
+## [2025-01-21] Auto Documentation
+
+### Added
+- New module: `auto_documentation.py` - Automatic documentation generation
+- New router: `server/routers/documentation.py` - REST API for documentation management
+
+### Generated Files
+| File | Location | Description |
+|------|----------|-------------|
+| `README.md` | Project root | Project overview with features, tech stack, setup |
+| `SETUP.md` | `docs/` | Detailed setup guide with prerequisites |
+| `API.md` | `docs/` | API endpoint documentation |
+
+### Documentation Content
+- **Project name and description** - From app_spec.txt
+- **Tech stack** - Auto-detected from package.json, requirements.txt
+- **Features** - From features.db with completion status
+- **Setup steps** - From init.sh, package.json scripts
+- **Environment variables** - From .env.example
+- **API endpoints** - Extracted from Express/FastAPI routes
+- **Components** - Extracted from React/Vue components
+
+### API Endpoints
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/docs/generate` | POST | Generate documentation |
+| `/api/docs/{project}` | GET | List documentation files |
+| `/api/docs/{project}/{filename}` | GET | Get documentation content |
+| `/api/docs/preview` | POST | Preview README without writing |
+| `/api/docs/{project}/{filename}` | DELETE | Delete documentation file |
+
+### Usage
+```python
+from auto_documentation import DocumentationGenerator, generate_documentation
+
+# Quick generation
+files = generate_documentation(project_dir)
+
+# Custom generation
+generator = DocumentationGenerator(project_dir, output_dir="docs")
+docs = generator.generate()
+generator.write_readme(docs)
+generator.write_api_docs(docs)
+generator.write_setup_guide(docs)
+```
+
+### Configuration
+```json
+{
+  "docs": {
+    "enabled": true,
+    "generate_on_init": false,
+    "generate_on_complete": true,
+    "output_dir": "docs"
+  }
+}
+```
+
+### How to Disable
+```json
+{"docs": {"enabled": false}}
+```
+
+---
+
 ## [2025-01-21] Review Agent
 
 ### Added
@@ -621,6 +686,6 @@ The following features are planned for implementation:
 
 ### Phase 4: Polish & Ecosystem
 - [x] Template Library - SaaS, e-commerce, dashboard templates ✅
-- [ ] Auto Documentation - README, API docs generation
+- [x] Auto Documentation - README, API docs generation ✅
 - [ ] Design Tokens - Consistent styling
 - [ ] Visual Regression - Screenshot comparison testing
