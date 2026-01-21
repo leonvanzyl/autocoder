@@ -168,8 +168,48 @@ export function ProjectMaintenance({ projectName }: ProjectMaintenanceProps) {
             {deleteInfo.isLoading ? (
               <div className="mt-4 text-sm text-[var(--color-neo-text-secondary)]">Loading project info…</div>
             ) : deleteInfo.error ? (
-              <div className="mt-4 neo-card p-3 border-3 border-[var(--color-neo-danger)] text-sm text-[var(--color-neo-danger)]">
-                {deleteInfo.error instanceof Error ? deleteInfo.error.message : 'Failed to load delete info'}
+              <div className="mt-4 space-y-3">
+                <div className="neo-card p-3 border-3 border-[var(--color-neo-danger)] text-sm text-[var(--color-neo-danger)]">
+                  {deleteInfo.error instanceof Error ? deleteInfo.error.message : 'Failed to load delete info'}
+                </div>
+                <div className="text-xs text-[var(--color-neo-text-secondary)]">
+                  Delete metadata is unavailable. Restart AutoCoder to load the latest API, or continue with a manual delete.
+                </div>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={deleteFiles}
+                    onChange={(e) => setDeleteFiles(e.target.checked)}
+                  />
+                  Also delete files on disk
+                </label>
+                <div>
+                  <div className="text-xs text-[var(--color-neo-text-secondary)]">
+                    Type <span className="font-mono">{projectName}</span> to confirm.
+                  </div>
+                  <input
+                    className="neo-input w-full mt-2"
+                    value={confirmName}
+                    onChange={(e) => setConfirmName(e.target.value)}
+                    placeholder={projectName}
+                  />
+                </div>
+                <div className="flex justify-end gap-2">
+                  <button className="neo-btn neo-btn-secondary" onClick={() => setConfirmDelete(false)}>
+                    Cancel
+                  </button>
+                  <button
+                    className="neo-btn neo-btn-danger"
+                    onClick={async () => {
+                      await handleDelete()
+                      setConfirmDelete(false)
+                    }}
+                    disabled={deleteProject.isPending || confirmName.trim() !== projectName}
+                  >
+                    <Trash2 size={16} />
+                    Delete
+                  </button>
+                </div>
               </div>
             ) : deleteInfo.data ? (
               <div className="mt-4 space-y-3">
