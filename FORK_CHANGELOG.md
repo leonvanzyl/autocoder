@@ -9,6 +9,97 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - Fork documentation (FORK_README.md, FORK_CHANGELOG.md)
 - Configuration system via `.autocoder/config.json`
 
+## [2025-01-21] Design Tokens
+
+### Added
+- New module: `design_tokens.py` - Design tokens management system
+- New router: `server/routers/design_tokens.py` - REST API for token management
+
+### Token Categories
+| Category | Description |
+|----------|-------------|
+| `colors` | Primary, secondary, accent, semantic colors with auto-generated shades |
+| `spacing` | Spacing scale (default: 4, 8, 12, 16, 24, 32, 48, 64, 96) |
+| `typography` | Font families, sizes, weights, line heights |
+| `borders` | Border radii and widths |
+| `shadows` | Box shadow definitions |
+| `animations` | Durations and easing functions |
+
+### Generated Files
+| File | Description |
+|------|-------------|
+| `tokens.css` | CSS custom properties with color shades |
+| `_tokens.scss` | SCSS variables |
+| `tailwind.tokens.js` | Tailwind CSS extend config |
+
+### Color Shades
+Automatically generates 50-950 shades from base colors:
+- 50, 100, 200, 300, 400 (lighter)
+- 500 (base color)
+- 600, 700, 800, 900, 950 (darker)
+
+### API Endpoints
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/design-tokens/{project}` | GET | Get current tokens |
+| `/api/design-tokens/{project}` | PUT | Update tokens |
+| `/api/design-tokens/{project}/generate` | POST | Generate token files |
+| `/api/design-tokens/{project}/preview/{format}` | GET | Preview output (css/scss/tailwind) |
+| `/api/design-tokens/{project}/validate` | POST | Validate tokens |
+| `/api/design-tokens/{project}/reset` | POST | Reset to defaults |
+
+### app_spec.txt Support
+```xml
+<design_tokens>
+  <colors>
+    <primary>#3B82F6</primary>
+    <secondary>#6366F1</secondary>
+    <accent>#F59E0B</accent>
+  </colors>
+  <spacing>
+    <scale>[4, 8, 12, 16, 24, 32, 48]</scale>
+  </spacing>
+  <typography>
+    <font_family>Inter, system-ui, sans-serif</font_family>
+  </typography>
+</design_tokens>
+```
+
+### Usage
+```python
+from design_tokens import DesignTokensManager, generate_design_tokens
+
+# Quick generation
+files = generate_design_tokens(project_dir)
+
+# Custom management
+manager = DesignTokensManager(project_dir)
+tokens = manager.load()
+manager.generate_css(tokens, output_path)
+manager.generate_tailwind_config(tokens, output_path)
+
+# Validate accessibility
+issues = manager.validate_contrast(tokens)
+```
+
+### Configuration
+```json
+{
+  "design_tokens": {
+    "enabled": true,
+    "output_dir": "src/styles",
+    "generate_on_init": true
+  }
+}
+```
+
+### How to Disable
+```json
+{"design_tokens": {"enabled": false}}
+```
+
+---
+
 ## [2025-01-21] Auto Documentation
 
 ### Added
@@ -687,5 +778,5 @@ The following features are planned for implementation:
 ### Phase 4: Polish & Ecosystem
 - [x] Template Library - SaaS, e-commerce, dashboard templates ✅
 - [x] Auto Documentation - README, API docs generation ✅
-- [ ] Design Tokens - Consistent styling
+- [x] Design Tokens - Consistent styling ✅
 - [ ] Visual Regression - Screenshot comparison testing
