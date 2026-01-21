@@ -5,24 +5,17 @@ from typing import Literal
 
 
 ReviewMode = Literal["off", "advisory", "gate"]
-ReviewerType = Literal["none", "command", "claude", "multi_cli"]
-
-
 @dataclass(frozen=True)
 class ReviewConfig:
     enabled: bool = False
     mode: ReviewMode = "off"
-    reviewer_type: ReviewerType = "none"
-
-    # command reviewer
-    command: str | None = None
     timeout_s: int | None = None
 
     # claude reviewer (optional)
     model: str | None = None
 
     # multi_cli reviewer (optional)
-    review_agents: list[str] | None = None
+    engines: list[str] | None = None
     consensus: str | None = None  # majority|all|any
     codex_model: str | None = None
     codex_reasoning_effort: str | None = None

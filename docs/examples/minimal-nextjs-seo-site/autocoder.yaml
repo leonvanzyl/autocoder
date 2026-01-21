@@ -1,17 +1,15 @@
-worker:
-  provider: claude
-  patch_max_iterations: 2
-  patch_agents: "codex,gemini"
+## AutoCoder project config
+## Keep this minimal; engine chains are stored per project in the DB.
 
 commands:
   setup:
-    - command: npm install
+    command: npm install
   test:
-    - command: npm run build
+    command: npm run build
   lint:
-    - command: npm run lint
-      allow_fail: true
+    command: npm run lint
+    allow_fail: true
   typecheck:
-    - command: npm run typecheck
-      allow_fail: true
+    command: npm run typecheck
+    allow_fail: true
 

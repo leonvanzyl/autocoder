@@ -5,21 +5,19 @@ This keeps the coding runtime on **Claude Agent SDK**, while letting other LLMs 
 
 ## Why external CLIs?
 
-- Separate auth/config per provider
+- Separate auth/config per tool
 - Read-only review (diff-in → JSON-out)
 - Easy to skip if a CLI isn’t installed
 - Extensible to more tools later
 
 ## Enable (project config)
 
-In the target project’s `autocoder.yaml`:
+In the target project’s `autocoder.yaml`, you can enable review + set consensus:
 
 ```yaml
 review:
   enabled: true
   mode: gate            # off | advisory | gate
-  type: multi_cli       # none | command | claude | multi_cli
-  agents: [codex, gemini]
   consensus: majority   # majority | all | any
   timeout: 300
   codex_model: gpt-5.2
@@ -27,12 +25,12 @@ review:
   gemini_model: gemini-3-pro-preview
 ```
 
+Engine order is configured separately (see below).
+
 ## Enable (Web UI)
 
-Settings page → **Advanced → Automation → Review**:
-- Type: `multi_cli (codex/gemini)`
-- Agents: `codex,gemini`
-- Consensus: `majority` / `all` / `any`
+- **Settings → Advanced → Review**: enable review + pick mode/consensus.
+- **Settings → Engines → Review**: choose engine order (Claude review + Codex/Gemini CLIs).
 
 ## Required tooling
 

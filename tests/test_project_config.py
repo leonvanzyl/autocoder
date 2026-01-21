@@ -10,8 +10,6 @@ def test_load_project_config_missing_returns_empty(tmp_path: Path):
     assert cfg.preset is None
     assert cfg.commands == {}
     assert cfg.review.enabled is False
-    assert cfg.worker.provider is None
-    assert cfg.initializer.provider is None
 
 
 def test_load_project_config_with_preset_and_override(tmp_path: Path):
@@ -42,9 +40,12 @@ def test_load_project_config_review_section(tmp_path: Path):
 review:
   enabled: true
   mode: gate
-  type: command
-  command: "python -c \\"print('ok')\\""
+  engines: [claude_review, codex_cli]
+  consensus: majority
   timeout: 12
+  codex_model: gpt-5
+  codex_reasoning_effort: high
+  gemini_model: gemini-3-pro
 """.strip(),
         encoding="utf-8",
     )
@@ -52,49 +53,12 @@ review:
     cfg = load_project_config(tmp_path)
     assert cfg.review.enabled is True
     assert cfg.review.mode == "gate"
-    assert cfg.review.reviewer_type == "command"
-    assert cfg.review.command is not None and "python -c" in cfg.review.command
     assert cfg.review.timeout_s == 12
-
-
-def test_load_project_config_worker_section(tmp_path: Path):
-    (tmp_path / "autocoder.yaml").write_text(
-        """
-worker:
-  provider: multi_cli
-  patch_max_iterations: 5
-  patch_agents: [codex, gemini]
-""".strip(),
-        encoding="utf-8",
-    )
-
-    cfg = load_project_config(tmp_path)
-    assert cfg.worker.provider == "multi_cli"
-    assert cfg.worker.patch_max_iterations == 5
-    assert cfg.worker.patch_agents == ["codex", "gemini"]
-
-
-def test_load_project_config_initializer_section(tmp_path: Path):
-    (tmp_path / "autocoder.yaml").write_text(
-        """
-initializer:
-  provider: multi_cli
-  agents: [codex, gemini]
-  synthesizer: claude
-  timeout_s: 400
-  stage_threshold: 120
-  enqueue_count: 25
-""".strip(),
-        encoding="utf-8",
-    )
-
-    cfg = load_project_config(tmp_path)
-    assert cfg.initializer.provider == "multi_cli"
-    assert cfg.initializer.agents == ["codex", "gemini"]
-    assert cfg.initializer.synthesizer == "claude"
-    assert cfg.initializer.timeout_s == 400
-    assert cfg.initializer.stage_threshold == 120
-    assert cfg.initializer.enqueue_count == 25
+    assert cfg.review.engines == ["claude_review", "codex_cli"]
+    assert cfg.review.consensus == "majority"
+    assert cfg.review.codex_model == "gpt-5"
+    assert cfg.review.codex_reasoning_effort == "high"
+    assert cfg.review.gemini_model == "gemini-3-pro"
 
 
 def test_synthesize_node_commands_avoids_missing_test_script(tmp_path: Path):

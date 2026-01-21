@@ -372,8 +372,13 @@ class MultiCliReviewer(Reviewer):
             return ReviewResult(approved=True, skipped=True, reason="Empty diff; skipping external review")
 
         timeout_s = int(self.cfg.timeout_s or 300)
-        agents = self.cfg.review_agents or ["codex", "gemini"]
-        agents = [a for a in agents if a in {"codex", "gemini"}]
+        raw_agents = self.cfg.engines or ["codex_cli", "gemini_cli"]
+        agents = []
+        for a in raw_agents:
+            if a == "codex_cli":
+                agents.append("codex")
+            elif a == "gemini_cli":
+                agents.append("gemini")
         if not agents:
             agents = ["codex", "gemini"]
 

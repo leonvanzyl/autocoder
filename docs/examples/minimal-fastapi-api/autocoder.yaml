@@ -1,11 +1,9 @@
-worker:
-  provider: claude
-  patch_max_iterations: 2
-  patch_agents: "codex,gemini"
+## AutoCoder project config
+## Keep this minimal; engine chains are stored per project in the DB.
 
 commands:
   setup:
-    - command: "{VENV_PY} -m pip install -r requirements.txt"
+    command: "{VENV_PY} -m pip install -r requirements.txt"
   test:
-    - command: "{VENV_PY} -m pytest -q"
+    command: "{VENV_PY} -m pytest -q"
 

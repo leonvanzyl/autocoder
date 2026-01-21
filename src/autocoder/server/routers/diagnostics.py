@@ -5,20 +5,21 @@ Diagnostics Router
 Runs deterministic end-to-end fixture tests from the Web UI.
 
 Currently supported:
-- QA provider pipeline fixture (Gatekeeper reject -> QA sub-agent -> Gatekeeper merge)
+- QA engine pipeline fixture (Gatekeeper reject -> QA sub-agent -> Gatekeeper merge)
 - Parallel mini project fixture (parallel run on a tiny repo)
 """
 
 from __future__ import annotations
 
 import os
+import json
 import sys
 import subprocess
 from datetime import datetime
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from ..settings_store import apply_advanced_settings_env, load_advanced_settings
 
@@ -51,8 +52,31 @@ def _effective_out_dir() -> Path:
 
 class QAProviderRunRequest(BaseModel):
     fixture: str = Field(default="node", pattern="^(node|python)$")
-    provider: str = Field(default="multi_cli", pattern="^(claude|codex_cli|gemini_cli|multi_cli)$")
+    engines: list[str] = Field(default_factory=lambda: ["codex_cli", "gemini_cli", "claude_patch"])
     timeout_s: int = Field(default=240, ge=30, le=3600)
+
+    @model_validator(mode="after")
+    def _validate_engines(self):
+        allowed = {"codex_cli", "gemini_cli", "claude_patch"}
+        cleaned = []
+        for e in self.engines:
+            if not isinstance(e, str):
+                continue
+            v = e.strip().lower()
+            if v in allowed:
+                cleaned.append(v)
+        # de-dupe while preserving order
+        deduped = []
+        seen = set()
+        for e in cleaned:
+            if e in seen:
+                continue
+            seen.add(e)
+            deduped.append(e)
+        if not deduped:
+            raise ValueError("engines must include at least one of codex_cli, gemini_cli, claude_patch")
+        self.engines = deduped
+        return self
 
 
 class QAProviderRunResponse(BaseModel):
@@ -137,14 +161,14 @@ async def run_qa_provider(req: QAProviderRunRequest):
     if not script.exists():
         raise HTTPException(status_code=500, detail="e2e_qa_provider.py not found")
 
-    settings = load_advanced_settings()
     out_dir = _effective_out_dir()
     out_dir.mkdir(parents=True, exist_ok=True)
 
     runs_dir = out_dir / "diagnostics_runs"
     runs_dir.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    log_path = runs_dir / f"qa-provider-{req.fixture}-{req.provider}-{stamp}.log"
+    engines_slug = "-".join(req.engines)
+    log_path = runs_dir / f"qa-provider-{req.fixture}-{engines_slug}-{stamp}.log"
 
     cmd = [
         sys.executable,
@@ -153,8 +177,8 @@ async def run_qa_provider(req: QAProviderRunRequest):
         str(out_dir),
         "--fixture",
         req.fixture,
-        "--provider",
-        req.provider,
+        "--engines",
+        json.dumps(req.engines),
         "--timeout-s",
         str(int(req.timeout_s)),
     ]

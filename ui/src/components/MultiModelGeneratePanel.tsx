@@ -34,11 +34,11 @@ export function MultiModelGeneratePanel({
     if (!setupStatus.gemini_cli && synthesizer === 'gemini') setSynthesizer('claude')
   }, [setupStatus, synthesizer])
 
-  const agentsCsv = useMemo(() => {
-    const agents: string[] = []
+  const agentsList = useMemo(() => {
+    const agents: Array<'codex' | 'gemini'> = []
     if (useCodex) agents.push('codex')
     if (useGemini) agents.push('gemini')
-    return agents.join(',')
+    return agents
   }, [useCodex, useGemini])
 
   const canGenerate = prompt.trim().length > 0 && (useCodex || useGemini || synthesizer === 'claude')
@@ -48,13 +48,13 @@ export function MultiModelGeneratePanel({
     setResult(null)
     setLoading(true)
     try {
-      const res = await generateArtifact(projectName, {
-        kind,
-        prompt: prompt.trim(),
-        agents: agentsCsv,
-        synthesizer,
-        timeout_s: timeoutS,
-      })
+    const res = await generateArtifact(projectName, {
+      kind,
+      prompt: prompt.trim(),
+      agents: agentsList,
+      synthesizer,
+      timeout_s: timeoutS,
+    })
       setResult(res)
       onDone?.(res.output_path)
     } catch (e) {
@@ -146,7 +146,7 @@ export function MultiModelGeneratePanel({
             <span className="font-display font-bold text-sm">Gemini</span>
           </label>
           <span className="text-xs text-[var(--color-neo-text-secondary)] font-mono">
-            {agentsCsv || '(none)'}
+            {agentsList.length ? agentsList.join(', ') : '(none)'}
           </span>
         </div>
         {setupStatus && (!setupStatus.codex_cli || !setupStatus.gemini_cli) && (

@@ -28,6 +28,8 @@ import type {
   PruneWorkerLogsRequest,
   PruneWorkerLogsResponse,
   AdvancedSettings,
+  EngineSettings,
+  EngineId,
   DevServerStatusResponse,
   DevServerStartRequest,
   DevServerActionResponse,
@@ -322,6 +324,26 @@ export async function updateAdvancedSettings(settings: AdvancedSettings): Promis
 }
 
 // ============================================================================
+// Engine Settings API (per project)
+// ============================================================================
+
+export async function getEngineSettings(projectName: string): Promise<EngineSettings> {
+  const qp = `?project=${encodeURIComponent(projectName)}`
+  return fetchJSON(`/engine-settings${qp}`)
+}
+
+export async function updateEngineSettings(
+  projectName: string,
+  settings: EngineSettings
+): Promise<EngineSettings> {
+  const qp = `?project=${encodeURIComponent(projectName)}`
+  return fetchJSON(`/engine-settings${qp}`, {
+    method: 'PUT',
+    body: JSON.stringify(settings),
+  })
+}
+
+// ============================================================================
 // Dev Server API
 // ============================================================================
 
@@ -389,7 +411,7 @@ export async function getDiagnosticsFixturesDir(): Promise<DiagnosticsFixturesDi
 
 export interface RunQAProviderE2ERequest {
   fixture: 'node' | 'python'
-  provider: 'claude' | 'codex_cli' | 'gemini_cli' | 'multi_cli'
+  engines: EngineId[]
   timeout_s?: number
 }
 
@@ -514,7 +536,7 @@ export async function clearCleanupQueue(projectName: string): Promise<{ success:
 export interface GenerateArtifactRequest {
   kind: 'spec' | 'plan'
   prompt: string
-  agents?: string
+  agents?: Array<'codex' | 'gemini'>
   synthesizer?: '' | 'none' | 'claude' | 'codex' | 'gemini'
   no_synthesize?: boolean
   timeout_s?: number
@@ -544,7 +566,7 @@ export interface GsdStatusResponse {
 }
 
 export interface GsdToSpecRequest {
-  agents?: string
+  agents?: Array<'codex' | 'gemini'>
   synthesizer?: '' | 'none' | 'claude' | 'codex' | 'gemini'
   no_synthesize?: boolean
   timeout_s?: number
@@ -572,14 +594,6 @@ export interface AutocoderYamlResponse {
   content: string
   inferred_preset?: string | null
   resolved_commands?: string[]
-  resolved_worker_provider?: string | null
-  resolved_worker_patch_max_iterations?: number | null
-  resolved_initializer_provider?: string | null
-  resolved_initializer_agents?: string[] | null
-  resolved_initializer_synthesizer?: string | null
-  resolved_initializer_timeout_s?: number | null
-  resolved_initializer_stage_threshold?: number | null
-  resolved_initializer_enqueue_count?: number | null
 }
 
 export async function getAutocoderYaml(projectName: string): Promise<AutocoderYamlResponse> {

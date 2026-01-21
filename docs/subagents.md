@@ -24,35 +24,19 @@ When enabled, **immediately after a Gatekeeper rejection**, the orchestrator spa
 Env vars:
 - `AUTOCODER_QA_SUBAGENT_ENABLED=1`
 - `AUTOCODER_QA_SUBAGENT_MAX_ITERATIONS=2`
-- `AUTOCODER_QA_SUBAGENT_PROVIDER=claude` (`claude|codex_cli|gemini_cli|multi_cli`)
-- `AUTOCODER_QA_SUBAGENT_AGENTS=codex,gemini` (order when provider=`multi_cli`)
-
-Notes:
-- `codex_cli` requires the `codex` CLI on PATH; `gemini_cli` requires the `gemini` CLI.
-- `multi_cli` runs the configured list in order and picks the first successful patch.
 
 Web UI:
-- Settings -> Advanced -> Automation -> QA sub-agent
+- Settings -> Advanced -> Automation -> QA sub-agent (toggle)
+- Settings -> Engines -> QA Fix (engine order)
 
-## Feature Worker Provider (implemented)
+## Engine Chains (implemented)
 
-By default, AutoCoder implements features using the **Claude Agent SDK** worker (`src/autocoder/agent/`). For some workflows, you can switch feature implementation to a **patch worker** that generates unified diffs via external CLIs (Codex/Gemini).
+AutoCoder uses **engine chains** (per project) for feature implementation, QA fixers, review, spec drafts, and initializer drafts. Configure them in:
 
-Env vars:
-- `AUTOCODER_WORKER_PROVIDER=claude` (`claude|codex_cli|gemini_cli|multi_cli`)
-- `AUTOCODER_WORKER_PATCH_MAX_ITERATIONS=2`
-- `AUTOCODER_WORKER_PATCH_AGENTS=codex,gemini` (order when provider=`multi_cli`)
+- Settings -> Engines (project scoped)
+- `GET/PUT /api/engine-settings?project=...`
 
-Project config:
-- In the target repo’s `autocoder.yaml`, set `worker.provider`, `worker.patch_max_iterations`, `worker.patch_agents`.
-- Per-project worker settings override the global env defaults.
-
-Notes:
-- Patch worker entrypoint: `src/autocoder/qa_worker.py --mode implement`.
-- Patch workers submit to Gatekeeper; they do not bypass deterministic verification.
-
-Web UI:
-- Settings -> Advanced -> Automation -> Feature Workers
+Patch worker entrypoint: `src/autocoder/qa_worker.py --mode implement --engines '["codex_cli","gemini_cli","claude_patch"]'`.
 
 ## Controller (preflight verification)
 
@@ -64,9 +48,9 @@ Env vars:
 - `AUTOCODER_CONTROLLER_ENABLED=1`
 - `AUTOCODER_ALLOW_NO_TESTS=1` only applies in YOLO mode and only for clearly-detectable "no tests" cases.
 
-## Multi-Provider Reviews
+## Multi-Model Reviews
 
-For a second "opinion" from another model/provider (Codex/Gemini/etc.), use the **Gatekeeper review step** via `review:` in the target project's `autocoder.yaml` (or via UI Advanced settings). See `docs/multi_model_review.md`.
+For a second "opinion" from another model (Codex/Gemini/etc.), use the **Gatekeeper review step** via `review:` in the target project's `autocoder.yaml` and configure the engine chain in **Settings → Engines**. See `docs/multi_model_review.md`.
 
 ## Planner (feature plan)
 
@@ -75,10 +59,10 @@ This uses the same multi-provider generation system as the Spec/Plan generator.
 
 Env vars:
 - `AUTOCODER_PLANNER_ENABLED=1`
-- `AUTOCODER_PLANNER_AGENTS=codex,gemini`
 - `AUTOCODER_PLANNER_SYNTHESIZER=claude` (`none|claude|codex|gemini`)
 - `AUTOCODER_PLANNER_TIMEOUT_S=180`
 - `AUTOCODER_PLANNER_MODEL=` (optional Claude model for synthesis)
 
 Web UI:
-- Settings -> Advanced -> Automation -> Planner
+- Settings -> Advanced -> Automation -> Planner (toggle + synthesizer)
+- Settings -> Engines -> Spec Draft (engine order)

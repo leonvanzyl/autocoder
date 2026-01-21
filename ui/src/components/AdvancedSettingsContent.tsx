@@ -12,7 +12,6 @@ import { useAdvancedSettings, useUpdateAdvancedSettings } from '../hooks/useAdva
 import { useSetupStatus } from '../hooks/useProjects'
 import type { AdvancedSettings } from '../lib/types'
 import { ConfirmationDialog } from './ConfirmationDialog'
-import { CsvAgentOrderField } from './CsvAgentOrderField'
 import { HelpModal } from './HelpModal'
 
 function clampInt(v: number, min: number, max: number): number {
@@ -23,27 +22,19 @@ function clampInt(v: number, min: number, max: number): number {
 const DEFAULTS: AdvancedSettings = {
   review_enabled: false,
   review_mode: 'off',
-  review_type: 'none',
-  review_command: '',
   review_timeout_s: 0,
   review_model: '',
-  review_agents: '',
   review_consensus: '',
   codex_model: '',
   codex_reasoning_effort: '',
   gemini_model: '',
   locks_enabled: true,
   worker_verify: true,
-  worker_provider: 'claude',
-  worker_patch_max_iterations: 2,
-  worker_patch_agents: 'codex,gemini',
   qa_fix_enabled: false,
   qa_model: '',
   qa_max_sessions: 0,
   qa_subagent_enabled: true,
   qa_subagent_max_iterations: 2,
-  qa_subagent_provider: 'claude',
-  qa_subagent_agents: 'codex,gemini',
   controller_enabled: false,
   controller_model: '',
   controller_max_sessions: 0,
@@ -54,11 +45,8 @@ const DEFAULTS: AdvancedSettings = {
   regression_pool_max_iterations: 1,
   planner_enabled: false,
   planner_model: '',
-  planner_agents: 'codex,gemini',
   planner_synthesizer: 'claude',
   planner_timeout_s: 180,
-  initializer_provider: 'claude',
-  initializer_agents: 'codex,gemini',
   initializer_synthesizer: 'claude',
   initializer_timeout_s: 300,
   initializer_stage_threshold: 120,
@@ -97,7 +85,6 @@ type HelpTopic =
   | 'locks'
   | 'gatekeeper'
   | 'cli_defaults'
-  | 'workers'
   | 'qa_controller'
   | 'regression_pool'
   | 'planner'
@@ -154,18 +141,13 @@ const HELP_CONTENT: Record<HelpTopic, { title: string; body: JSX.Element }> = {
           </ul>
         </div>
         <div className="neo-card p-4 bg-[var(--color-neo-bg)] space-y-2">
-          <div className="font-display font-bold uppercase text-xs">Types</div>
+          <div className="font-display font-bold uppercase text-xs">Engines</div>
           <ul className="list-disc pl-5 space-y-1">
             <li>
-              <span className="font-bold">Command</span>: run a shell command in the staged repo (exit 0 = pass). Great for
-              <span className="font-mono"> lint </span>/<span className="font-mono"> typecheck </span> gates.
+              Choose the engine chain in the <span className="font-bold">Engines</span> tab (Claude review + Codex/Gemini CLIs).
             </li>
             <li>
-              <span className="font-bold">Claude</span>: Claude Agent SDK reviews <span className="font-mono">git diff --cached</span>. If no credentials
-              exist, it skips (so merges stay deterministic by default).
-            </li>
-            <li>
-              <span className="font-bold">Multi‑CLI</span>: Codex/Gemini CLIs review the diff and vote via consensus (any/majority/all). Missing CLIs are skipped.
+              Missing CLIs are skipped automatically. Claude review skips when credentials are missing.
             </li>
           </ul>
         </div>
@@ -249,39 +231,6 @@ const HELP_CONTENT: Record<HelpTopic, { title: string; body: JSX.Element }> = {
       </div>
     ),
   },
-  workers: {
-    title: 'Feature workers — providers and patch order',
-    body: (
-      <div className="space-y-4 text-sm">
-        <p>
-          Feature workers implement features. By default you get the full Claude Agent SDK loop. Optional providers can generate a unified diff instead (fast, but narrower).
-        </p>
-        <div className="neo-card p-4 bg-[var(--color-neo-bg)] space-y-2">
-          <div className="font-display font-bold uppercase text-xs">Providers</div>
-          <ul className="list-disc pl-5 space-y-1">
-            <li>
-              <span className="font-bold">Claude (Agent SDK)</span>: full tool loop + context. Best default.
-            </li>
-            <li>
-              <span className="font-bold">Codex CLI / Gemini CLI</span>: patch worker outputs diffs; Gatekeeper verifies and merges.
-            </li>
-            <li>
-              <span className="font-bold">Multi‑CLI</span>: tries Codex/Gemini in your selected order.
-            </li>
-          </ul>
-        </div>
-        <div className="neo-card p-4 bg-[var(--color-neo-bg)] space-y-2">
-          <div className="font-display font-bold uppercase text-xs">Important</div>
-          <p className="text-[var(--color-neo-text-secondary)]">
-            <span className="font-mono">multi_cli</span> means <span className="font-bold">Codex + Gemini</span> only. Claude is a separate provider.
-          </p>
-        </div>
-        <p className="text-[var(--color-neo-text-secondary)]">
-          Patch order only matters for <span className="font-mono">multi_cli</span>. If a CLI isn’t installed, it’s skipped automatically.
-        </p>
-      </div>
-    ),
-  },
   qa_controller: {
     title: 'QA + Controller — fixing failures without human babysitting',
     body: (
@@ -337,7 +286,8 @@ const HELP_CONTENT: Record<HelpTopic, { title: string; body: JSX.Element }> = {
     body: (
       <div className="space-y-4 text-sm">
         <p>
-          Planner generates a short plan per feature and prepends it to the worker prompt. Codex/Gemini can draft, and an optional synthesizer can merge ideas.
+          Planner generates a short plan per feature and prepends it to the worker prompt. Draft engines are configured in
+          <span className="font-bold"> Settings → Engines</span>; an optional synthesizer can merge ideas.
         </p>
         <p className="text-[var(--color-neo-text-secondary)]">
           Use it when features are complex, specs are messy, or you want more predictable step‑by‑step execution.
@@ -350,7 +300,8 @@ const HELP_CONTENT: Record<HelpTopic, { title: string; body: JSX.Element }> = {
     body: (
       <div className="space-y-4 text-sm">
         <p>
-          Initializer turns your spec into a backlog. You can use Claude, Codex CLI, Gemini CLI, or multi‑CLI drafts with an optional synthesizer.
+          Initializer turns your spec into a backlog. Draft engines are configured in
+          <span className="font-bold"> Settings → Engines</span>, with an optional synthesizer here.
         </p>
         <div className="neo-card p-4 bg-[var(--color-neo-bg)] space-y-2">
           <div className="font-display font-bold uppercase text-xs">Staging</div>
@@ -419,43 +370,15 @@ export function AdvancedSettingsContent() {
 
     const isHexColor = (value: string) => /^#[0-9a-fA-F]{6}$/.test(value.trim())
 
-    const normalizeCsv = (raw: string) =>
-      raw
-        .replace(/;/g, ',')
-        .split(',')
-        .map((p) => p.trim().toLowerCase())
-        .filter(Boolean)
-
-    const validateAgentCsv = (field: FieldName, raw: string, opts?: { required?: boolean }) => {
-      const required = Boolean(opts?.required)
-      const tokens = normalizeCsv(raw)
-      if (required && tokens.length === 0) {
-        addError(field, 'Select at least one agent')
-        return
-      }
-      const allowed = new Set(['codex', 'gemini'])
-      const unknown = tokens.filter((t) => !allowed.has(t))
-      if (unknown.length > 0) {
-        addError(field, `Unknown agent(s): ${unknown.join(', ')} (allowed: codex, gemini)`)
-      }
-    }
-
     if (draft.api_port_range_end <= draft.api_port_range_start) addError('api_port_range_end', 'API port range end must be > start')
     if (draft.web_port_range_end <= draft.web_port_range_start) addError('web_port_range_end', 'WEB port range end must be > start')
 
     if (draft.review_enabled) {
       if (draft.review_mode === 'off') addError('review_mode', 'Set review mode to advisory or gate')
-      if (draft.review_type === 'none') addError('review_type', 'Select a review type')
-      if (draft.review_type === 'command' && !draft.review_command.trim()) addError('review_command', 'Review command is required for command review')
-      if (draft.review_type === 'multi_cli') {
-        if (!draft.review_agents.trim()) addError('review_agents', 'Review agents are required for multi_cli review')
-        validateAgentCsv('review_agents', draft.review_agents, { required: true })
-      }
       if (draft.review_consensus.trim() && !['any', 'majority', 'all'].includes(draft.review_consensus.trim()))
         addError('review_consensus', 'Consensus must be any, majority, or all')
     } else {
       if (draft.review_mode !== 'off') addWarning('review_mode', 'Review is disabled; mode is ignored')
-      if (draft.review_type !== 'none') addWarning('review_type', 'Review is disabled; type is ignored')
     }
 
     if (
@@ -464,27 +387,8 @@ export function AdvancedSettingsContent() {
     )
       addError('codex_reasoning_effort', 'Codex reasoning must be low|medium|high|xlow|xmedium|xhigh (or blank)')
 
-    if (draft.worker_provider === 'multi_cli' && !draft.worker_patch_agents.trim())
-      addError('worker_patch_agents', 'Patch provider order is required for multi_cli')
-    validateAgentCsv('worker_patch_agents', draft.worker_patch_agents, { required: draft.worker_provider === 'multi_cli' })
-
-    if (draft.qa_subagent_enabled && draft.qa_subagent_provider === 'multi_cli' && !draft.qa_subagent_agents.trim())
-      addError('qa_subagent_agents', 'QA provider order is required for multi_cli')
-    if (draft.qa_subagent_provider === 'multi_cli') {
-      validateAgentCsv('qa_subagent_agents', draft.qa_subagent_agents, { required: draft.qa_subagent_enabled })
-    }
-
-    if (draft.planner_enabled && !draft.planner_agents.trim()) addError('planner_agents', 'Planner agents are required when planner is enabled')
-    validateAgentCsv('planner_agents', draft.planner_agents, { required: draft.planner_enabled })
-
     if (draft.regression_pool_enabled && draft.regression_pool_max_agents <= 0)
       addError('regression_pool_max_agents', 'Regression pool max agents must be > 0 when enabled')
-
-    if (draft.initializer_provider === 'multi_cli' && !draft.initializer_agents.trim())
-      addError('initializer_agents', 'Initializer agents are required when provider is multi_cli')
-    if (draft.initializer_provider === 'multi_cli') {
-      validateAgentCsv('initializer_agents', draft.initializer_agents, { required: true })
-    }
 
     if (draft.initializer_stage_threshold > 0 && draft.initializer_enqueue_count === 0)
       addWarning('initializer_enqueue_count', 'Stage threshold is set but enqueue count is 0 (backlog will never start)')
@@ -500,53 +404,8 @@ export function AdvancedSettingsContent() {
     if (!isHexColor(draft.agent_color_done)) addError('agent_color_done', 'Done color must be a 6-digit hex (e.g. #70e000)')
     if (!isHexColor(draft.agent_color_retry)) addError('agent_color_retry', 'Retry color must be a 6-digit hex (e.g. #f59e0b)')
 
-    if (setupStatus) {
-      const hasCodex = Boolean(setupStatus.codex_cli)
-      const hasGemini = Boolean(setupStatus.gemini_cli)
-
-      const textHas = (s: string, needle: string) => s.toLowerCase().includes(needle)
-      const needsCodex =
-        draft.worker_provider === 'codex_cli' ||
-        draft.qa_subagent_provider === 'codex_cli' ||
-        draft.initializer_provider === 'codex_cli' ||
-        (draft.review_enabled && draft.review_type === 'multi_cli' && textHas(draft.review_agents, 'codex')) ||
-        textHas(draft.worker_patch_agents, 'codex') ||
-        textHas(draft.qa_subagent_agents, 'codex') ||
-        (draft.planner_enabled && textHas(draft.planner_agents, 'codex')) ||
-        textHas(draft.initializer_agents, 'codex')
-
-      const needsGemini =
-        draft.worker_provider === 'gemini_cli' ||
-        draft.qa_subagent_provider === 'gemini_cli' ||
-        draft.initializer_provider === 'gemini_cli' ||
-        (draft.review_enabled && draft.review_type === 'multi_cli' && textHas(draft.review_agents, 'gemini')) ||
-        textHas(draft.worker_patch_agents, 'gemini') ||
-        textHas(draft.qa_subagent_agents, 'gemini') ||
-        (draft.planner_enabled && textHas(draft.planner_agents, 'gemini')) ||
-        textHas(draft.initializer_agents, 'gemini')
-
-      if (needsCodex && !hasCodex) addWarning('codex_model', 'Codex CLI not detected on PATH; Codex steps will be skipped/disabled')
-      if (needsGemini && !hasGemini) addWarning('gemini_model', 'Gemini CLI not detected on PATH; Gemini steps will be skipped/disabled')
-      if (draft.worker_provider === 'multi_cli' && !hasCodex && !hasGemini)
-        addWarning('worker_provider', 'Multi-CLI selected, but neither Codex nor Gemini CLIs were detected')
-    }
-
     return { errors, warnings, fieldErrors, fieldWarnings }
-  }, [draft, setupStatus])
-
-  const labelProvider = (v: string) =>
-    v === 'claude'
-      ? 'Claude (Agent SDK)'
-      : v === 'codex_cli'
-        ? 'Codex CLI'
-        : v === 'gemini_cli'
-          ? 'Gemini CLI'
-          : v === 'multi_cli'
-            ? 'Multi-CLI (Codex + Gemini)'
-            : v
-
-  const labelReviewType = (v: string) =>
-    v === 'none' ? 'None' : v === 'command' ? 'Command' : v === 'claude' ? 'Claude' : v === 'multi_cli' ? 'Multi-CLI' : v
+  }, [draft])
 
   const labelReviewMode = (v: string) => (v === 'off' ? 'Off' : v === 'advisory' ? 'Advisory' : v === 'gate' ? 'Gate' : v)
 
@@ -721,88 +580,34 @@ export function AdvancedSettingsContent() {
                     </div>
                   </div>
 
-                  <div className="neo-card p-3">
-                    <div className="text-xs font-mono text-[var(--color-neo-text-secondary)] mb-1">Type</div>
-                    <select
-                      value={draft.review_type}
-                      onChange={(e) => setDraft({ ...draft, review_type: e.target.value as AdvancedSettings['review_type'] })}
-                      className="neo-btn text-sm py-2 px-3 bg-white border-3 border-[var(--color-neo-border)] font-display w-full"
-                    >
-                      <option value="none">{labelReviewType('none')}</option>
-                      <option value="command">{labelReviewType('command')}</option>
-                      <option value="claude">{labelReviewType('claude')}</option>
-                      <option value="multi_cli">{labelReviewType('multi_cli')}</option>
-                    </select>
-                    {validation.fieldErrors.review_type && <div className="text-xs mt-1 text-[var(--color-neo-danger)]">{validation.fieldErrors.review_type}</div>}
-                    {!validation.fieldErrors.review_type && validation.fieldWarnings.review_type && (
-                      <div className="text-xs mt-1 text-yellow-800">{validation.fieldWarnings.review_type}</div>
-                    )}
-                    <div className="text-xs text-[var(--color-neo-text-secondary)] mt-2">
-                      {draft.review_type === 'command'
-                        ? 'Command: run a verification command and treat non-zero exit as rejection.'
-                        : draft.review_type === 'claude'
-                          ? 'Claude: AI review of the staged diff.'
-                          : draft.review_type === 'multi_cli'
-                            ? 'Multi-CLI: Codex/Gemini review of the staged diff (skips missing CLIs).'
-                            : 'None: no reviewer selected.'}
-                    </div>
-                  </div>
-
                   <Field label="Timeout (s)" value={draft.review_timeout_s} onChange={(v) => setDraft({ ...draft, review_timeout_s: clampInt(v, 0, 3600) })} />
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
-                  {draft.review_type === 'command' && (
-                    <TextField
-                      label="Review command"
-                      value={draft.review_command}
-                      onChange={(v) => setDraft({ ...draft, review_command: v })}
-                      placeholder="e.g. npm run lint"
-                      error={validation.fieldErrors.review_command}
-                    />
-                  )}
-
-                  {draft.review_type === 'claude' && (
-                    <SelectField
-                      label="Claude review model (optional)"
-                      value={(draft.review_model || '').trim().toLowerCase()}
-                      onChange={(v) => setDraft({ ...draft, review_model: v })}
-                      options={[
-                        { value: '', label: 'Auto (sonnet)' },
-                        { value: 'haiku', label: 'haiku' },
-                        { value: 'sonnet', label: 'sonnet' },
-                        { value: 'opus', label: 'opus' },
-                      ]}
-                    />
-                  )}
-
-                  {draft.review_type === 'multi_cli' && (
-                    <>
-                      <CsvAgentOrderField
-                        label="Review agents"
-                        value={draft.review_agents}
-                        onChange={(v) => setDraft({ ...draft, review_agents: v })}
-                        error={validation.fieldErrors.review_agents}
-                        availability={{ codex: Boolean(setupStatus?.codex_cli), gemini: Boolean(setupStatus?.gemini_cli) }}
-                        rawPlaceholder="e.g. codex,gemini"
-                      />
-                      <SelectField
-                        label="Consensus"
-                        value={(draft.review_consensus || '').trim().toLowerCase()}
-                        onChange={(v) => setDraft({ ...draft, review_consensus: v })}
-                        options={[
-                          { value: '', label: 'Auto (majority)' },
-                          { value: 'majority', label: 'majority' },
-                          { value: 'any', label: 'any' },
-                          { value: 'all', label: 'all' },
-                        ]}
-                        error={validation.fieldErrors.review_consensus}
-                      />
-                    </>
-                  )}
+                  <SelectField
+                    label="Claude review model (optional)"
+                    value={(draft.review_model || '').trim().toLowerCase()}
+                    onChange={(v) => setDraft({ ...draft, review_model: v })}
+                    options={[
+                      { value: '', label: 'Auto (sonnet)' },
+                      { value: 'haiku', label: 'haiku' },
+                      { value: 'sonnet', label: 'sonnet' },
+                      { value: 'opus', label: 'opus' },
+                    ]}
+                  />
+                  <SelectField
+                    label="Consensus (when multiple reviewers run)"
+                    value={(draft.review_consensus || '').trim().toLowerCase()}
+                    onChange={(v) => setDraft({ ...draft, review_consensus: v })}
+                    options={[
+                      { value: '', label: 'Auto (majority)' },
+                      { value: 'majority', label: 'majority' },
+                      { value: 'any', label: 'any' },
+                      { value: 'all', label: 'all' },
+                    ]}
+                    error={validation.fieldErrors.review_consensus}
+                  />
                 </div>
 
                 <div className="text-xs text-[var(--color-neo-text-secondary)] mt-2">
+                  Review engines are configured in <span className="font-display font-semibold">Settings → Engines</span>.
                   Tip: set mode to <span className="font-mono">gate</span> to block merges when review fails.
                 </div>
               </div>
@@ -944,83 +749,12 @@ export function AdvancedSettingsContent() {
               </div>
 
               <div className="neo-card p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="font-display font-bold uppercase">Feature Workers</div>
-                  <button
-                    type="button"
-                    className="inline-flex items-center justify-center p-1 rounded hover:bg-black/5"
-                    onClick={() => setHelpTopic('workers')}
-                    title="What are feature workers?"
-                    aria-label="Help: Feature workers"
-                  >
-                    <Info size={16} className="text-[var(--color-neo-text-secondary)]" aria-hidden="true" />
-                  </button>
+                <div className="font-display font-bold uppercase mb-2">Engine Chains</div>
+                <div className="text-sm text-[var(--color-neo-text-secondary)]">
+                  Feature workers, QA fixers, review, and spec/initializer engines are configured in the
+                  <span className="font-display font-semibold"> Engines</span> tab (project‑scoped).
+                  Advanced Settings only controls the global safety toggles.
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div className="neo-card p-3">
-                    <div className="font-display font-bold text-sm mb-2">Worker provider</div>
-                    <select
-                      value={draft.worker_provider}
-                      onChange={(e) => setDraft({ ...draft, worker_provider: e.target.value as AdvancedSettings['worker_provider'] })}
-                      className="neo-btn text-sm py-2 px-3 bg-white border-3 border-[var(--color-neo-border)] font-display w-full"
-                    >
-                      <option value="claude">{labelProvider('claude')}</option>
-                      <option value="codex_cli" disabled={setupStatus ? !setupStatus.codex_cli : false}>
-                        {labelProvider('codex_cli')}
-                      </option>
-                      <option value="gemini_cli" disabled={setupStatus ? !setupStatus.gemini_cli : false}>
-                        {labelProvider('gemini_cli')}
-                      </option>
-                      <option
-                        value="multi_cli"
-                        disabled={setupStatus ? !setupStatus.codex_cli && !setupStatus.gemini_cli : false}
-                      >
-                        {labelProvider('multi_cli')}
-                      </option>
-                    </select>
-                    {validation.fieldWarnings.worker_provider && (
-                      <div className="text-xs mt-2 text-yellow-800">{validation.fieldWarnings.worker_provider}</div>
-                    )}
-                    <div className="text-xs text-[var(--color-neo-text-secondary)] mt-2">
-                      Patch workers implement features by generating unified diffs, then Gatekeeper verifies deterministically.
-                    </div>
-                  </div>
-
-                  {draft.worker_provider === 'claude' ? (
-                    <div className="neo-card p-3 bg-[var(--color-neo-bg)] self-start">
-                      <div className="font-display font-bold text-sm mb-1">Patch settings</div>
-                      <div className="text-xs text-[var(--color-neo-text-secondary)]">
-                        You’re using the Claude Agent SDK worker. Patch iterations/order only apply to Codex/Gemini providers.
-                      </div>
-                    </div>
-                  ) : (
-                    <>
-                      <Field
-                        label="Patch iterations"
-                        value={draft.worker_patch_max_iterations}
-                        onChange={(v) => setDraft({ ...draft, worker_patch_max_iterations: clampInt(v, 1, 20) })}
-                      />
-
-                      {draft.worker_provider === 'multi_cli' ? (
-                        <CsvAgentOrderField
-                          label="Patch provider order"
-                          value={draft.worker_patch_agents}
-                          onChange={(v) => setDraft({ ...draft, worker_patch_agents: v })}
-                          error={validation.fieldErrors.worker_patch_agents}
-                          availability={{ codex: Boolean(setupStatus?.codex_cli), gemini: Boolean(setupStatus?.gemini_cli) }}
-                          rawPlaceholder="e.g. codex,gemini"
-                        />
-                      ) : null}
-                    </>
-                  )}
-                </div>
-                {draft.worker_provider === 'multi_cli' ? (
-                  <div className="text-xs text-[var(--color-neo-text-secondary)] mt-2">
-                    <span className="block">
-                      Note: <span className="font-mono">multi_cli</span> uses the order above.
-                    </span>
-                  </div>
-                ) : null}
               </div>
 
               <details
@@ -1072,45 +806,10 @@ export function AdvancedSettingsContent() {
                     onChange={(v) => setDraft({ ...draft, qa_subagent_max_iterations: clampInt(v, 1, 20) })}
                   />
                   <div className="neo-card p-3">
-                    <div className="font-display font-bold text-sm mb-2">QA provider</div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      <div>
-                        <select
-                          value={draft.qa_subagent_provider}
-                          onChange={(e) => setDraft({ ...draft, qa_subagent_provider: e.target.value as AdvancedSettings['qa_subagent_provider'] })}
-                          className="neo-btn text-sm py-2 px-3 bg-white border-3 border-[var(--color-neo-border)] font-display w-full"
-                        >
-                          <option value="claude">{labelProvider('claude')}</option>
-                          <option value="codex_cli" disabled={setupStatus ? !setupStatus.codex_cli : false}>
-                            {labelProvider('codex_cli')}
-                          </option>
-                          <option value="gemini_cli" disabled={setupStatus ? !setupStatus.gemini_cli : false}>
-                            {labelProvider('gemini_cli')}
-                          </option>
-                          <option
-                            value="multi_cli"
-                            disabled={setupStatus ? !setupStatus.codex_cli && !setupStatus.gemini_cli : false}
-                          >
-                            {labelProvider('multi_cli')}
-                          </option>
-                        </select>
-                      </div>
-                      {draft.qa_subagent_provider === 'multi_cli' ? (
-                        <CsvAgentOrderField
-                          label="Order"
-                          value={draft.qa_subagent_agents}
-                          onChange={(v) => setDraft({ ...draft, qa_subagent_agents: v })}
-                          error={validation.fieldErrors.qa_subagent_agents}
-                          availability={{ codex: Boolean(setupStatus?.codex_cli), gemini: Boolean(setupStatus?.gemini_cli) }}
-                          rawPlaceholder="e.g. codex,gemini"
-                        />
-                      ) : null}
-                    </div>
-                    <div className="text-xs text-[var(--color-neo-text-secondary)] mt-2">
-                      Spawns a short-lived fixer after Gatekeeper rejects a feature (reuses the same branch; no new scope).
-                      <span className="block mt-1">
-                        Note: <span className="font-mono">codex_cli</span> uses <span className="font-mono">Codex model</span> above, and <span className="font-mono">gemini_cli</span> uses <span className="font-mono">Gemini model</span>.
-                      </span>
+                    <div className="font-display font-bold text-sm mb-2">QA engines</div>
+                    <div className="text-xs text-[var(--color-neo-text-secondary)]">
+                      QA sub-agent engines are configured in <span className="font-display font-semibold">Settings → Engines</span>.
+                      This section only controls when the QA fixer runs and how long it can try.
                     </div>
                   </div>
 
@@ -1205,7 +904,7 @@ export function AdvancedSettingsContent() {
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
                   <label className="neo-card p-3 flex items-center justify-between cursor-pointer">
-                    <span className="font-display font-bold text-sm">Feature plan (multi-model)</span>
+                    <span className="font-display font-bold text-sm">Feature plan (multi-engine)</span>
                     <input
                       type="checkbox"
                       checked={draft.planner_enabled}
@@ -1218,14 +917,13 @@ export function AdvancedSettingsContent() {
                     value={draft.planner_timeout_s}
                     onChange={(v) => setDraft({ ...draft, planner_timeout_s: clampInt(v, 30, 3600) })}
                   />
-                  <CsvAgentOrderField
-                    label="Agents"
-                    value={draft.planner_agents}
-                    onChange={(v) => setDraft({ ...draft, planner_agents: v })}
-                    error={validation.fieldErrors.planner_agents}
-                    availability={{ codex: Boolean(setupStatus?.codex_cli), gemini: Boolean(setupStatus?.gemini_cli) }}
-                    rawPlaceholder="e.g. codex,gemini"
-                  />
+                  <div className="neo-card p-3">
+                    <div className="font-display font-bold text-sm mb-1">Draft engines</div>
+                    <div className="text-xs text-[var(--color-neo-text-secondary)]">
+                      Draft engines are set in <span className="font-display font-semibold">Settings → Engines</span>
+                      (<span className="font-mono">spec_draft</span> chain).
+                    </div>
+                  </div>
                   <div className="neo-card p-3">
                     <div className="font-display font-bold text-sm mb-2">Synthesizer</div>
                     <select
@@ -1256,12 +954,12 @@ export function AdvancedSettingsContent() {
                   />
                 </div>
                 <div className="text-xs text-[var(--color-neo-text-secondary)] mt-2">
-                  Generates a short implementation plan per feature and prepends it to the worker prompt. Uses Codex/Gemini CLIs
-                  when available, with optional Claude synthesis.
+                  Generates a short implementation plan per feature and prepends it to the worker prompt. Uses the draft engines
+                  configured in Settings → Engines, with optional synthesis.
                 </div>
               </details>
 
-              <details className="neo-card p-4" open={draft.initializer_provider !== 'claude'}>
+              <details className="neo-card p-4" open={draft.initializer_synthesizer !== 'claude'}>
                 <summary className="font-display font-bold uppercase cursor-pointer select-none">Initializer</summary>
                 <div className="flex justify-end mt-2">
                   <button
@@ -1276,72 +974,36 @@ export function AdvancedSettingsContent() {
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
                   <div className="neo-card p-3">
-                    <div className="text-xs font-mono text-[var(--color-neo-text-secondary)] mb-1">Provider</div>
+                    <div className="font-display font-bold text-sm mb-1">Initializer engines</div>
+                    <div className="text-xs text-[var(--color-neo-text-secondary)]">
+                      Draft engines live in <span className="font-display font-semibold">Settings → Engines</span>
+                      (<span className="font-mono">initializer</span> chain).
+                    </div>
+                  </div>
+                  <div className="neo-card p-3">
+                    <div className="font-display font-bold text-sm mb-2">Synthesizer</div>
                     <select
-                      value={draft.initializer_provider}
-                      onChange={(e) => setDraft({ ...draft, initializer_provider: e.target.value as AdvancedSettings['initializer_provider'] })}
+                      value={draft.initializer_synthesizer}
+                      onChange={(e) =>
+                        setDraft({ ...draft, initializer_synthesizer: e.target.value as AdvancedSettings['initializer_synthesizer'] })
+                      }
                       className="neo-btn text-sm py-2 px-3 bg-white border-3 border-[var(--color-neo-border)] font-display w-full"
                     >
-                      <option value="claude">{labelProvider('claude')}</option>
-                      <option value="codex_cli" disabled={setupStatus ? !setupStatus.codex_cli : false}>
-                        {labelProvider('codex_cli')}
+                      <option value="claude">claude</option>
+                      <option value="none">none</option>
+                      <option value="codex" disabled={setupStatus ? !setupStatus.codex_cli : false}>
+                        codex
                       </option>
-                      <option value="gemini_cli" disabled={setupStatus ? !setupStatus.gemini_cli : false}>
-                        {labelProvider('gemini_cli')}
-                      </option>
-                      <option
-                        value="multi_cli"
-                        disabled={setupStatus ? !setupStatus.codex_cli && !setupStatus.gemini_cli : false}
-                      >
-                        {labelProvider('multi_cli')}
+                      <option value="gemini" disabled={setupStatus ? !setupStatus.gemini_cli : false}>
+                        gemini
                       </option>
                     </select>
                   </div>
-                  {draft.initializer_provider === 'multi_cli' ? (
-                    <CsvAgentOrderField
-                      label="Agents"
-                      value={draft.initializer_agents}
-                      onChange={(v) => setDraft({ ...draft, initializer_agents: v })}
-                      error={validation.fieldErrors.initializer_agents}
-                      availability={{ codex: Boolean(setupStatus?.codex_cli), gemini: Boolean(setupStatus?.gemini_cli) }}
-                      rawPlaceholder="e.g. codex,gemini"
-                    />
-                  ) : null}
-                  {draft.initializer_provider === 'claude' ? (
-                    <div className="neo-card p-3 bg-[var(--color-neo-bg)] self-start">
-                      <div className="font-display font-bold text-sm mb-1">Multi-model settings</div>
-                      <div className="text-xs text-[var(--color-neo-text-secondary)]">
-                        Claude initializer runs inside the main agent loop. Synthesizer/timeout/agent-order only apply to Codex/Gemini providers.
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="neo-card p-3">
-                      <div className="font-display font-bold text-sm mb-2">Synthesizer</div>
-                      <select
-                        value={draft.initializer_synthesizer}
-                        onChange={(e) =>
-                          setDraft({ ...draft, initializer_synthesizer: e.target.value as AdvancedSettings['initializer_synthesizer'] })
-                        }
-                        className="neo-btn text-sm py-2 px-3 bg-white border-3 border-[var(--color-neo-border)] font-display w-full"
-                      >
-                        <option value="claude">claude</option>
-                        <option value="none">none</option>
-                        <option value="codex" disabled={setupStatus ? !setupStatus.codex_cli : false}>
-                          codex
-                        </option>
-                        <option value="gemini" disabled={setupStatus ? !setupStatus.gemini_cli : false}>
-                          gemini
-                        </option>
-                      </select>
-                    </div>
-                  )}
-                  {draft.initializer_provider !== 'claude' ? (
-                    <Field
-                      label="Timeout (s)"
-                      value={draft.initializer_timeout_s}
-                      onChange={(v) => setDraft({ ...draft, initializer_timeout_s: clampInt(v, 30, 3600) })}
-                    />
-                  ) : null}
+                  <Field
+                    label="Timeout (s)"
+                    value={draft.initializer_timeout_s}
+                    onChange={(v) => setDraft({ ...draft, initializer_timeout_s: clampInt(v, 30, 3600) })}
+                  />
                   <Field
                     label="Stage threshold"
                     value={draft.initializer_stage_threshold}

@@ -73,32 +73,20 @@ Env vars:
 - `AUTOCODER_QA_MAX_SESSIONS=3`
 - `AUTOCODER_QA_SUBAGENT_ENABLED=1`
 - `AUTOCODER_QA_SUBAGENT_MAX_ITERATIONS=2`
-- `AUTOCODER_QA_SUBAGENT_PROVIDER=claude` (`claude|codex_cli|gemini_cli|multi_cli`)
-- `AUTOCODER_QA_SUBAGENT_AGENTS=codex,gemini` (order when provider=`multi_cli`)
 
 Web UI:
 
 - Settings -> Advanced -> Automation -> QA sub-agent
+- Settings -> Engines -> QA Fix (engine chain)
 
-## Optional patch-based feature worker (Codex/Gemini)
+## Engine chains (feature workers, QA, review, spec, initializer)
 
-Feature implementation normally runs through the Claude Agent SDK loop. For some environments, you can switch feature implementation to a patch worker that emits a unified diff via external CLIs (Codex/Gemini) and submits to Gatekeeper for deterministic verification.
+Feature implementation normally runs through the Claude Agent SDK loop. For some environments, you can switch feature implementation to a patch worker chain that emits a unified diff via external CLIs (Codex/Gemini) and submits to Gatekeeper for deterministic verification.
 
-Env vars:
+Engine chains are configured per project in the Web UI:
 
-- `AUTOCODER_WORKER_PROVIDER=claude` (`claude|codex_cli|gemini_cli|multi_cli`)
-- `AUTOCODER_WORKER_PATCH_MAX_ITERATIONS=2`
-- `AUTOCODER_WORKER_PATCH_AGENTS=codex,gemini` (order when provider=`multi_cli`)
-
-Per-project config (recommended):
-
-You can store worker defaults in the target repo’s `autocoder.yaml`:
-
-- `worker.provider`
-- `worker.patch_max_iterations`
-- `worker.patch_agents`
-
-Per-project `autocoder.yaml` worker settings take precedence over global env vars (so each project can carry its own policy).
+- Settings -> Engines (project scoped)
+- API: `GET/PUT /api/engine-settings?project=...`
 
 ## Worktree cleanup queue (Windows-safe)
 
@@ -183,7 +171,7 @@ Planner synthesis is timeboxed and safe to call from within the orchestrator’s
 The Web UI includes a **Diagnostics** page to validate the reliability pipeline without guessing:
 
 - Configure a fixtures directory (defaults to `dev_archive/e2e-fixtures`).
-- Run deterministic E2E fixtures (QA provider pipeline, parallel mini project).
+- Run deterministic E2E fixtures (QA engine pipeline, parallel mini project).
 - View recent run logs + tail output.
 
 Implementation note: the "Parallel Mini" fixture uses a deterministic dummy worker (`AUTOCODER_E2E_DUMMY_WORKER=1`)

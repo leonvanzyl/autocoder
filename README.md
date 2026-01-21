@@ -32,7 +32,7 @@ It's not going to replace your dev team (yet), but it's shockingly good at build
 ### Settings: project vs global (and who wins)
 
 - **Project settings (portable):** stored in the target project’s `agent_system.db` (notably **Model Settings**). This means each project can carry its own model preset/mapping without touching `.env`.
-- **Global settings (your machine):** stored in `~/.autocoder/settings.db` (Web UI **Advanced Settings**: ports, retry/backoff, QA provider defaults, log retention, diagnostics, etc.). Override path with `AUTOCODER_SETTINGS_DB_PATH`.
+- **Global settings (your machine):** stored in `~/.autocoder/settings.db` (Web UI **Advanced Settings**: ports, retry/backoff, QA/Controller toggles, log retention, diagnostics, etc.). Override path with `AUTOCODER_SETTINGS_DB_PATH`.
 - **Precedence when the UI launches a run:** saved Advanced Settings override `.env`/shell env vars (but only if you actually saved settings). If you never saved Advanced Settings, the UI won’t override your env.
 
 ---
@@ -94,7 +94,7 @@ On Windows, you can also use `start.bat` / `start_ui.bat`. These scripts now fir
 
 ### New Project Setup Wizard (Web UI)
 
-When creating a new project in the Web UI, AutoCoder includes an optional **Project Setup** step that can create (or copy) a per-project `autocoder.yaml`, including the `worker:` defaults (feature worker provider, patch iterations/order). You can always edit this later in Settings → Project Config.
+When creating a new project in the Web UI, AutoCoder includes an optional **Project Setup** step that can create (or copy) a per-project `autocoder.yaml` with verification commands and review settings. Engine chains (feature worker/QA/review/spec) live in the project DB and are configured in **Settings → Engines**.
 
 **What happens next:**
 
@@ -139,7 +139,7 @@ autocoder-ui
 - Quick run settings: **Settings** button (or press `S`).
 - Dashboard navigation: click the **Autonomous Coder** logo (or choose **Dashboard** in the project dropdown) to go back without stopping any running agents. If something is still running, the Dashboard shows a “running in the background” card with a one-click return.
 - Global settings (no project selected): from the Dashboard click **Settings** (or press `S`) to open **Advanced** + **Diagnostics**.
-- Full settings hub: open `http://127.0.0.1:8888/#/settings` (Run / Models / Advanced).
+- Full settings hub: open `http://127.0.0.1:8888/#/settings` (Run / Models / Engines / Advanced / Diagnostics).
 - Advanced settings (Run/Advanced/Diagnostics defaults) are stored globally in `~/.autocoder/settings.db` (override path with `AUTOCODER_SETTINGS_DB_PATH`). Legacy `~/.autocoder/ui_settings.json` is read once and auto-migrated.
 - When the UI starts a run, **saved** advanced settings override `.env`/shell env vars. If you’ve never saved Advanced Settings, the UI does not override env vars.
 - Provider badge: when a project is selected, the header shows **ALT API** (custom endpoint) or **GLM** (z.ai/GLM-style endpoint) if configured via `.env`.
@@ -219,21 +219,16 @@ In the Web UI: click **Knowledge** (shortcut `K`) to create/edit/delete knowledg
 
 #### Initializer backlog + staging
 
-You can also control **how the feature backlog is generated and staged**:
+Initializer drafts now use the **engine chain** in Settings → Engines (project‑scoped). Global knobs still live in Advanced Settings:
 
-```yaml
-initializer:
-  provider: claude           # claude|codex_cli|gemini_cli|multi_cli
-  agents: [codex, gemini]    # only used for multi_cli
-  synthesizer: claude        # none|claude|codex|gemini
-  timeout_s: 300
-  stage_threshold: 120       # stage backlog above this count
-  enqueue_count: 30          # keep this many enabled
-```
+- `AUTOCODER_INITIALIZER_SYNTHESIZER` (default `claude`)
+- `AUTOCODER_INITIALIZER_TIMEOUT_S` (default `300`)
+- `AUTOCODER_INITIALIZER_STAGE_THRESHOLD` (default `120`)
+- `AUTOCODER_INITIALIZER_ENQUEUE_COUNT` (default `30`)
 
 Notes:
 - Large backlogs are **staged** (not dropped). Only `enqueue_count` features are active at a time.
-- UI: **Settings → Advanced → Initializer** sets global defaults; **Settings → Project Config** overrides per project.
+- UI: **Settings → Advanced → Initializer** sets the global defaults; **Settings → Engines** controls draft engines.
 - Staged features show in a separate column and can be enqueued in batches.
 
 ### Onboarding Existing Projects (GSD → Spec)
@@ -318,21 +313,19 @@ Transient Claude SDK errors (rate limits, timeouts, connection blips) use expone
 - `AUTOCODER_SDK_EXPONENTIAL_BASE` (default `2`)
 - `AUTOCODER_SDK_JITTER` (default `true`)
 
-### Feature Worker Provider (optional)
+### Engine Chains (per-project)
 
-By default, feature implementation uses the **Claude Agent SDK** worker. You can optionally switch feature implementation to a patch worker that generates unified diffs via external CLIs.
+Feature implementation, QA fixers, review, spec/plan drafts, and initializer drafts are controlled by **engine chains** stored in each project’s `agent_system.db`:
 
-- Provider: `AUTOCODER_WORKER_PROVIDER` (`claude|codex_cli|gemini_cli|multi_cli`)
-- Iterations (patch worker): `AUTOCODER_WORKER_PATCH_MAX_ITERATIONS` (default `2`)
-- Provider order (multi): `AUTOCODER_WORKER_PATCH_AGENTS` (default `codex,gemini`)
+- Configure in **Settings → Engines** or via `GET/PUT /api/engine-settings?project=...`.
+- Order matters: engines run in sequence until a patch/decision succeeds.
+- Patch workers use `src/autocoder/qa_worker.py --mode implement --engines '["codex_cli","gemini_cli","claude_patch"]'`.
 
 **Codex defaults (nice quality-of-life):** if you leave Codex model settings blank, AutoCoder will try to read Codex CLI defaults from `~/.codex/config.toml` (`model` and `model_reasoning_effort`). You can still override via env (`AUTOCODER_CODEX_MODEL`, `AUTOCODER_CODEX_REASONING_EFFORT`) or in the Web UI (Advanced Settings).
 
 Codex reasoning effort accepts: `low|medium|high|xlow|xmedium|xhigh` (Codex CLI uses `model_reasoning_effort`).
 
-Per-project (recommended): store these under `worker:` in the target repo’s `autocoder.yaml` so each project carries its own defaults.
-
-In the Web UI: Settings -> Advanced -> Automation -> Feature Workers.
+Per-project engine chains live in the project’s `agent_system.db` (use **Settings → Engines**).
 
 ### QA Fix Mode (optional)
 
@@ -349,10 +342,9 @@ When enabled, the orchestrator will spawn a short-lived QA worker immediately af
 
 - Enable: `AUTOCODER_QA_SUBAGENT_ENABLED=1`
 - Iterations: `AUTOCODER_QA_SUBAGENT_MAX_ITERATIONS` (default `2`)
-- Provider: `AUTOCODER_QA_SUBAGENT_PROVIDER` (`claude|codex_cli|gemini_cli|multi_cli`)
-- Provider order (multi): `AUTOCODER_QA_SUBAGENT_AGENTS` (default `codex,gemini`)
+- Engines are configured in **Settings → Engines** (QA Fix chain).
 
-In the Web UI: Settings -> Advanced -> Automation -> QA sub-agent.
+In the Web UI: Settings -> Advanced -> Automation -> QA sub-agent (toggle only).
 
 ### Regression Pool (optional)
 
@@ -394,14 +386,14 @@ When enabled, AutoCoder generates a short per-feature plan (Codex/Gemini drafts,
 
 To validate the Gatekeeper -> QA sub-agent -> re-verify loop without relying on a full feature-implementation agent, run:
 
-- Node fixture: `python scripts/e2e_qa_provider.py --out-dir "G:/Apps/autocoder-e2e-fixtures" --fixture node --provider multi_cli`
-- Python/pytest fixture: `python scripts/e2e_qa_provider.py --out-dir "G:/Apps/autocoder-e2e-fixtures" --fixture python --provider multi_cli`
+- Node fixture: `python scripts/e2e_qa_provider.py --out-dir "G:/Apps/autocoder-e2e-fixtures" --fixture node --engines '["codex_cli","gemini_cli","claude_patch"]'`
+- Python/pytest fixture: `python scripts/e2e_qa_provider.py --out-dir "G:/Apps/autocoder-e2e-fixtures" --fixture python --engines '["codex_cli"]'`
 
-This creates a minimal repo that intentionally fails verification on `feat/1`, then relies on the selected QA provider to generate a patch and resubmit until Gatekeeper merges.
+This creates a minimal repo that intentionally fails verification on `feat/1`, then relies on the selected QA engine chain to generate a patch and resubmit until Gatekeeper merges.
 
 You can also run this via the CLI (same codepath as the Diagnostics UI):
 
-- `autocoder diagnostics --fixture node --provider multi_cli --out-dir "G:/Apps/autocoder-e2e-fixtures"`
+- `autocoder diagnostics --fixture node --engines '["codex_cli","gemini_cli","claude_patch"]' --out-dir "G:/Apps/autocoder-e2e-fixtures"`
 
 Notes:
 

@@ -21,14 +21,16 @@ export function GsdToSpecPanel({ projectName }: { projectName: string }) {
     if (!setup.gemini_cli && synthesizer === 'gemini') setSynthesizer('claude')
   }, [setup, synthesizer])
 
-  const agentsCsv = useMemo(() => {
-    const a: string[] = []
+  const agentsList = useMemo(() => {
+    const a: Array<'codex' | 'gemini'> = []
     if (useCodex) a.push('codex')
     if (useGemini) a.push('gemini')
-    return a.join(',')
+    return a
   }, [useCodex, useGemini])
 
-  const canRun = Boolean(statusQuery.data && statusQuery.data.exists && statusQuery.data.missing.length === 0)
+  const canRun =
+    Boolean(statusQuery.data && statusQuery.data.exists && statusQuery.data.missing.length === 0) &&
+    (agentsList.length > 0 || synthesizer === 'claude')
 
   return (
     <div className="neo-card p-4">
@@ -134,7 +136,7 @@ export function GsdToSpecPanel({ projectName }: { projectName: string }) {
               <span className="font-display font-bold text-sm">Gemini</span>
             </label>
             <span className="text-xs text-[var(--color-neo-text-secondary)] font-mono">
-              {agentsCsv || '(none)'}
+              {agentsList.length ? agentsList.join(', ') : '(none)'}
             </span>
           </div>
         </div>
@@ -160,13 +162,17 @@ export function GsdToSpecPanel({ projectName }: { projectName: string }) {
           className="neo-btn neo-btn-primary text-sm"
           onClick={() =>
             run.mutate({
-              agents: agentsCsv,
+              agents: agentsList,
               synthesizer,
               timeout_s: timeoutS,
             })
           }
           disabled={!canRun || run.isPending}
-          title={!canRun ? 'Missing .planning/codebase required files' : 'Generate prompts/app_spec.txt from GSD mapping'}
+          title={
+            !canRun
+              ? 'Missing required files or no engines selected'
+              : 'Generate prompts/app_spec.txt from GSD mapping'
+          }
         >
           {run.isPending ? <Loader2 size={18} className="animate-spin" /> : <Sparkles size={18} />}
           Generate app_spec.txt

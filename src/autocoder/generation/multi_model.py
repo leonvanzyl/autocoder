@@ -155,7 +155,10 @@ class MultiModelGenerateConfig:
         timeout_s: int | None = None,
     ) -> "MultiModelGenerateConfig":
         env_agents = _split_csv(os.environ.get("AUTOCODER_GENERATE_AGENTS")) or None
-        picked_agents = agents or [a for a in (env_agents or ["codex", "gemini"]) if a in {"codex", "gemini"}]  # type: ignore[list-item]
+        if agents is None:
+            picked_agents = [a for a in (env_agents or ["codex", "gemini"]) if a in {"codex", "gemini"}]  # type: ignore[list-item]
+        else:
+            picked_agents = agents
 
         synth = synthesizer or (os.environ.get("AUTOCODER_GENERATE_SYNTHESIZER") or "claude").strip().lower()
         if synth not in {"none", "claude", "codex", "gemini"}:
@@ -360,7 +363,7 @@ def generate_multi_model_artifact(
     drafts_root.mkdir(parents=True, exist_ok=True)
 
     prompt = build_generation_prompt(kind, user_prompt)
-    requested = cfg.agents or ["codex", "gemini"]  # type: ignore[list-item]
+    requested = cfg.agents if cfg.agents is not None else ["codex", "gemini"]  # type: ignore[list-item]
     agents = _available_agents(requested)
     if not agents and cfg.synthesizer in {"codex", "gemini"}:
         # If user asked for a CLI synthesizer but it's not present, fail fast.
@@ -472,7 +475,7 @@ def generate_multi_model_text(
             header += f"--- BEGIN {name.upper()} DRAFT ---\n{content}\n--- END {name.upper()} DRAFT ---\n\n"
         return header
 
-    requested = cfg.agents or ["codex", "gemini"]  # type: ignore[list-item]
+    requested = cfg.agents if cfg.agents is not None else ["codex", "gemini"]  # type: ignore[list-item]
     agents = _available_agents(requested)
     if not agents and cfg.synthesizer in {"codex", "gemini"}:
         raise RuntimeError("No requested generation CLIs found (codex/gemini).")

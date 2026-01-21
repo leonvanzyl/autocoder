@@ -218,22 +218,16 @@ export interface PruneWorkerLogsResponse {
 
 // Advanced settings (UI server)
 export type ReviewMode = 'off' | 'advisory' | 'gate'
-export type ReviewType = 'none' | 'command' | 'claude' | 'multi_cli'
-export type WorkerProvider = 'claude' | 'codex_cli' | 'gemini_cli' | 'multi_cli'
 export type PlannerSynthesizer = 'none' | 'claude' | 'codex' | 'gemini'
 export type ReviewConsensus = 'any' | 'majority' | 'all'
-export type CodexReasoningEffort = 'low' | 'medium' | 'high'
-export type InitializerProvider = 'claude' | 'codex_cli' | 'gemini_cli' | 'multi_cli'
+export type CodexReasoningEffort = 'low' | 'medium' | 'high' | 'xlow' | 'xmedium' | 'xhigh'
 export type InitializerSynthesizer = 'none' | 'claude' | 'codex' | 'gemini'
 
 export interface AdvancedSettings {
   review_enabled: boolean
   review_mode: ReviewMode
-  review_type: ReviewType
-  review_command: string
   review_timeout_s: number
   review_model: string
-  review_agents: string
   review_consensus: string
   codex_model: string
   codex_reasoning_effort: string
@@ -241,17 +235,12 @@ export interface AdvancedSettings {
 
   locks_enabled: boolean
   worker_verify: boolean
-  worker_provider: WorkerProvider
-  worker_patch_max_iterations: number
-  worker_patch_agents: string
 
   qa_fix_enabled: boolean
   qa_model: string
   qa_max_sessions: number
   qa_subagent_enabled: boolean
   qa_subagent_max_iterations: number
-  qa_subagent_provider: WorkerProvider
-  qa_subagent_agents: string
 
   controller_enabled: boolean
   controller_model: string
@@ -265,12 +254,9 @@ export interface AdvancedSettings {
 
   planner_enabled: boolean
   planner_model: string
-  planner_agents: string
   planner_synthesizer: PlannerSynthesizer
   planner_timeout_s: number
 
-  initializer_provider: InitializerProvider
-  initializer_agents: string
   initializer_synthesizer: InitializerSynthesizer
   initializer_timeout_s: number
   initializer_stage_threshold: number
@@ -306,6 +292,20 @@ export interface AdvancedSettings {
   web_port_range_start: number
   web_port_range_end: number
   skip_port_check: boolean
+}
+
+export type EngineId = 'codex_cli' | 'gemini_cli' | 'claude_patch' | 'claude_review' | 'claude_spec'
+export type EngineStage = 'implement' | 'qa_fix' | 'review' | 'spec_draft' | 'spec_synthesize' | 'initializer'
+
+export interface EngineChain {
+  enabled: boolean
+  max_iterations: number
+  engines: EngineId[]
+}
+
+export interface EngineSettings {
+  version: number
+  chains: Record<EngineStage, EngineChain>
 }
 
 // ============================================================================

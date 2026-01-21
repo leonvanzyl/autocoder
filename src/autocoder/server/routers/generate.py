@@ -35,7 +35,7 @@ class GenerateRequest(BaseModel):
     kind: Literal["spec", "plan"] = "spec"
     prompt: str = Field(min_length=1)
 
-    agents: str = ""  # csv: codex,gemini
+    agents: list[Literal["codex", "gemini"]] | None = None
     synthesizer: Literal["", "none", "claude", "codex", "gemini"] = ""
     no_synthesize: bool = False
     timeout_s: int = Field(default=0, ge=0, le=36000)
@@ -56,7 +56,7 @@ class GsdStatusResponse(BaseModel):
 
 
 class GsdToSpecRequest(BaseModel):
-    agents: str = ""  # csv: codex,gemini
+    agents: list[Literal["codex", "gemini"]] | None = None
     synthesizer: Literal["", "none", "claude", "codex", "gemini"] = ""
     no_synthesize: bool = False
     timeout_s: int = Field(default=0, ge=0, le=36000)
@@ -80,11 +80,11 @@ async def generate_for_project(project_name: str, req: GenerateRequest) -> Gener
     if not prompt:
         raise HTTPException(status_code=400, detail="Prompt is required")
 
-    agents = [a.strip().lower() for a in (req.agents or "").replace(";", ",").split(",") if a.strip()]
-    agents = [a for a in agents if a in {"codex", "gemini"}]
+    raw_agents = req.agents
+    agents = [a for a in (raw_agents or []) if a in {"codex", "gemini"}]
 
     cfg = MultiModelGenerateConfig.from_env(
-        agents=agents or None,
+        agents=None if raw_agents is None else agents,
         synthesizer=(req.synthesizer if req.synthesizer else None),  # type: ignore[arg-type]
         timeout_s=(req.timeout_s if req.timeout_s and req.timeout_s > 0 else None),
     )
@@ -143,11 +143,11 @@ async def gsd_to_spec(project_name: str, req: GsdToSpecRequest = GsdToSpecReques
     if not project_dir.exists():
         raise HTTPException(status_code=404, detail="Project directory not found")
 
-    agents = [a.strip().lower() for a in (req.agents or "").replace(";", ",").split(",") if a.strip()]
-    agents = [a for a in agents if a in {"codex", "gemini"}]
+    raw_agents = req.agents
+    agents = [a for a in (raw_agents or []) if a in {"codex", "gemini"}]
 
     cfg = MultiModelGenerateConfig.from_env(
-        agents=agents or None,
+        agents=None if raw_agents is None else agents,
         synthesizer=(req.synthesizer if req.synthesizer else None),  # type: ignore[arg-type]
         timeout_s=(req.timeout_s if req.timeout_s and req.timeout_s > 0 else None),
     )

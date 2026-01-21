@@ -34,6 +34,7 @@ from .worktree_manager import WorktreeManager
 from .project_config import load_project_config, infer_preset, synthesize_commands_from_preset
 from autocoder.reviewers.base import ReviewConfig
 from autocoder.reviewers.factory import get_reviewer
+from autocoder.core.engine_settings import load_engine_settings
 
 logger = logging.getLogger(__name__)
 
@@ -308,14 +309,18 @@ class Gatekeeper:
         def _review_config_from_project(cfg: Any) -> ReviewConfig:
             # cfg is a ResolvedProjectConfig; keep conversion robust in case of missing fields.
             r = getattr(cfg, "review", None)
+            engines: list[str] = []
+            with contextlib.suppress(Exception):
+                engine_settings = load_engine_settings(str(self.project_dir))
+                chain = engine_settings.chain_for("review")
+                if chain.enabled:
+                    engines = list(chain.engines)
             return ReviewConfig(
                 enabled=bool(getattr(r, "enabled", False)),
                 mode=str(getattr(r, "mode", "off") or "off").strip().lower(),  # type: ignore[arg-type]
-                reviewer_type=str(getattr(r, "reviewer_type", "none") or "none").strip().lower(),  # type: ignore[arg-type]
-                command=getattr(r, "command", None),
                 timeout_s=getattr(r, "timeout_s", None),
                 model=getattr(r, "model", None),
-                review_agents=getattr(r, "agents", None),
+                engines=engines,
                 consensus=getattr(r, "consensus", None),
                 codex_model=getattr(r, "codex_model", None),
                 codex_reasoning_effort=getattr(r, "codex_reasoning_effort", None),
@@ -588,7 +593,7 @@ class Gatekeeper:
                         "stdout": rr.stdout,
                         "stderr": rr.stderr,
                         "mode": review_cfg.mode,
-                        "type": review_cfg.reviewer_type,
+                        "engines": list(review_cfg.engines or []),
                     }
                 except Exception as e:
                     review = {
@@ -599,7 +604,7 @@ class Gatekeeper:
                         "stdout": "",
                         "stderr": "",
                         "mode": review_cfg.mode,
-                        "type": review_cfg.reviewer_type,
+                        "engines": list(review_cfg.engines or []),
                     }
 
                 if review_cfg.mode == "gate" and review and not review.get("approved") and not review.get("skipped"):

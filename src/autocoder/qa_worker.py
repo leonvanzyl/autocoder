@@ -7,10 +7,10 @@ A short-lived worker that can:
 - `--mode fix`: run after Gatekeeper rejection and patch ONLY the failing verification
 - `--mode implement`: implement a feature by emitting a unified diff patch
 
-Providers:
+Engines:
 - codex_cli: `codex` CLI emits a patch (captured via output schema)
 - gemini_cli: `gemini` CLI emits a patch (`-o json`)
-- multi_cli: try multiple providers in order
+- claude_patch: Claude SDK emits a unified diff (read-only tools)
 
 This worker:
 1) loads feature context from `agent_system.db`
@@ -34,6 +34,7 @@ from datetime import datetime
 from pathlib import Path
 
 from autocoder.core.cli_defaults import get_codex_cli_defaults
+from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
 from autocoder.core.database import get_database
 from autocoder.core.knowledge_files import build_knowledge_bundle
 
@@ -221,7 +222,7 @@ def _stage_and_commit(repo: Path, message: str) -> tuple[bool, str]:
         return False, str(e)
 
 
-def _fix_prompt(*, repo: Path, provider: str, failure: str, diff: str, attempt: int) -> str:
+def _fix_prompt(*, repo: Path, failure: str, diff: str, attempt: int) -> str:
     knowledge = build_knowledge_bundle(repo, max_total_chars=8000)
     base = (
         "You are a software engineer fixing a CI failure.\n"
@@ -245,7 +246,7 @@ def _fix_prompt(*, repo: Path, provider: str, failure: str, diff: str, attempt: 
     return base
 
 
-def _implement_prompt(*, repo: Path, provider: str, feature: dict, files: list[str], hints: dict[str, str], diff: str, attempt: int) -> str:
+def _implement_prompt(*, repo: Path, feature: dict, files: list[str], hints: dict[str, str], diff: str, attempt: int) -> str:
     name = str(feature.get("name") or "").strip()
     desc = str(feature.get("description") or "").strip()
     category = str(feature.get("category") or "").strip()
@@ -388,13 +389,13 @@ def _run_gemini(repo: Path, *, prompt: str, timeout_s: int) -> tuple[bool, str, 
 
 
 def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Patch worker (Codex/Gemini unified-diff applier)")
+    p = argparse.ArgumentParser(description="Patch worker (Codex/Gemini/Claude unified-diff applier)")
     p.add_argument("--mode", default="fix", choices=["fix", "implement"])
     p.add_argument("--project-dir", required=True)
     p.add_argument("--agent-id", required=True)
     p.add_argument("--feature-id", type=int, required=True)
     p.add_argument("--worktree-path", required=True)
-    p.add_argument("--provider", required=True, choices=["codex_cli", "gemini_cli", "multi_cli"])
+    p.add_argument("--engines", required=True, help="JSON array of patch engines (codex_cli|gemini_cli|claude_patch)")
     p.add_argument("--max-iterations", type=int, default=2)
     p.add_argument("--timeout-s", type=int, default=600)
     return p.parse_args()
@@ -407,23 +408,103 @@ async def heartbeat_loop(database, agent_id: str, interval_seconds: int = 60) ->
         await asyncio.sleep(max(5, interval_seconds))
 
 
-def _provider_order(provider: str, *, mode: str) -> list[str]:
-    if provider != "multi_cli":
-        return [provider]
-    raw = os.environ.get(
-        "AUTOCODER_WORKER_PATCH_AGENTS" if mode == "implement" else "AUTOCODER_QA_SUBAGENT_AGENTS",
-        "codex,gemini",
-    )
-    parts = [x.strip().lower() for x in raw.replace(";", ",").split(",") if x.strip()]
+def _parse_engine_list(raw: str) -> list[str]:
+    try:
+        data = json.loads(raw)
+    except Exception:
+        return []
+    if not isinstance(data, list):
+        return []
     out: list[str] = []
-    for x in parts:
-        if x == "codex":
-            out.append("codex_cli")
-        elif x == "gemini":
-            out.append("gemini_cli")
-        elif x in {"codex_cli", "gemini_cli"}:
-            out.append(x)
-    return out or ["codex_cli", "gemini_cli"]
+    for item in data:
+        if not isinstance(item, str):
+            continue
+        v = item.strip().lower()
+        if v in {"codex_cli", "gemini_cli", "claude_patch"}:
+            out.append(v)
+    # de-dupe while preserving order
+    seen: set[str] = set()
+    deduped: list[str] = []
+    for v in out:
+        if v in seen:
+            continue
+        seen.add(v)
+        deduped.append(v)
+    return deduped
+
+
+def _claude_cli_path(use_custom_api: bool) -> str | None:
+    if use_custom_api:
+        return None
+    cli_command = (os.environ.get("AUTOCODER_CLI_COMMAND") or os.environ.get("CLI_COMMAND") or "claude").strip()
+    return shutil.which(cli_command)
+
+
+async def _run_claude_patch(repo: Path, *, prompt: str, timeout_s: int) -> tuple[bool, str, str]:
+    use_custom_api = False
+    if "ANTHROPIC_AUTH_TOKEN" in os.environ:
+        os.environ["ANTHROPIC_API_KEY"] = os.environ["ANTHROPIC_AUTH_TOKEN"]
+        use_custom_api = True
+
+    credentials_path = Path.home() / ".claude" / ".credentials.json"
+    if not use_custom_api and not credentials_path.exists():
+        return False, "", "claude credentials not found; skipped"
+
+    model = (
+        os.environ.get("AUTOCODER_CLAUDE_PATCH_MODEL")
+        or os.environ.get("AUTOCODER_REVIEW_MODEL")
+        or "sonnet"
+    ).strip()
+
+    # Read-only settings file (no writes).
+    settings_file = repo / ".claude_settings.patch.json"
+    security_settings = {
+        "sandbox": {"enabled": True, "autoAllowBashIfSandboxed": True},
+        "permissions": {
+            "defaultMode": "reject",
+            "allow": [
+                "Read(./**)",
+                "Glob(./**)",
+                "Grep(./**)",
+            ],
+        },
+    }
+    settings_file.write_text(json.dumps(security_settings, indent=2), encoding="utf-8")
+
+    client = ClaudeSDKClient(
+        options=ClaudeAgentOptions(
+            model=model,
+            cli_path=_claude_cli_path(use_custom_api),
+            allowed_tools=["Read", "Glob", "Grep"],
+            system_prompt=(
+                "You are generating a unified diff patch.\n"
+                "Output ONLY the unified diff starting with 'diff --git'.\n"
+                "No explanations, no markdown fences."
+            ),
+            cwd=str(repo),
+            settings=str(settings_file),
+            max_turns=2,
+            setting_sources=["project"],
+        )
+    )
+
+    async def _collect() -> str:
+        await client.query(prompt)
+        text = ""
+        async for msg in client.receive_response():
+            if type(msg).__name__ == "AssistantMessage" and hasattr(msg, "content"):
+                for block in msg.content:
+                    if type(block).__name__ == "TextBlock" and hasattr(block, "text"):
+                        text += block.text
+        return text
+
+    try:
+        text = await asyncio.wait_for(_collect(), timeout=timeout_s)
+        return True, text, ""
+    except asyncio.TimeoutError:
+        return False, "", "claude patch timed out"
+    except Exception as e:
+        return False, "", str(e)
 
 
 async def main() -> int:
@@ -450,7 +531,12 @@ async def main() -> int:
     logger.info(f"Agent:    {args.agent_id}")
     logger.info(f"Feature:  #{args.feature_id} - {feature.get('name')}")
     logger.info(f"Repo:     {repo}")
-    logger.info(f"Provider: {args.provider}")
+    engines = _parse_engine_list(args.engines)
+    if not engines:
+        logger.error("No valid engines provided. Expected JSON list of codex_cli|gemini_cli|claude_patch.")
+        return 2
+
+    logger.info(f"Engines:  {', '.join(engines)}")
     logger.info(f"Max iters:{args.max_iterations}")
     logger.info("=" * 70)
 
@@ -467,14 +553,12 @@ async def main() -> int:
         hints = _detect_project_hints(repo) if mode == "implement" else {}
 
         for attempt in range(1, max(1, int(args.max_iterations)) + 1):
-            providers = _provider_order(args.provider, mode=mode)
-            for p in providers:
-                logger.info(f"Attempt {attempt}: provider={p}")
+            for p in engines:
+                logger.info(f"Attempt {attempt}: engine={p}")
                 try:
                     if mode == "implement":
                         prompt = _implement_prompt(
                             repo=repo,
-                            provider=p,
                             feature=feature,
                             files=files,
                             hints=hints,
@@ -483,17 +567,19 @@ async def main() -> int:
                         )
                     else:
                         failure_blob = failure + ("\n" + last_err if last_err else "")
-                        prompt = _fix_prompt(repo=repo, provider=p, failure=failure_blob, diff=diff, attempt=attempt)
+                        prompt = _fix_prompt(repo=repo, failure=failure_blob, diff=diff, attempt=attempt)
 
                     if p == "codex_cli":
                         ok, patch, err = _run_codex(repo, prompt=prompt, timeout_s=int(args.timeout_s))
-                    else:
+                    elif p == "gemini_cli":
                         ok, patch, err = _run_gemini(repo, prompt=prompt, timeout_s=int(args.timeout_s))
+                    else:
+                        ok, patch, err = await _run_claude_patch(repo, prompt=prompt, timeout_s=int(args.timeout_s))
                 except Exception as e:
                     ok, patch, err = False, "", str(e)
 
                 if not ok:
-                    last_err = err or "provider failed"
+                    last_err = err or "engine failed"
                     logger.warning(last_err)
                     continue
 

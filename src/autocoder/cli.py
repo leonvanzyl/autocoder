@@ -823,12 +823,17 @@ Examples:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  autocoder diagnostics --fixture node --provider multi_cli
-  autocoder diagnostics --fixture python --provider gemini_cli
+  autocoder diagnostics --fixture node --engines '["codex_cli","gemini_cli","claude_patch"]'
+  autocoder diagnostics --fixture python --engines '["codex_cli"]'
         """,
     )
     diag_parser.add_argument("--fixture", choices=["node", "python"], default="node")
-    diag_parser.add_argument("--provider", choices=["claude", "codex_cli", "gemini_cli", "multi_cli"], default="multi_cli")
+    diag_parser.add_argument(
+        "--engines",
+        type=str,
+        default='["codex_cli","gemini_cli","claude_patch"]',
+        help="JSON array of engines (codex_cli|gemini_cli|claude_patch)",
+    )
     diag_parser.add_argument("--timeout-s", type=int, default=240)
     diag_parser.add_argument("--out-dir", type=str, default=None, help="Where to create fixture repos (default: dev_archive/e2e-fixtures)")
 
@@ -890,8 +895,8 @@ Examples:
             out_dir,
             "--fixture",
             args.fixture,
-            "--provider",
-            args.provider,
+            "--engines",
+            args.engines,
             "--timeout-s",
             str(int(args.timeout_s)),
         ]

@@ -23,6 +23,7 @@ import os
 import sys
 import logging
 import subprocess
+import json
 import psutil
 import threading
 import socket
@@ -39,6 +40,7 @@ from .worktree_manager import WorktreeManager
 from .database import Database, get_database
 from .gatekeeper import Gatekeeper
 from .project_config import load_project_config
+from .engine_settings import load_engine_settings, EngineSettings
 from .logs import prune_worker_logs_from_env, prune_gatekeeper_artifacts_from_env
 from autocoder.generation.multi_model import (
     MultiModelGenerateConfig,
@@ -370,6 +372,10 @@ class Orchestrator:
             self.project_config = load_project_config(self.project_dir)
         if not hasattr(self, "project_config"):
             self.project_config = None
+        with contextlib.suppress(Exception):
+            self.engine_settings = load_engine_settings(str(self.project_dir))
+        if not hasattr(self, "engine_settings"):
+            self.engine_settings = EngineSettings.defaults()
 
         # Initialize port allocator
         self.port_allocator = PortAllocator()
@@ -452,14 +458,17 @@ class Orchestrator:
         logger.info("📝 No features found, running initializer agent...")
 
         try:
-            init_provider = self._initializer_provider()
-            if init_provider == "claude":
+            init_agents = self._initializer_agents()
+            if init_agents:
+                logger.info(f"   Provider: multi-model ({', '.join(init_agents)})")
+                self._run_initializer_multi_model(agents=init_agents)
+            else:
                 # Select model for initializer (use best available model)
                 model = self.available_models[0] if self.available_models else "opus"
 
-                logger.info(f"   Provider: CLAUDE")
+                logger.info("   Provider: CLAUDE")
                 logger.info(f"   Model: {model.upper()}")
-                logger.info(f"   Location: Main branch (no worktree needed)")
+                logger.info("   Location: Main branch (no worktree needed)")
 
                 # Run initializer with max_iterations=1 (only initializer session)
                 await run_autonomous_agent(
@@ -468,9 +477,6 @@ class Orchestrator:
                     max_iterations=1,  # Only run initializer
                     yolo_mode=False     # Full testing for initializer
                 )
-            else:
-                logger.info(f"   Provider: {init_provider.upper()} (multi-model backlog)")
-                self._run_initializer_multi_model(provider=init_provider)
 
             # Verify features were created
             stats = self.database.get_stats()
@@ -491,7 +497,7 @@ class Orchestrator:
             logger.error(f"   ❌ Initializer failed: {e}")
             return False
 
-    def _run_initializer_multi_model(self, *, provider: str) -> None:
+    def _run_initializer_multi_model(self, *, agents: list[str]) -> None:
         """
         Generate a feature backlog using Codex/Gemini CLIs (optionally synthesized).
         """
@@ -504,11 +510,7 @@ class Orchestrator:
         feature_count = infer_feature_count(self.project_dir)
         prompt = build_backlog_prompt(spec_text, feature_count)
 
-        agents = self._initializer_agents()
-        if provider == "codex_cli":
-            agents = ["codex"]
-        elif provider == "gemini_cli":
-            agents = ["gemini"]
+        agents = [a for a in agents if a in {"codex", "gemini"}]
 
         cfg = MultiModelGenerateConfig.from_env(
             agents=agents,
@@ -807,17 +809,14 @@ class Orchestrator:
 
             # Spawn actual worker process.
             #
-            # Providers:
+            # Workers:
             # - AUTOCODER_E2E_DUMMY_WORKER=1: deterministic fixture worker (no LLM)
-            # - project autocoder.yaml: worker.provider / worker.patch_* (per-project defaults)
-            # - AUTOCODER_WORKER_PROVIDER=claude: Claude Agent SDK worker
-            # - AUTOCODER_WORKER_PROVIDER=codex_cli|gemini_cli|multi_cli: patch-based worker via qa_worker.py
+            # - Engine chain enabled (project DB): patch worker via qa_worker.py
+            # - Engine chain disabled: Claude Agent SDK worker
             cmd: list[str] = []
-            provider_for_env = "claude"
-            cfg_patch_agents: Optional[list[str]] = None
+            use_patch_chain = False
             if self._env_truthy("AUTOCODER_E2E_DUMMY_WORKER"):
                 worker_script = Path(__file__).resolve().parents[1] / "e2e_dummy_worker.py"
-                provider_for_env = "dummy"
                 cmd = [
                     sys.executable,
                     str(worker_script),
@@ -835,31 +834,31 @@ class Orchestrator:
                     str(web_port),
                 ]
             else:
-                cfg_provider: Optional[str] = None
-                cfg_patch_iters: Optional[int] = None
-                with contextlib.suppress(Exception):
-                    cfg = load_project_config(self.project_dir)
-                    worker_cfg = getattr(cfg, "worker", None) if cfg is not None else None
-                    if worker_cfg is not None:
-                        cfg_provider = getattr(worker_cfg, "provider", None)
-                        cfg_patch_iters = getattr(worker_cfg, "patch_max_iterations", None)
-                        cfg_patch_agents = getattr(worker_cfg, "patch_agents", None)
+                engine_settings = self._engine_settings()
+                implement_chain = engine_settings.chain_for("implement")
+                use_patch_chain = implement_chain.enabled and bool(implement_chain.engines)
 
-                env_provider = str(os.environ.get("AUTOCODER_WORKER_PROVIDER", "")).strip().lower()
-                # Allow shorthand.
-                if env_provider == "codex":
-                    env_provider = "codex_cli"
-                elif env_provider == "gemini":
-                    env_provider = "gemini_cli"
-
-                provider = (cfg_provider or env_provider or "claude").strip().lower()
-                if provider == "codex":
-                    provider = "codex_cli"
-                elif provider == "gemini":
-                    provider = "gemini_cli"
-                provider_for_env = provider
-
-                if provider == "claude":
+                if use_patch_chain:
+                    worker_script = Path(__file__).parent.parent / "qa_worker.py"
+                    cmd = [
+                        sys.executable,
+                        str(worker_script),
+                        "--mode",
+                        "implement",
+                        "--project-dir",
+                        str(self.project_dir),
+                        "--agent-id",
+                        agent_id,
+                        "--feature-id",
+                        str(feature_id),
+                        "--worktree-path",
+                        worktree_info["worktree_path"],
+                        "--engines",
+                        json.dumps(list(implement_chain.engines)),
+                        "--max-iterations",
+                        str(int(implement_chain.max_iterations or 2)),
+                    ]
+                else:
                     worker_script = Path(__file__).parent.parent / "agent_worker.py"
                     cmd = [
                         sys.executable,
@@ -882,66 +881,9 @@ class Orchestrator:
                         str(web_port),
                         "--yolo",  # Use YOLO mode for parallel execution (speed)
                     ]
-                elif provider in {"codex_cli", "gemini_cli", "multi_cli"}:
-                    worker_script = Path(__file__).parent.parent / "qa_worker.py"
-                    patch_iters_raw = str(os.environ.get("AUTOCODER_WORKER_PATCH_MAX_ITERATIONS", "")).strip()
-                    env_patch_iters: Optional[int] = None
-                    if patch_iters_raw:
-                        with contextlib.suppress(Exception):
-                            env_patch_iters = int(patch_iters_raw)
-                    if env_patch_iters is not None:
-                        env_patch_iters = max(1, min(20, env_patch_iters))
-                    patch_iters = cfg_patch_iters if cfg_patch_iters is not None else (env_patch_iters if env_patch_iters is not None else 2)
-                    cmd = [
-                        sys.executable,
-                        str(worker_script),
-                        "--mode",
-                        "implement",
-                        "--project-dir",
-                        str(self.project_dir),
-                        "--agent-id",
-                        agent_id,
-                        "--feature-id",
-                        str(feature_id),
-                        "--worktree-path",
-                        worktree_info["worktree_path"],
-                        "--provider",
-                        provider,
-                        "--max-iterations",
-                        str(patch_iters),
-                    ]
-                else:
-                    logger.error(f"   ❌ Unknown AUTOCODER_WORKER_PROVIDER='{provider}', falling back to claude")
-                    worker_script = Path(__file__).parent.parent / "agent_worker.py"
-                    cmd = [
-                        sys.executable,
-                        str(worker_script),
-                        "--project-dir",
-                        str(self.project_dir),
-                        "--agent-id",
-                        agent_id,
-                        "--feature-id",
-                        str(feature_id),
-                        "--worktree-path",
-                        worktree_info["worktree_path"],
-                        "--model",
-                        model,
-                        "--max-iterations",
-                        "5",
-                        "--api-port",
-                        str(api_port),
-                        "--web-port",
-                        str(web_port),
-                        "--yolo",
-                    ]
 
             # Prepare environment with port allocations (redundant with CLI args)
             env = os.environ.copy()
-            # Make the effective provider visible to workers/subprocesses.
-            env["AUTOCODER_WORKER_PROVIDER"] = provider_for_env
-            with contextlib.suppress(Exception):
-                if provider_for_env in {"multi_cli"} and cfg_patch_agents:
-                    env["AUTOCODER_WORKER_PATCH_AGENTS"] = ",".join([str(x) for x in cfg_patch_agents if str(x).strip()])
             env["AUTOCODER_API_PORT"] = str(api_port)
             env["AUTOCODER_WEB_PORT"] = str(web_port)
             # Compatibility for common dev servers that read generic port env vars.
@@ -961,9 +903,15 @@ class Orchestrator:
             logs_dir.mkdir(parents=True, exist_ok=True)
             log_file_path = logs_dir / f"{agent_id}.log"
 
+            worker_mode = "patch" if use_patch_chain else "claude"
+            worker_engines = list(implement_chain.engines) if use_patch_chain else []
+
             logger.info(f"🚀 Launching {agent_id}:")
             logger.info(f"   Feature: #{feature_id} - {claimed_feature['name']}")
-            logger.info(f"   Model: {model.upper()}")
+            if use_patch_chain:
+                logger.info(f"   Engines: {', '.join(worker_engines) if worker_engines else 'none'}")
+            else:
+                logger.info(f"   Model: {model.upper()}")
             logger.info(f"   Worktree: {worktree_info['worktree_path']}")
             logger.info(f"   Ports: API={api_port}, WEB={web_port}")
             logger.info(f"   Logs: {log_file_path}")
@@ -1006,8 +954,9 @@ class Orchestrator:
                         feature_id=int(feature_id),
                         data={
                             "branch": str(claimed_branch),
-                            "provider": str(provider_for_env),
-                            "model": str(model),
+                            "worker_mode": worker_mode,
+                            "engines": worker_engines,
+                            "model": str(model) if not use_patch_chain else "",
                             "api_port": int(api_port),
                             "web_port": int(web_port),
                             "worktree": str(worktree_info.get("worktree_path") or ""),
@@ -1105,6 +1054,23 @@ class Orchestrator:
         raw = str(os.environ.get(name, "")).strip().lower()
         return raw in {"1", "true", "yes", "on"}
 
+    def _engine_settings(self) -> EngineSettings:
+        with contextlib.suppress(Exception):
+            return load_engine_settings(str(self.project_dir))
+        return self.engine_settings if getattr(self, "engine_settings", None) is not None else EngineSettings.defaults()
+
+    def _chain_agents(self, stage: str) -> list[str]:
+        chain = self._engine_settings().chain_for(stage)  # type: ignore[arg-type]
+        if not chain.enabled:
+            return []
+        agents: list[str] = []
+        for engine in chain.engines:
+            if engine == "codex_cli":
+                agents.append("codex")
+            elif engine == "gemini_cli":
+                agents.append("gemini")
+        return agents
+
     def _stop_when_done(self) -> bool:
         raw = str(os.environ.get("AUTOCODER_STOP_WHEN_DONE", "")).strip().lower()
         if not raw:
@@ -1126,13 +1092,10 @@ class Orchestrator:
         return max(30, min(3600, v))
 
     def _planner_agents(self) -> list[str]:
-        raw = str(os.environ.get("AUTOCODER_PLANNER_AGENTS", "")).strip().lower()
-        parts = [p.strip() for p in raw.replace(";", ",").split(",") if p.strip()]
-        out: list[str] = []
-        for p in parts:
-            if p in {"codex", "gemini"}:
-                out.append(p)
-        return out or ["codex", "gemini"]
+        chain = self._engine_settings().chain_for("spec_draft")
+        if not chain.enabled:
+            return ["codex", "gemini"]
+        return self._chain_agents("spec_draft")
 
     def _planner_synthesizer(self) -> str:
         raw = str(os.environ.get("AUTOCODER_PLANNER_SYNTHESIZER", "")).strip().lower()
@@ -1143,45 +1106,15 @@ class Orchestrator:
     def _planner_model(self) -> str:
         return str(os.environ.get("AUTOCODER_PLANNER_MODEL", "")).strip().lower()
 
-    def _initializer_provider(self) -> str:
-        cfg_provider = None
-        with contextlib.suppress(Exception):
-            if getattr(self, "project_config", None) is not None:
-                cfg_provider = getattr(getattr(self.project_config, "initializer", None), "provider", None)
-        raw = str(cfg_provider or os.environ.get("AUTOCODER_INITIALIZER_PROVIDER", "") or "claude").strip().lower()
-        if raw == "codex":
-            raw = "codex_cli"
-        elif raw == "gemini":
-            raw = "gemini_cli"
-        if raw not in {"claude", "codex_cli", "gemini_cli", "multi_cli"}:
-            return "claude"
-        return raw
-
     def _initializer_agents(self) -> list[str]:
-        cfg_agents = None
-        with contextlib.suppress(Exception):
-            if getattr(self, "project_config", None) is not None:
-                cfg_agents = getattr(getattr(self.project_config, "initializer", None), "agents", None)
-        if cfg_agents:
-            return [str(x).strip().lower() for x in cfg_agents if str(x).strip()]
-        raw = str(os.environ.get("AUTOCODER_INITIALIZER_AGENTS", "")).strip().lower()
-        parts = [p.strip() for p in raw.replace(";", ",").split(",") if p.strip()]
-        return [p for p in parts if p in {"codex", "gemini"}] or ["codex", "gemini"]
+        return self._chain_agents("initializer")
 
     def _initializer_synthesizer(self) -> str:
-        cfg_synth = None
-        with contextlib.suppress(Exception):
-            if getattr(self, "project_config", None) is not None:
-                cfg_synth = getattr(getattr(self.project_config, "initializer", None), "synthesizer", None)
-        raw = str(cfg_synth or os.environ.get("AUTOCODER_INITIALIZER_SYNTHESIZER", "")).strip().lower()
+        raw = str(os.environ.get("AUTOCODER_INITIALIZER_SYNTHESIZER", "")).strip().lower()
         return raw if raw in {"none", "claude", "codex", "gemini"} else "claude"
 
     def _initializer_timeout_s(self) -> int:
-        cfg_timeout = None
-        with contextlib.suppress(Exception):
-            if getattr(self, "project_config", None) is not None:
-                cfg_timeout = getattr(getattr(self.project_config, "initializer", None), "timeout_s", None)
-        raw = str(cfg_timeout if cfg_timeout is not None else os.environ.get("AUTOCODER_INITIALIZER_TIMEOUT_S", "")).strip()
+        raw = str(os.environ.get("AUTOCODER_INITIALIZER_TIMEOUT_S", "")).strip()
         try:
             v = int(raw) if raw else 300
         except Exception:
@@ -1189,11 +1122,7 @@ class Orchestrator:
         return max(30, min(3600, v))
 
     def _initializer_stage_threshold(self) -> int:
-        cfg_stage = None
-        with contextlib.suppress(Exception):
-            if getattr(self, "project_config", None) is not None:
-                cfg_stage = getattr(getattr(self.project_config, "initializer", None), "stage_threshold", None)
-        raw = str(cfg_stage if cfg_stage is not None else os.environ.get("AUTOCODER_INITIALIZER_STAGE_THRESHOLD", "")).strip()
+        raw = str(os.environ.get("AUTOCODER_INITIALIZER_STAGE_THRESHOLD", "")).strip()
         try:
             v = int(raw) if raw else 120
         except Exception:
@@ -1201,11 +1130,7 @@ class Orchestrator:
         return max(0, v)
 
     def _initializer_enqueue_count(self) -> int:
-        cfg_enqueue = None
-        with contextlib.suppress(Exception):
-            if getattr(self, "project_config", None) is not None:
-                cfg_enqueue = getattr(getattr(self.project_config, "initializer", None), "enqueue_count", None)
-        raw = str(cfg_enqueue if cfg_enqueue is not None else os.environ.get("AUTOCODER_INITIALIZER_ENQUEUE_COUNT", "")).strip()
+        raw = str(os.environ.get("AUTOCODER_INITIALIZER_ENQUEUE_COUNT", "")).strip()
         try:
             v = int(raw) if raw else 30
         except Exception:
@@ -1229,12 +1154,6 @@ class Orchestrator:
             return raw
         # QA is short-lived; default to a fast/strong middle tier.
         return "sonnet" if "sonnet" in self.available_models else (self.available_models[0] if self.available_models else "opus")
-
-    def _qa_subagent_provider(self) -> str:
-        raw = str(os.environ.get("AUTOCODER_QA_SUBAGENT_PROVIDER", "")).strip().lower()
-        if raw in {"claude", "codex_cli", "gemini_cli", "multi_cli"}:
-            return raw
-        return "claude"
 
     def _spawn_qa_subagent(self, *, feature_id: int, feature_name: str, branch_name: str) -> str | None:
         """
@@ -1272,11 +1191,36 @@ class Orchestrator:
             self.port_allocator.release_ports(qa_agent_id)
             return None
 
-        provider = self._qa_subagent_provider()
+        engine_settings = self._engine_settings()
+        qa_chain = engine_settings.chain_for("qa_fix")
+        use_patch_chain = qa_chain.enabled and bool(qa_chain.engines)
+
         max_iterations = self._qa_subagent_max_iterations()
+        if use_patch_chain:
+            max_iterations = min(max_iterations, int(qa_chain.max_iterations or max_iterations))
+
         model = self._qa_subagent_model()
 
-        if provider == "claude":
+        if use_patch_chain:
+            # External CLI patch fixer chain (Codex/Gemini/Claude patch).
+            worker_script = Path(__file__).parent.parent / "qa_worker.py"
+            cmd = [
+                sys.executable,
+                str(worker_script),
+                "--project-dir",
+                str(self.project_dir),
+                "--agent-id",
+                qa_agent_id,
+                "--feature-id",
+                str(feature_id),
+                "--worktree-path",
+                worktree_info["worktree_path"],
+                "--engines",
+                json.dumps(list(qa_chain.engines)),
+                "--max-iterations",
+                str(max_iterations),
+            ]
+        else:
             worker_script = Path(__file__).parent.parent / "agent_worker.py"
             cmd = [
                 sys.executable,
@@ -1298,25 +1242,6 @@ class Orchestrator:
                 "--web-port",
                 str(web_port),
             ]
-        else:
-            # External CLI patch fixer (Codex/Gemini).
-            worker_script = Path(__file__).parent.parent / "qa_worker.py"
-            cmd = [
-                sys.executable,
-                str(worker_script),
-                "--project-dir",
-                str(self.project_dir),
-                "--agent-id",
-                qa_agent_id,
-                "--feature-id",
-                str(feature_id),
-                "--worktree-path",
-                worktree_info["worktree_path"],
-                "--provider",
-                provider,
-                "--max-iterations",
-                str(max_iterations),
-            ]
 
         env = os.environ.copy()
         env["AUTOCODER_API_PORT"] = str(api_port)
@@ -1333,11 +1258,15 @@ class Orchestrator:
         logs_dir.mkdir(parents=True, exist_ok=True)
         log_file_path = logs_dir / f"{qa_agent_id}.log"
 
+        qa_engines = list(qa_chain.engines) if use_patch_chain else []
+        qa_mode = "patch" if use_patch_chain else "claude"
+
         logger.info(f"🧪 Launching QA sub-agent {qa_agent_id}:")
         logger.info(f"   Feature: #{feature_id} - {feature_name}")
         logger.info(f"   Branch: {branch_name}")
-        logger.info(f"   Provider: {provider}")
-        if provider == "claude":
+        if use_patch_chain:
+            logger.info(f"   Engines: {', '.join(qa_engines) if qa_engines else 'none'}")
+        else:
             logger.info(f"   Model: {model.upper()}")
         logger.info(f"   Max iters: {max_iterations}")
         logger.info(f"   Ports: API={api_port}, WEB={web_port}")
@@ -1371,15 +1300,16 @@ class Orchestrator:
                     message=f"QA sub-agent {qa_agent_id} started for feature #{feature_id}",
                     agent_id=qa_agent_id,
                     feature_id=int(feature_id),
-                    data={
-                        "branch": str(branch_name),
-                        "provider": str(provider),
-                        "model": str(model) if provider == "claude" else "",
-                        "max_iterations": int(max_iterations),
-                        "api_port": int(api_port),
-                        "web_port": int(web_port),
-                    },
-                )
+                        data={
+                            "branch": str(branch_name),
+                            "qa_mode": qa_mode,
+                            "engines": qa_engines,
+                            "model": str(model) if not use_patch_chain else "",
+                            "max_iterations": int(max_iterations),
+                            "api_port": int(api_port),
+                            "web_port": int(web_port),
+                        },
+                    )
             return qa_agent_id
         except Exception as e:
             logger.error(f"   ❌ Failed to spawn QA sub-agent process: {e}")
@@ -1390,7 +1320,7 @@ class Orchestrator:
                     message=f"Failed to spawn QA sub-agent for feature #{feature_id}",
                     agent_id=str(qa_agent_id),
                     feature_id=int(feature_id),
-                    data={"error": str(e), "branch": str(branch_name), "provider": str(provider)},
+                    data={"error": str(e), "branch": str(branch_name), "qa_mode": qa_mode, "engines": qa_engines},
                 )
             with contextlib.suppress(Exception):
                 self.database.requeue_feature(feature_id, preserve_branch=True)

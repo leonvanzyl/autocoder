@@ -11,13 +11,18 @@ by setting environment variables (without requiring users to manage their shell 
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, fields
 from pathlib import Path
 
 from autocoder.core.global_settings_db import get_global_setting_json, set_global_setting_json
 
 
 _ADVANCED_SETTINGS_KEY = "advanced_settings_v1"
+
+
+def _filter_known_fields(raw: dict) -> dict:
+    allowed = {f.name for f in fields(AdvancedSettings)}
+    return {k: v for k, v in raw.items() if k in allowed}
 
 def _config_dir() -> Path:
     d = Path.home() / ".autocoder"
@@ -34,11 +39,8 @@ class AdvancedSettings:
     # Review (optional)
     review_enabled: bool = False
     review_mode: str = "off"  # off|advisory|gate
-    review_type: str = "none"  # none|command|claude|multi_cli
-    review_command: str = ""
     review_timeout_s: int = 0
     review_model: str = ""
-    review_agents: str = ""
     review_consensus: str = ""
     codex_model: str = ""
     codex_reasoning_effort: str = ""
@@ -49,18 +51,12 @@ class AdvancedSettings:
 
     # Worker behavior
     worker_verify: bool = True
-    worker_provider: str = "claude"  # claude|codex_cli|gemini_cli|multi_cli
-    worker_patch_max_iterations: int = 2
-    worker_patch_agents: str = "codex,gemini"  # csv; used when worker_provider=multi_cli
-
     # QA/controller sub-agents (optional)
     qa_fix_enabled: bool = False
     qa_model: str = ""
     qa_max_sessions: int = 0
     qa_subagent_enabled: bool = True
     qa_subagent_max_iterations: int = 2
-    qa_subagent_provider: str = "claude"  # claude|codex_cli|gemini_cli|multi_cli
-    qa_subagent_agents: str = "codex,gemini"  # csv; used when provider=multi_cli
     controller_enabled: bool = False
     controller_model: str = ""
     controller_max_sessions: int = 0
@@ -75,13 +71,10 @@ class AdvancedSettings:
     # Feature planner (optional; multi-model plan artifact)
     planner_enabled: bool = False
     planner_model: str = ""  # Claude model for synthesis (optional)
-    planner_agents: str = "codex,gemini"  # csv (codex,gemini)
     planner_synthesizer: str = "claude"  # none|claude|codex|gemini
     planner_timeout_s: int = 180
 
     # Initializer defaults (feature backlog generation)
-    initializer_provider: str = "claude"  # claude|codex_cli|gemini_cli|multi_cli
-    initializer_agents: str = "codex,gemini"
     initializer_synthesizer: str = "claude"  # none|claude|codex|gemini
     initializer_timeout_s: int = 300
     initializer_stage_threshold: int = 120
@@ -131,27 +124,19 @@ class AdvancedSettings:
         return {
             "AUTOCODER_REVIEW_ENABLED": "1" if self.review_enabled else "0",
             "AUTOCODER_REVIEW_MODE": str(self.review_mode or "off"),
-            "AUTOCODER_REVIEW_TYPE": str(self.review_type or "none"),
-            "AUTOCODER_REVIEW_COMMAND": str(self.review_command or ""),
             "AUTOCODER_REVIEW_TIMEOUT_S": str(int(self.review_timeout_s or 0)),
             "AUTOCODER_REVIEW_MODEL": str(self.review_model or ""),
-            "AUTOCODER_REVIEW_AGENTS": str(self.review_agents or ""),
             "AUTOCODER_REVIEW_CONSENSUS": str(self.review_consensus or ""),
             "AUTOCODER_CODEX_MODEL": str(self.codex_model or ""),
             "AUTOCODER_CODEX_REASONING_EFFORT": str(self.codex_reasoning_effort or ""),
             "AUTOCODER_GEMINI_MODEL": str(self.gemini_model or ""),
             "AUTOCODER_LOCKS_ENABLED": "1" if self.locks_enabled else "0",
             "AUTOCODER_WORKER_VERIFY": "1" if self.worker_verify else "0",
-            "AUTOCODER_WORKER_PROVIDER": str(self.worker_provider or "claude"),
-            "AUTOCODER_WORKER_PATCH_MAX_ITERATIONS": str(int(self.worker_patch_max_iterations or 2)),
-            "AUTOCODER_WORKER_PATCH_AGENTS": str(self.worker_patch_agents or "codex,gemini"),
             "AUTOCODER_QA_FIX_ENABLED": "1" if self.qa_fix_enabled else "0",
             "AUTOCODER_QA_MODEL": str(self.qa_model or ""),
             "AUTOCODER_QA_MAX_SESSIONS": str(int(self.qa_max_sessions or 0)),
             "AUTOCODER_QA_SUBAGENT_ENABLED": "1" if self.qa_subagent_enabled else "0",
             "AUTOCODER_QA_SUBAGENT_MAX_ITERATIONS": str(int(self.qa_subagent_max_iterations or 2)),
-            "AUTOCODER_QA_SUBAGENT_PROVIDER": str(self.qa_subagent_provider or "claude"),
-            "AUTOCODER_QA_SUBAGENT_AGENTS": str(self.qa_subagent_agents or "codex,gemini"),
             "AUTOCODER_CONTROLLER_ENABLED": "1" if self.controller_enabled else "0",
             "AUTOCODER_CONTROLLER_MODEL": str(self.controller_model or ""),
             "AUTOCODER_CONTROLLER_MAX_SESSIONS": str(int(self.controller_max_sessions or 0)),
@@ -162,11 +147,8 @@ class AdvancedSettings:
             "AUTOCODER_REGRESSION_POOL_MAX_ITERATIONS": str(int(self.regression_pool_max_iterations or 1)),
             "AUTOCODER_PLANNER_ENABLED": "1" if self.planner_enabled else "0",
             "AUTOCODER_PLANNER_MODEL": str(self.planner_model or ""),
-            "AUTOCODER_PLANNER_AGENTS": str(self.planner_agents or "codex,gemini"),
             "AUTOCODER_PLANNER_SYNTHESIZER": str(self.planner_synthesizer or "claude"),
             "AUTOCODER_PLANNER_TIMEOUT_S": str(int(self.planner_timeout_s or 180)),
-            "AUTOCODER_INITIALIZER_PROVIDER": str(self.initializer_provider or "claude"),
-            "AUTOCODER_INITIALIZER_AGENTS": str(self.initializer_agents or "codex,gemini"),
             "AUTOCODER_INITIALIZER_SYNTHESIZER": str(self.initializer_synthesizer or "claude"),
             "AUTOCODER_INITIALIZER_TIMEOUT_S": str(int(self.initializer_timeout_s or 300)),
             "AUTOCODER_INITIALIZER_STAGE_THRESHOLD": str(int(self.initializer_stage_threshold or 0)),
@@ -208,7 +190,7 @@ def load_persisted_advanced_settings() -> AdvancedSettings | None:
         data = get_global_setting_json(_ADVANCED_SETTINGS_KEY)
         if isinstance(data, dict) and data:
             try:
-                return AdvancedSettings(**data)
+                return AdvancedSettings(**_filter_known_fields(data))
             except Exception:
                 return None
     except Exception:
@@ -219,7 +201,7 @@ def load_persisted_advanced_settings() -> AdvancedSettings | None:
     if legacy_path.exists():
         try:
             legacy_data = json.loads(legacy_path.read_text(encoding="utf-8"))
-            settings = AdvancedSettings(**legacy_data)
+            settings = AdvancedSettings(**_filter_known_fields(legacy_data))
             try:
                 set_global_setting_json(_ADVANCED_SETTINGS_KEY, asdict(settings))
             except Exception:

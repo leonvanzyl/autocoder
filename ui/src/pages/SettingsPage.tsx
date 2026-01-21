@@ -6,8 +6,9 @@
  */
 
 import { useMemo, useState } from 'react'
-import { Settings as SettingsIcon, SlidersHorizontal, Brain, Sparkles, FileText, Activity } from 'lucide-react'
+import { Settings as SettingsIcon, SlidersHorizontal, Brain, Sparkles, FileText, Activity, Wrench } from 'lucide-react'
 import { ModelSettingsContent } from '../components/ModelSettingsContent'
+import { EngineSettingsContent } from '../components/EngineSettingsContent'
 import { AdvancedSettingsContent } from '../components/AdvancedSettingsContent'
 import { MultiModelGeneratePanel } from '../components/MultiModelGeneratePanel'
 import { GsdToSpecPanel } from '../components/GsdToSpecPanel'
@@ -17,7 +18,7 @@ import { DiagnosticsContent } from '../components/DiagnosticsContent'
 import type { RunSettings } from '../components/SettingsModal'
 import type { ProjectSummary } from '../lib/types'
 
-type SettingsPageTab = 'run' | 'models' | 'generate' | 'config' | 'advanced' | 'diagnostics'
+type SettingsPageTab = 'run' | 'models' | 'engines' | 'generate' | 'config' | 'advanced' | 'diagnostics'
 
 export function SettingsPage({
   initialTab = 'run',
@@ -41,7 +42,7 @@ export function SettingsPage({
   const [tab, setTab] = useState<SettingsPageTab>(initialTab)
   const activeScope: 'global' | 'project' = useMemo(() => {
     if (tab === 'advanced' || tab === 'diagnostics') return 'global'
-    if (tab === 'models' || tab === 'generate' || tab === 'config') return 'project'
+    if (tab === 'models' || tab === 'engines' || tab === 'generate' || tab === 'config') return 'project'
     return projectName ? 'project' : 'global'
   }, [projectName, tab])
 
@@ -57,15 +58,17 @@ export function SettingsPage({
     const route =
       next === 'advanced'
         ? '#/settings/advanced'
-        : next === 'models'
-          ? '#/settings/models'
-          : next === 'generate'
-            ? '#/settings/generate'
-            : next === 'config'
-              ? '#/settings/config'
-              : next === 'diagnostics'
-                ? '#/settings/diagnostics'
-                : '#/settings'
+          : next === 'models'
+            ? '#/settings/models'
+            : next === 'engines'
+              ? '#/settings/engines'
+              : next === 'generate'
+                ? '#/settings/generate'
+                : next === 'config'
+                  ? '#/settings/config'
+                  : next === 'diagnostics'
+                    ? '#/settings/diagnostics'
+                    : '#/settings'
     window.location.hash = route
   }
 
@@ -158,6 +161,16 @@ export function SettingsPage({
           >
             <Brain size={18} />
             Models
+          </button>
+          <button
+            className={`neo-btn text-sm ${tab === 'engines' ? 'bg-[var(--color-neo-accent)] text-white' : 'neo-btn-secondary'} ${
+              projectTabsEnabled ? '' : 'opacity-70'
+            }`}
+            onClick={() => setTabWithHash('engines')}
+            title={!projectTabsEnabled ? 'Select a project to edit engines' : undefined}
+          >
+            <Wrench size={18} />
+            Engines
           </button>
           <button
             className={`neo-btn text-sm ${tab === 'generate' ? 'bg-[var(--color-neo-accent)] text-white' : 'neo-btn-secondary'} ${
@@ -266,6 +279,17 @@ export function SettingsPage({
             <div className="font-display font-bold uppercase mb-2">Select a project</div>
             <div className="text-sm text-[var(--color-neo-text-secondary)]">
               Models are project-scoped. Pick a project from the selector above to continue.
+            </div>
+          </div>
+        )
+      ) : tab === 'engines' ? (
+        projectName ? (
+          <EngineSettingsContent projectName={projectName} />
+        ) : (
+          <div className="neo-card p-6">
+            <div className="font-display font-bold uppercase mb-2">Select a project</div>
+            <div className="text-sm text-[var(--color-neo-text-secondary)]">
+              Engines are project-scoped. Pick a project from the selector above to continue.
             </div>
           </div>
         )

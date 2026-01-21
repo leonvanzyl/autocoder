@@ -6,9 +6,8 @@ def test_multi_cli_reviewer_consensus_majority():
     cfg = ReviewConfig(
         enabled=True,
         mode="gate",
-        reviewer_type="multi_cli",
         timeout_s=1,
-        review_agents=["codex", "gemini"],
+        engines=["codex_cli", "gemini_cli"],
         consensus="majority",
     )
     r = MultiCliReviewer(cfg)
@@ -26,9 +25,8 @@ def test_multi_cli_reviewer_consensus_any():
     cfg = ReviewConfig(
         enabled=True,
         mode="gate",
-        reviewer_type="multi_cli",
         timeout_s=1,
-        review_agents=["codex", "gemini"],
+        engines=["codex_cli", "gemini_cli"],
         consensus="any",
     )
     r = MultiCliReviewer(cfg)

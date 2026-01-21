@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import os
 
-from .base import ReviewConfig, Reviewer
-from .command import CommandReviewer
 from .claude import ClaudeReviewer
+from .chain import ChainReviewer
 from .multi_cli import MultiCliReviewer
+from .base import ReviewConfig, Reviewer
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -50,18 +50,6 @@ def apply_env_overrides(cfg: ReviewConfig) -> ReviewConfig:
         if m in {"off", "advisory", "gate"}:
             mode = m
 
-    reviewer_type = (cfg.reviewer_type or "none").strip().lower()
-    type_raw = _env_str("AUTOCODER_REVIEW_TYPE")
-    if type_raw:
-        t = type_raw.strip().lower()
-        if t in {"none", "command", "claude", "multi_cli"}:
-            reviewer_type = t
-
-    command = cfg.command
-    cmd_raw = _env_str("AUTOCODER_REVIEW_COMMAND")
-    if cmd_raw is not None:
-        command = cmd_raw
-
     timeout_s = cfg.timeout_s
     t_raw = _env_int("AUTOCODER_REVIEW_TIMEOUT_S")
     if t_raw is not None:
@@ -71,12 +59,6 @@ def apply_env_overrides(cfg: ReviewConfig) -> ReviewConfig:
     model_raw = _env_str("AUTOCODER_REVIEW_MODEL")
     if model_raw is not None:
         model = model_raw
-
-    review_agents = cfg.review_agents
-    agents_raw = _env_str("AUTOCODER_REVIEW_AGENTS")
-    if agents_raw is not None:
-        parts = [p.strip().lower() for p in agents_raw.replace(";", ",").split(",")]
-        review_agents = [p for p in parts if p]
 
     consensus = cfg.consensus
     consensus_raw = _env_str("AUTOCODER_REVIEW_CONSENSUS")
@@ -101,11 +83,9 @@ def apply_env_overrides(cfg: ReviewConfig) -> ReviewConfig:
     return ReviewConfig(
         enabled=enabled,
         mode=mode,  # type: ignore[arg-type]
-        reviewer_type=reviewer_type,  # type: ignore[arg-type]
-        command=command,
         timeout_s=timeout_s,
         model=model,
-        review_agents=review_agents,
+        engines=cfg.engines,
         consensus=consensus,
         codex_model=codex_model,
         codex_reasoning_effort=codex_reasoning_effort,
@@ -120,12 +100,19 @@ def get_reviewer(cfg: ReviewConfig) -> Reviewer | None:
 
     cfg = apply_env_overrides(cfg)
 
-    if not cfg.enabled or cfg.mode == "off" or cfg.reviewer_type in {"none"}:
+    if not cfg.enabled or cfg.mode == "off":
         return None
-    if cfg.reviewer_type == "command":
-        return CommandReviewer(cfg)
-    if cfg.reviewer_type == "claude":
+    engines = [e for e in (cfg.engines or []) if e]
+    if not engines:
+        return None
+    has_codex = "codex_cli" in engines
+    has_gemini = "gemini_cli" in engines
+    has_claude = "claude_review" in engines
+
+    if has_claude and (has_codex or has_gemini):
+        return ChainReviewer(cfg)
+    if has_claude:
         return ClaudeReviewer(cfg)
-    if cfg.reviewer_type == "multi_cli":
+    if has_codex or has_gemini:
         return MultiCliReviewer(cfg)
     return None

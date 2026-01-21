@@ -34,24 +34,8 @@ const TEMPLATE = `# autocoder.yaml
 # review:
 #   enabled: false
 #   mode: advisory       # off|advisory|gate
-#   type: multi_cli      # none|command|claude|multi_cli
-#   agents: [codex, gemini]
+#   engines: [claude_review, codex_cli, gemini_cli]
 #   consensus: majority  # majority|all|any
-#
-# Optional per-project feature worker defaults:
-# worker:
-#   provider: claude            # claude|codex_cli|gemini_cli|multi_cli
-#   patch_max_iterations: 2     # for patch workers
-#   patch_agents: [codex, gemini]  # order for multi_cli
-#
-# Optional initializer defaults (multi-model backlog generation):
-# initializer:
-#   provider: claude           # claude|codex_cli|gemini_cli|multi_cli
-#   agents: [codex, gemini]    # used when provider=multi_cli
-#   synthesizer: claude        # none|claude|codex|gemini
-#   timeout_s: 300
-#   stage_threshold: 120       # stage backlog above this count
-#   enqueue_count: 30          # keep this many enabled
 `
 
 export function ProjectConfigEditor({ projectName }: { projectName: string }) {
@@ -76,14 +60,6 @@ export function ProjectConfigEditor({ projectName }: { projectName: string }) {
       path: q.data.path,
       inferred: q.data.inferred_preset || null,
       cmds: q.data.resolved_commands || [],
-      workerProvider: q.data.resolved_worker_provider || null,
-      workerIters: q.data.resolved_worker_patch_max_iterations ?? null,
-      initializerProvider: q.data.resolved_initializer_provider || null,
-      initializerAgents: q.data.resolved_initializer_agents || null,
-      initializerSynthesizer: q.data.resolved_initializer_synthesizer || null,
-      initializerTimeout: q.data.resolved_initializer_timeout_s ?? null,
-      initializerStage: q.data.resolved_initializer_stage_threshold ?? null,
-      initializerEnqueue: q.data.resolved_initializer_enqueue_count ?? null,
       exists: q.data.exists,
     }
   }, [q.data])
@@ -141,21 +117,6 @@ export function ProjectConfigEditor({ projectName }: { projectName: string }) {
               </div>
               <div className="mt-1 text-xs font-mono text-[var(--color-neo-text-secondary)]">
                 Inferred preset: {meta.inferred || '(none)'} | Resolved commands: {meta.cmds.length ? meta.cmds.join(', ') : '(none)'}
-              </div>
-              <div className="mt-1 text-xs font-mono text-[var(--color-neo-text-secondary)]">
-                Worker: {meta.workerProvider || '(default)'}
-                {meta.workerIters ? ` (patch iters: ${meta.workerIters})` : ''}
-              </div>
-              <div className="mt-1 text-xs font-mono text-[var(--color-neo-text-secondary)]">
-                Initializer: {meta.initializerProvider || '(default)'}
-                {meta.initializerAgents && meta.initializerAgents.length > 0
-                  ? ` [${meta.initializerAgents.join(', ')}]`
-                  : ''}
-                {meta.initializerSynthesizer ? ` (synth: ${meta.initializerSynthesizer})` : ''}
-                {meta.initializerTimeout ? ` (timeout: ${meta.initializerTimeout}s)` : ''}
-              </div>
-              <div className="mt-1 text-xs font-mono text-[var(--color-neo-text-secondary)]">
-                Staging: {meta.initializerStage ?? '(default)'} threshold, {meta.initializerEnqueue ?? '(default)'} enqueue
               </div>
               {!meta.exists && (
                 <div className="mt-2 text-xs text-[var(--color-neo-text-secondary)]">

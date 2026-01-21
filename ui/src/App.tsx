@@ -659,6 +659,8 @@ function App() {
                   ? 'advanced'
                   : window.location.hash === '#/settings/models'
                     ? 'models'
+                    : window.location.hash === '#/settings/engines'
+                      ? 'engines'
                     : window.location.hash === '#/settings/generate'
                       ? 'generate'
                       : window.location.hash === '#/settings/config'

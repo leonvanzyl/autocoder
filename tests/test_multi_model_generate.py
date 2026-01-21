@@ -38,3 +38,13 @@ def test_generate_config_from_env_defaults():
         os.environ.clear()
         os.environ.update(prev)
 
+
+def test_generate_config_respects_explicit_empty_agents():
+    prev = dict(os.environ)
+    try:
+        os.environ["AUTOCODER_GENERATE_AGENTS"] = "codex,gemini"
+        cfg = MultiModelGenerateConfig.from_env(agents=[])
+        assert cfg.agents == []
+    finally:
+        os.environ.clear()
+        os.environ.update(prev)

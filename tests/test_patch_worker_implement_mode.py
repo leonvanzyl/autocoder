@@ -63,8 +63,8 @@ def test_patch_worker_implement_mode_marks_ready(tmp_path, monkeypatch):
             str(feature_id),
             "--worktree-path",
             str(repo),
-            "--provider",
-            "codex_cli",
+            "--engines",
+            '["codex_cli"]',
             "--max-iterations",
             "1",
             "--timeout-s",
@@ -79,4 +79,3 @@ def test_patch_worker_implement_mode_marks_ready(tmp_path, monkeypatch):
 
     f = db.get_feature(feature_id)
     assert f["review_status"] == "READY_FOR_VERIFICATION"
-

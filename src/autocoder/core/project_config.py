@@ -64,11 +64,9 @@ class CommandSpec:
 class ReviewSpec:
     enabled: bool = False
     mode: str = "off"  # off|advisory|gate
-    reviewer_type: str = "none"  # none|command|claude|multi_cli
-    command: str | None = None
     timeout_s: int | None = None
     model: str | None = None
-    agents: list[str] | None = None
+    engines: list[str] | None = None
     consensus: str | None = None  # majority|all|any
     codex_model: str | None = None
     codex_reasoning_effort: str | None = None
@@ -76,39 +74,10 @@ class ReviewSpec:
 
 
 @dataclass(frozen=True)
-class WorkerSpec:
-    """
-    Per-project worker settings for feature implementation.
-
-    If unset (all fields None), callers should fall back to global defaults / env vars.
-    """
-
-    provider: str | None = None  # claude|codex_cli|gemini_cli|multi_cli
-    patch_max_iterations: int | None = None
-    patch_agents: list[str] | None = None  # order for multi_cli (codex,gemini)
-
-
-@dataclass(frozen=True)
-class InitializerSpec:
-    """
-    Per-project initializer settings (feature backlog generation).
-    """
-
-    provider: str | None = None  # claude|codex_cli|gemini_cli|multi_cli
-    agents: list[str] | None = None  # order for multi_cli (codex,gemini)
-    synthesizer: str | None = None  # none|claude|codex|gemini
-    timeout_s: int | None = None
-    stage_threshold: int | None = None
-    enqueue_count: int | None = None
-
-
-@dataclass(frozen=True)
 class ResolvedProjectConfig:
     preset: str | None
     commands: dict[str, CommandSpec | None]
     review: ReviewSpec = field(default_factory=ReviewSpec)
-    worker: WorkerSpec = field(default_factory=WorkerSpec)
-    initializer: InitializerSpec = field(default_factory=InitializerSpec)
 
     def get_command(self, name: str) -> CommandSpec | None:
         return self.commands.get(name)
@@ -296,25 +265,32 @@ def load_project_config(project_dir: Path) -> ResolvedProjectConfig:
         mode = str(review_in.get("mode", "off") or "off").strip().lower()
         if mode not in {"off", "advisory", "gate"}:
             mode = "off"
-        reviewer_type = str(review_in.get("type", review_in.get("reviewer_type", "none")) or "none").strip().lower()
-        if reviewer_type not in {"none", "command", "claude", "multi_cli"}:
-            reviewer_type = "none"
-        command = review_in.get("command")
-        if not isinstance(command, str) or not command.strip():
-            command = None
         timeout_s = _as_int(review_in.get("timeout", review_in.get("timeout_s", None)))
         model = review_in.get("model")
         if not isinstance(model, str) or not model.strip():
             model = None
 
-        agents_in = review_in.get("agents", review_in.get("review_agents", None))
-        agents: list[str] | None = None
-        if isinstance(agents_in, str):
-            parts = [p.strip().lower() for p in agents_in.replace(";", ",").split(",")]
-            agents = [p for p in parts if p]
-        elif isinstance(agents_in, list):
-            parts = [str(p).strip().lower() for p in agents_in]
-            agents = [p for p in parts if p]
+        engines_in = review_in.get("engines")
+        engines: list[str] | None = None
+        if isinstance(engines_in, str):
+            parts = [p.strip().lower() for p in engines_in.replace(";", ",").split(",")]
+            engines = [p for p in parts if p]
+        elif isinstance(engines_in, list):
+            parts = [str(p).strip().lower() for p in engines_in]
+            engines = [p for p in parts if p]
+
+        if engines:
+            normalized: list[str] = []
+            for e in engines:
+                if e == "claude":
+                    normalized.append("claude_review")
+                elif e == "codex":
+                    normalized.append("codex_cli")
+                elif e == "gemini":
+                    normalized.append("gemini_cli")
+                elif e in {"claude_review", "codex_cli", "gemini_cli"}:
+                    normalized.append(e)
+            engines = normalized
 
         consensus = review_in.get("consensus")
         if not isinstance(consensus, str) or not consensus.strip():
@@ -343,83 +319,16 @@ def load_project_config(project_dir: Path) -> ResolvedProjectConfig:
         review = ReviewSpec(
             enabled=enabled,
             mode=mode,
-            reviewer_type=reviewer_type,
-            command=command.strip() if isinstance(command, str) else None,
             timeout_s=timeout_s,
             model=model.strip() if isinstance(model, str) else None,
-            agents=agents,
+            engines=engines,
             consensus=consensus,
             codex_model=codex_model,
             codex_reasoning_effort=codex_reasoning_effort,
             gemini_model=gemini_model,
         )
 
-    worker_in = merged.get("worker", {})
-    worker = WorkerSpec()
-    if isinstance(worker_in, dict):
-        provider_raw = worker_in.get("provider", worker_in.get("worker_provider", None))
-        provider: str | None = None
-        if isinstance(provider_raw, str) and provider_raw.strip():
-            p = provider_raw.strip().lower()
-            # Allow shorthand in YAML.
-            if p == "codex":
-                p = "codex_cli"
-            elif p == "gemini":
-                p = "gemini_cli"
-            if p in {"claude", "codex_cli", "gemini_cli", "multi_cli"}:
-                provider = p
-
-        patch_max = _as_int(worker_in.get("patch_max_iterations", worker_in.get("max_iterations", None)))
-        if patch_max is not None:
-            patch_max = max(1, min(20, patch_max))
-
-        agents_in = worker_in.get("patch_agents", worker_in.get("agents", None))
-        patch_agents: list[str] | None = None
-        if isinstance(agents_in, str):
-            parts = [p.strip().lower() for p in agents_in.replace(";", ",").split(",")]
-            patch_agents = [p for p in parts if p]
-        elif isinstance(agents_in, list):
-            parts = [str(p).strip().lower() for p in agents_in]
-            patch_agents = [p for p in parts if p]
-
-        worker = WorkerSpec(provider=provider, patch_max_iterations=patch_max, patch_agents=patch_agents)
-
-    initializer = InitializerSpec()
-    init_in = data.get("initializer")
-    if isinstance(init_in, Mapping):
-        provider_raw = str(init_in.get("provider") or "").strip().lower()
-        if provider_raw == "codex":
-            provider_raw = "codex_cli"
-        elif provider_raw == "gemini":
-            provider_raw = "gemini_cli"
-        if provider_raw not in {"", "claude", "codex_cli", "gemini_cli", "multi_cli"}:
-            provider_raw = ""
-
-        agents_val = init_in.get("agents")
-        agents: list[str] | None = None
-        if isinstance(agents_val, list):
-            agents = [str(x).strip().lower() for x in agents_val if str(x).strip()]
-        elif isinstance(agents_val, str):
-            agents = [x.strip().lower() for x in agents_val.replace(";", ",").split(",") if x.strip()]
-
-        synth_raw = str(init_in.get("synthesizer") or "").strip().lower()
-        if synth_raw not in {"", "none", "claude", "codex", "gemini"}:
-            synth_raw = ""
-
-        timeout_s = _as_int(init_in.get("timeout_s"))
-        stage_threshold = _as_int(init_in.get("stage_threshold"))
-        enqueue_count = _as_int(init_in.get("enqueue_count"))
-
-        initializer = InitializerSpec(
-            provider=provider_raw or None,
-            agents=agents or None,
-            synthesizer=synth_raw or None,
-            timeout_s=timeout_s,
-            stage_threshold=stage_threshold,
-            enqueue_count=enqueue_count,
-        )
-
-    return ResolvedProjectConfig(preset=preset, commands=commands, review=review, worker=worker, initializer=initializer)
+    return ResolvedProjectConfig(preset=preset, commands=commands, review=review)
 
 
 def infer_preset(project_dir: Path) -> str | None:
