@@ -41,6 +41,7 @@ from .routers import (
     spec_creation_router,
     templates_router,
     terminal_router,
+    visual_regression_router,
 )
 from .schemas import SetupStatus
 from .services.assistant_chat_session import cleanup_all_sessions as cleanup_assistant_sessions
@@ -135,6 +136,7 @@ app.include_router(templates_router)
 app.include_router(review_router)
 app.include_router(documentation_router)
 app.include_router(design_tokens_router)
+app.include_router(visual_regression_router)
 
 
 # ============================================================================
