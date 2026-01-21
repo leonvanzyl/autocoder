@@ -24,6 +24,7 @@ from .cicd import router as cicd_router
 from .templates import router as templates_router
 from .review import router as review_router
 from .documentation import router as documentation_router
+from .design_tokens import router as design_tokens_router
 
 __all__ = [
     "projects_router",
@@ -45,4 +46,5 @@ __all__ = [
     "templates_router",
     "review_router",
     "documentation_router",
+    "design_tokens_router",
 ]

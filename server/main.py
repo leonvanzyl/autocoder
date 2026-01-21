@@ -36,6 +36,7 @@ from .routers import (
     agent_router,
     assistant_chat_router,
     cicd_router,
+    design_tokens_router,
     devserver_router,
     documentation_router,
     expand_project_router,
@@ -250,6 +251,7 @@ app.include_router(cicd_router)
 app.include_router(templates_router)
 app.include_router(review_router)
 app.include_router(documentation_router)
+app.include_router(design_tokens_router)
 
 
 # ============================================================================
