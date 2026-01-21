@@ -1,9 +1,20 @@
 /**
  * Hook for managing assistant chat WebSocket connection
+ *
+ * Automatically resumes the most recent conversation when mounted.
+ * Provides startNewConversation() to begin a fresh chat.
  */
 
 import { useState, useCallback, useRef, useEffect } from "react";
-import type { ChatMessage, AssistantChatServerMessage } from "../lib/types";
+import type {
+  ChatMessage,
+  AssistantChatServerMessage,
+  AssistantConversation,
+} from "../lib/types";
+import {
+  listAssistantConversations,
+  getAssistantConversation,
+} from "../lib/api";
 
 type ConnectionStatus = "disconnected" | "connecting" | "connected" | "error";
 
@@ -17,10 +28,15 @@ interface UseAssistantChatReturn {
   isLoading: boolean;
   connectionStatus: ConnectionStatus;
   conversationId: number | null;
+  conversations: AssistantConversation[];
+  isLoadingHistory: boolean;
   start: (conversationId?: number | null) => void;
   sendMessage: (content: string) => void;
   disconnect: () => void;
   clearMessages: () => void;
+  startNewConversation: () => void;
+  switchConversation: (conversationId: number) => void;
+  refreshConversations: () => Promise<void>;
 }
 
 function generateId(): string {
@@ -36,6 +52,10 @@ export function useAssistantChat({
   const [connectionStatus, setConnectionStatus] =
     useState<ConnectionStatus>("disconnected");
   const [conversationId, setConversationId] = useState<number | null>(null);
+  const [conversations, setConversations] = useState<AssistantConversation[]>(
+    [],
+  );
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
 
   const wsRef = useRef<WebSocket | null>(null);
   const currentAssistantMessageRef = useRef<string | null>(null);
@@ -44,6 +64,8 @@ export function useAssistantChat({
   const pingIntervalRef = useRef<number | null>(null);
   const reconnectTimeoutRef = useRef<number | null>(null);
   const checkAndSendTimeoutRef = useRef<number | null>(null);
+  const hasInitializedRef = useRef(false);
+  const resumeTimeoutRef = useRef<number | null>(null);
 
   // Clean up on unmount
   useEffect(() => {
@@ -57,12 +79,51 @@ export function useAssistantChat({
       if (checkAndSendTimeoutRef.current) {
         clearTimeout(checkAndSendTimeoutRef.current);
       }
+      if (resumeTimeoutRef.current) {
+        clearTimeout(resumeTimeoutRef.current);
+      }
       if (wsRef.current) {
         wsRef.current.close();
       }
       currentAssistantMessageRef.current = null;
     };
   }, []);
+
+  // Fetch conversation list for the project
+  const refreshConversations = useCallback(async () => {
+    try {
+      const convos = await listAssistantConversations(projectName);
+      // Sort by updated_at descending (most recent first)
+      convos.sort((a, b) => {
+        const dateA = a.updated_at ? new Date(a.updated_at).getTime() : 0;
+        const dateB = b.updated_at ? new Date(b.updated_at).getTime() : 0;
+        return dateB - dateA;
+      });
+      setConversations(convos);
+    } catch (err) {
+      console.error("Failed to fetch conversations:", err);
+    }
+  }, [projectName]);
+
+  // Load messages from a specific conversation
+  const loadConversationMessages = useCallback(
+    async (convId: number): Promise<ChatMessage[]> => {
+      try {
+        const detail = await getAssistantConversation(projectName, convId);
+        return detail.messages.map((m) => ({
+          id: `db-${m.id}`,
+          role: m.role,
+          content: m.content,
+          timestamp: m.timestamp ? new Date(m.timestamp) : new Date(),
+          isStreaming: false,
+        }));
+      } catch (err) {
+        console.error("Failed to load conversation messages:", err);
+        return [];
+      }
+    },
+    [projectName],
+  );
 
   const connect = useCallback(() => {
     // Prevent multiple connection attempts
@@ -339,14 +400,140 @@ export function useAssistantChat({
     setConversationId(null);
   }, []);
 
+  // Start a brand new conversation (clears history, no conversation_id)
+  const startNewConversation = useCallback(() => {
+    disconnect();
+    setMessages([]);
+    setConversationId(null);
+    // Start fresh - pass null to not resume any conversation
+    start(null);
+  }, [disconnect, start]);
+
+  // Resume an existing conversation - just connect WebSocket, no greeting
+  const resumeConversation = useCallback(
+    (convId: number) => {
+      // Clear any pending resume timeout
+      if (resumeTimeoutRef.current) {
+        clearTimeout(resumeTimeoutRef.current);
+        resumeTimeoutRef.current = null;
+      }
+
+      connect();
+      setConversationId(convId);
+
+      // Wait for connection then send resume message (no greeting)
+      const maxRetries = 50;
+      let retryCount = 0;
+
+      const checkAndResume = () => {
+        if (wsRef.current?.readyState === WebSocket.OPEN) {
+          // Clear timeout ref since we're done
+          resumeTimeoutRef.current = null;
+          // Send start with conversation_id but backend won't send greeting
+          // for resumed conversations with messages
+          wsRef.current.send(
+            JSON.stringify({
+              type: "resume",
+              conversation_id: convId,
+            }),
+          );
+        } else if (wsRef.current?.readyState === WebSocket.CONNECTING) {
+          retryCount++;
+          if (retryCount < maxRetries) {
+            resumeTimeoutRef.current = window.setTimeout(checkAndResume, 100);
+          } else {
+            resumeTimeoutRef.current = null;
+          }
+        } else {
+          resumeTimeoutRef.current = null;
+        }
+      };
+
+      resumeTimeoutRef.current = window.setTimeout(checkAndResume, 100);
+    },
+    [connect],
+  );
+
+  // Switch to a specific existing conversation
+  const switchConversation = useCallback(
+    async (convId: number) => {
+      setIsLoadingHistory(true);
+      disconnect();
+
+      // Load messages from the database
+      const loadedMessages = await loadConversationMessages(convId);
+      setMessages(loadedMessages);
+
+      // Resume without greeting if has messages, otherwise start fresh
+      if (loadedMessages.length > 0) {
+        resumeConversation(convId);
+      } else {
+        start(convId);
+      }
+      setIsLoadingHistory(false);
+    },
+    [disconnect, loadConversationMessages, start, resumeConversation],
+  );
+
+  // Initialize on mount - fetch conversations and resume most recent
+  useEffect(() => {
+    if (hasInitializedRef.current) return;
+    hasInitializedRef.current = true;
+
+    const initialize = async () => {
+      setIsLoadingHistory(true);
+      try {
+        // Fetch conversation list
+        const convos = await listAssistantConversations(projectName);
+        convos.sort((a, b) => {
+          const dateA = a.updated_at ? new Date(a.updated_at).getTime() : 0;
+          const dateB = b.updated_at ? new Date(b.updated_at).getTime() : 0;
+          return dateB - dateA;
+        });
+        setConversations(convos);
+
+        // If there's a recent conversation with messages, resume without greeting
+        if (convos.length > 0) {
+          const mostRecent = convos[0];
+          const loadedMessages = await loadConversationMessages(mostRecent.id);
+          setMessages(loadedMessages);
+
+          if (loadedMessages.length > 0) {
+            // Has messages - just reconnect, don't request greeting
+            resumeConversation(mostRecent.id);
+          } else {
+            // Empty conversation - request greeting
+            start(mostRecent.id);
+          }
+        } else {
+          // No existing conversations, start fresh
+          start(null);
+        }
+      } catch (err) {
+        console.error("Failed to initialize chat:", err);
+        // Fall back to starting fresh
+        start(null);
+      } finally {
+        setIsLoadingHistory(false);
+      }
+    };
+
+    initialize();
+  }, [projectName, loadConversationMessages, start, resumeConversation]);
+
   return {
     messages,
     isLoading,
     connectionStatus,
     conversationId,
+    conversations,
+    isLoadingHistory,
     start,
     sendMessage,
     disconnect,
     clearMessages,
+    startNewConversation,
+    switchConversation,
+    refreshConversations,
   };
 }

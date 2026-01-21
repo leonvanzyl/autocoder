@@ -288,6 +288,41 @@ async def assistant_chat_websocket(websocket: WebSocket, project_name: str):
                             "content": f"Failed to start session: {str(e)}"
                         })
 
+                elif msg_type == "resume":
+                    # Resume an existing conversation without sending greeting
+                    conversation_id = message.get("conversation_id")
+
+                    # Validate conversation_id is present and valid
+                    if not conversation_id or not isinstance(conversation_id, int):
+                        logger.warning(f"Invalid resume request for {project_name}: missing or invalid conversation_id")
+                        await websocket.send_json({
+                            "type": "error",
+                            "content": "Missing or invalid conversation_id for resume"
+                        })
+                        continue
+
+                    try:
+                        # Create session
+                        session = await create_session(
+                            project_name,
+                            project_dir,
+                            conversation_id=conversation_id,
+                        )
+                        # Initialize but skip the greeting
+                        async for chunk in session.start(skip_greeting=True):
+                            await websocket.send_json(chunk)
+                        # Confirm we're ready
+                        await websocket.send_json({
+                            "type": "conversation_created",
+                            "conversation_id": conversation_id,
+                        })
+                    except Exception as e:
+                        logger.exception(f"Error resuming assistant session for {project_name}")
+                        await websocket.send_json({
+                            "type": "error",
+                            "content": f"Failed to resume session: {str(e)}"
+                        })
+
                 elif msg_type == "message":
                     if not session:
                         session = get_session(project_name)

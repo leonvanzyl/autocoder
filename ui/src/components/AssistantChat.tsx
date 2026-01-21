@@ -3,101 +3,119 @@
  *
  * Main chat interface for the project assistant.
  * Displays messages and handles user input.
+ * Automatically resumes the most recent conversation.
  */
 
-import { useState, useRef, useEffect, useCallback } from 'react'
-import { Send, Loader2, Wifi, WifiOff } from 'lucide-react'
-import { useAssistantChat } from '../hooks/useAssistantChat'
-import { ChatMessage } from './ChatMessage'
+import { useState, useRef, useEffect, useCallback } from "react";
+import { Send, Loader2, Wifi, WifiOff, Plus } from "lucide-react";
+import { useAssistantChat } from "../hooks/useAssistantChat";
+import { ChatMessage } from "./ChatMessage";
 
 interface AssistantChatProps {
-  projectName: string
+  projectName: string;
 }
 
 export function AssistantChat({ projectName }: AssistantChatProps) {
-  const [inputValue, setInputValue] = useState('')
-  const messagesEndRef = useRef<HTMLDivElement>(null)
-  const inputRef = useRef<HTMLTextAreaElement>(null)
-  const hasStartedRef = useRef(false)
+  const [inputValue, setInputValue] = useState("");
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   // Memoize the error handler to prevent infinite re-renders
   const handleError = useCallback((error: string) => {
-    console.error('Assistant error:', error)
-  }, [])
+    console.error("Assistant error:", error);
+  }, []);
 
   const {
     messages,
     isLoading,
     connectionStatus,
-    start,
+    isLoadingHistory,
+    startNewConversation,
     sendMessage,
   } = useAssistantChat({
     projectName,
     onError: handleError,
-  })
+  });
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
-
-  // Start the chat session when component mounts (only once)
-  useEffect(() => {
-    if (!hasStartedRef.current) {
-      hasStartedRef.current = true
-      start()
-    }
-  }, [start])
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
   // Focus input when not loading
   useEffect(() => {
     if (!isLoading) {
-      inputRef.current?.focus()
+      inputRef.current?.focus();
     }
-  }, [isLoading])
+  }, [isLoading]);
 
   const handleSend = () => {
-    const content = inputValue.trim()
-    if (!content || isLoading) return
+    const content = inputValue.trim();
+    if (!content || isLoading) return;
 
-    sendMessage(content)
-    setInputValue('')
-  }
+    sendMessage(content);
+    setInputValue("");
+  };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      handleSend()
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
     }
-  }
+  };
 
   return (
     <div className="flex flex-col h-full">
-      {/* Connection status indicator */}
-      <div className="flex items-center gap-2 px-4 py-2 border-b-2 border-[var(--color-neo-border)] bg-[var(--color-neo-bg)]">
-        {connectionStatus === 'connected' ? (
-          <>
-            <Wifi size={14} className="text-[var(--color-neo-done)]" />
-            <span className="text-xs text-[var(--color-neo-text-secondary)]">Connected</span>
-          </>
-        ) : connectionStatus === 'connecting' ? (
-          <>
-            <Loader2 size={14} className="text-[var(--color-neo-progress)] animate-spin" />
-            <span className="text-xs text-[var(--color-neo-text-secondary)]">Connecting...</span>
-          </>
-        ) : (
-          <>
-            <WifiOff size={14} className="text-[var(--color-neo-danger)]" />
-            <span className="text-xs text-[var(--color-neo-text-secondary)]">Disconnected</span>
-          </>
-        )}
+      {/* Header with connection status and new chat button */}
+      <div className="flex items-center justify-between px-4 py-2 border-b-2 border-[var(--color-neo-border)] bg-[var(--color-neo-bg)]">
+        <div className="flex items-center gap-2">
+          {connectionStatus === "connected" ? (
+            <>
+              <Wifi size={14} className="text-[var(--color-neo-done)]" />
+              <span className="text-xs text-[var(--color-neo-text-secondary)]">
+                Connected
+              </span>
+            </>
+          ) : connectionStatus === "connecting" ? (
+            <>
+              <Loader2
+                size={14}
+                className="text-[var(--color-neo-progress)] animate-spin"
+              />
+              <span className="text-xs text-[var(--color-neo-text-secondary)]">
+                Connecting...
+              </span>
+            </>
+          ) : (
+            <>
+              <WifiOff size={14} className="text-[var(--color-neo-danger)]" />
+              <span className="text-xs text-[var(--color-neo-text-secondary)]">
+                Disconnected
+              </span>
+            </>
+          )}
+        </div>
+        <button
+          onClick={startNewConversation}
+          disabled={isLoading || isLoadingHistory}
+          className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-[var(--color-neo-text-secondary)] hover:text-[var(--color-neo-text)] hover:bg-[var(--color-neo-bg-alt)] rounded border border-[var(--color-neo-border)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          title="Start a new conversation"
+        >
+          <Plus size={14} />
+          New Chat
+        </button>
       </div>
 
       {/* Messages area */}
       <div className="flex-1 overflow-y-auto bg-[var(--color-neo-bg)]">
         {messages.length === 0 ? (
           <div className="flex items-center justify-center h-full text-[var(--color-neo-text-secondary)] text-sm">
-            {isLoading ? (
+            {isLoadingHistory ? (
+              <div className="flex items-center gap-2">
+                <Loader2 size={16} className="animate-spin" />
+                <span>Loading conversation...</span>
+              </div>
+            ) : isLoading ? (
               <div className="flex items-center gap-2">
                 <Loader2 size={16} className="animate-spin" />
                 <span>Connecting to assistant...</span>
@@ -121,9 +139,18 @@ export function AssistantChat({ projectName }: AssistantChatProps) {
         <div className="px-4 py-2 border-t-2 border-[var(--color-neo-border)] bg-[var(--color-neo-bg)]">
           <div className="flex items-center gap-2 text-[var(--color-neo-text-secondary)] text-sm">
             <div className="flex gap-1">
-              <span className="w-2 h-2 bg-[var(--color-neo-progress)] rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-              <span className="w-2 h-2 bg-[var(--color-neo-progress)] rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-              <span className="w-2 h-2 bg-[var(--color-neo-progress)] rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+              <span
+                className="w-2 h-2 bg-[var(--color-neo-progress)] rounded-full animate-bounce"
+                style={{ animationDelay: "0ms" }}
+              />
+              <span
+                className="w-2 h-2 bg-[var(--color-neo-progress)] rounded-full animate-bounce"
+                style={{ animationDelay: "150ms" }}
+              />
+              <span
+                className="w-2 h-2 bg-[var(--color-neo-progress)] rounded-full animate-bounce"
+                style={{ animationDelay: "300ms" }}
+              />
             </div>
             <span>Thinking...</span>
           </div>
@@ -139,7 +166,7 @@ export function AssistantChat({ projectName }: AssistantChatProps) {
             onChange={(e) => setInputValue(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Ask about the codebase..."
-            disabled={isLoading || connectionStatus !== 'connected'}
+            disabled={isLoading || connectionStatus !== "connected"}
             className="
               flex-1
               neo-input
@@ -152,7 +179,11 @@ export function AssistantChat({ projectName }: AssistantChatProps) {
           />
           <button
             onClick={handleSend}
-            disabled={!inputValue.trim() || isLoading || connectionStatus !== 'connected'}
+            disabled={
+              !inputValue.trim() ||
+              isLoading ||
+              connectionStatus !== "connected"
+            }
             className="
               neo-btn neo-btn-primary
               px-4
@@ -172,5 +203,5 @@ export function AssistantChat({ projectName }: AssistantChatProps) {
         </p>
       </div>
     </div>
-  )
+  );
 }

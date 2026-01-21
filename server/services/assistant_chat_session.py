@@ -190,12 +190,15 @@ class AssistantChatSession:
                 self._client_entered = False
                 self.client = None
 
-    async def start(self) -> AsyncGenerator[dict, None]:
+    async def start(self, skip_greeting: bool = False) -> AsyncGenerator[dict, None]:
         """
         Initialize session with the Claude client.
 
         Creates a new conversation if none exists, then sends an initial greeting.
         Yields message chunks as they stream in.
+
+        Args:
+            skip_greeting: If True, skip sending the greeting (for resuming conversations)
         """
         # Create a new conversation if we don't have one
         if self.conversation_id is None:
@@ -283,18 +286,19 @@ class AssistantChatSession:
             yield {"type": "error", "content": f"Failed to initialize assistant: {str(e)}"}
             return
 
-        # Send initial greeting
-        try:
-            greeting = f"Hello! I'm your project assistant for **{self.project_name}**. I can help you understand the codebase, explain features, and answer questions about the project. What would you like to know?"
+        # Send initial greeting (unless resuming)
+        if not skip_greeting:
+            try:
+                greeting = f"Hello! I'm your project assistant for **{self.project_name}**. I can help you understand the codebase, manage features (create and deprioritize), and answer questions about the project. What would you like to do?"
 
-            # Store the greeting in the database
-            add_message(self.project_dir, self.conversation_id, "assistant", greeting)
+                # Store the greeting in the database
+                add_message(self.project_dir, self.conversation_id, "assistant", greeting)
 
-            yield {"type": "text", "content": greeting}
-            yield {"type": "response_done"}
-        except Exception as e:
-            logger.exception("Failed to send greeting")
-            yield {"type": "error", "content": f"Failed to start conversation: {str(e)}"}
+                yield {"type": "text", "content": greeting}
+                yield {"type": "response_done"}
+            except Exception as e:
+                logger.exception("Failed to send greeting")
+                yield {"type": "error", "content": f"Failed to start conversation: {str(e)}"}
 
     async def send_message(self, user_message: str) -> AsyncGenerator[dict, None]:
         """
