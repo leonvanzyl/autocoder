@@ -9,6 +9,66 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - Fork documentation (FORK_README.md, FORK_CHANGELOG.md)
 - Configuration system via `.autocoder/config.json`
 
+## [2025-01-21] CI/CD Integration
+
+### Added
+- New module: `integrations/ci/` - CI/CD workflow generation
+- New router: `server/routers/cicd.py` - REST API for workflow management
+
+### Generated Workflows
+| Workflow | Filename | Triggers |
+|----------|----------|----------|
+| CI | `ci.yml` | Push to branches, PRs |
+| Security | `security.yml` | Push/PR to main, weekly |
+| Deploy | `deploy.yml` | Push to main, manual |
+
+### CI Workflow Jobs
+- **Lint**: ESLint, ruff
+- **Type Check**: TypeScript tsc, mypy
+- **Test**: npm test, pytest
+- **Build**: Production build
+
+### Security Workflow Jobs
+- **NPM Audit**: Dependency vulnerability scan
+- **Pip Audit**: Python dependency scan
+- **CodeQL**: GitHub code scanning
+
+### Deploy Workflow Jobs
+- **Build**: Create production artifacts
+- **Deploy Staging**: Auto-deploy on merge to main
+- **Deploy Production**: Manual trigger only
+
+### API Endpoints
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/cicd/generate` | POST | Generate workflows |
+| `/api/cicd/preview` | POST | Preview workflow YAML |
+| `/api/cicd/workflows/{project}` | GET | List existing workflows |
+| `/api/cicd/workflows/{project}/{filename}` | GET | Get workflow content |
+
+### Usage
+```bash
+# Generate all workflows
+curl -X POST http://localhost:8888/api/cicd/generate \
+  -H "Content-Type: application/json" \
+  -d '{"project_name": "my-project"}'
+
+# Preview CI workflow
+curl -X POST http://localhost:8888/api/cicd/preview \
+  -H "Content-Type: application/json" \
+  -d '{"project_name": "my-project", "workflow_type": "ci"}'
+```
+
+### Stack Detection
+Automatically detects:
+- Node.js version from `engines` in package.json
+- Package manager (npm, yarn, pnpm, bun)
+- TypeScript, React, Next.js, Vue
+- Python version from pyproject.toml
+- FastAPI, Django
+
+---
+
 ## [2025-01-21] Feature Branches Git Workflow
 
 ### Added
@@ -363,7 +423,7 @@ The following features are planned for implementation:
 - [x] Feature Branches - Git workflow with feature branches ✅
 - [x] Error Recovery - Handle stuck features, auto-clear on startup ✅
 - [ ] Review Agent - Automatic code review
-- [ ] CI/CD Integration - GitHub Actions generation
+- [x] CI/CD Integration - GitHub Actions generation ✅
 
 ### Phase 4: Polish & Ecosystem
 - [ ] Template Library - SaaS, e-commerce, dashboard templates
