@@ -7,16 +7,21 @@ Each project has its own assistant.db file in the project directory.
 """
 
 import logging
+import threading
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, ForeignKey
+from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, ForeignKey, func
 from sqlalchemy.orm import sessionmaker, relationship, declarative_base
 
 logger = logging.getLogger(__name__)
 
 Base = declarative_base()
+
+_engine_cache: dict[str, object] = {}
+_sessionmaker_cache: dict[str, sessionmaker] = {}
+_cache_lock = threading.Lock()
 
 
 class Conversation(Base):
@@ -55,15 +60,31 @@ def get_engine(project_dir: Path):
     db_path = get_db_path(project_dir)
     # Use as_posix() for cross-platform compatibility with SQLite connection strings
     db_url = f"sqlite:///{db_path.as_posix()}"
-    engine = create_engine(db_url, echo=False)
-    Base.metadata.create_all(engine)
-    return engine
+    key = str(db_path.resolve())
+    with _cache_lock:
+        cached = _engine_cache.get(key)
+        if cached is not None:
+            return cached
+
+        engine = create_engine(
+            db_url,
+            echo=False,
+            connect_args={"check_same_thread": False},
+        )
+        Base.metadata.create_all(engine)
+        _engine_cache[key] = engine
+        return engine
 
 
 def get_session(project_dir: Path):
     """Get a new database session for a project."""
     engine = get_engine(project_dir)
-    Session = sessionmaker(bind=engine)
+    key = str(get_db_path(project_dir).resolve())
+    with _cache_lock:
+        Session = _sessionmaker_cache.get(key)
+        if Session is None:
+            Session = sessionmaker(bind=engine)
+            _sessionmaker_cache[key] = Session
     return Session()
 
 
@@ -92,9 +113,12 @@ def get_conversations(project_dir: Path, project_name: str) -> list[dict]:
     """Get all conversations for a project with message counts."""
     session = get_session(project_dir)
     try:
+        # Avoid N+1 lazy-load of messages by counting in SQL.
         conversations = (
-            session.query(Conversation)
+            session.query(Conversation, func.count(ConversationMessage.id))
+            .outerjoin(ConversationMessage, ConversationMessage.conversation_id == Conversation.id)
             .filter(Conversation.project_name == project_name)
+            .group_by(Conversation.id)
             .order_by(Conversation.updated_at.desc())
             .all()
         )
@@ -105,9 +129,9 @@ def get_conversations(project_dir: Path, project_name: str) -> list[dict]:
                 "title": c.title,
                 "created_at": c.created_at.isoformat() if c.created_at else None,
                 "updated_at": c.updated_at.isoformat() if c.updated_at else None,
-                "message_count": len(c.messages),
+                "message_count": int(message_count or 0),
             }
-            for c in conversations
+            for c, message_count in conversations
         ]
     finally:
         session.close()
