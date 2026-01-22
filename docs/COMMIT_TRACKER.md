@@ -14,6 +14,8 @@ git log --oneline master..upstream/master   # what upstream has that we don't
 
 | Commit | Summary | Status in this fork | Notes / Action |
 | --- | --- | --- | --- |
+| `9039108` | Split UI bundle into smaller chunks | **Ported (adapted)** | Added `manualChunks` split in `ui/vite.config.ts` (Windows-safe path normalization). |
+| `28e8bd6` | Conversation history perf + delete UX + memoized chat messages | **Ported (adapted)** | Ported N+1 fix + cached SQLAlchemy engine/session for assistant DB; added delete error feedback + memoized `ChatMessage` (our component set differs). |
 | `85f6940` | Parallel orchestration + dependency graph UI + agent mission control | **Partially ported** | We’re not adopting upstream’s dependency-graph orchestrator, but we *did* port the Playwright MCP `--isolated` behavior to reduce cross-agent browser conflicts. |
 | `bf3a6b0` | Per‑agent log viewer + stuck agent fixes + scheduling score | **Ported (adapted)** | Added per‑agent log jump + activity mini‑list, copy-to-clipboard for tails, and guarded the SDK client context manager to prevent “stuck” crash states. Scheduling score not applicable (we already prioritize blockers). |
 | `76e6521` | Dependency graph blank fix | **N/A** | We don’t ship dependency graph UI in this fork. |
@@ -35,6 +37,9 @@ Legend:
 
 | Commit | Upstream summary | Status | Notes |
 | --- | --- | --- | --- |
+| `29c6b25` | correct SDK import and clear stale agent UI on stop | **Already have** | We use `claude_agent_sdk` and reset WS state on project switch; activity/agent panels are DB-backed. |
+| `9039108` | split bundle into smaller chunks for better caching | **Ported** | Implemented Vite `manualChunks` split (react/query/xterm/ui) to reduce initial load + improve caching. |
+| `28e8bd6` | conversation history perf + code quality fixes | **Ported (selectively)** | Assistant DB: cached engine/session + SQL count; UI: delete errors stay visible + memoized chat message rendering. |
 | `fbe4c39` | improve build_frontend reliability and cross-platform compatibility | **Ported** | Added UI rebuild trigger logging + optional mtime tolerance (`AUTOCODER_UI_MTIME_TOLERANCE_S`). |
 | `3c80611` | Merge PR #76 (ui-build-detection) | **Skipped** | Merge commit only. |
 | `6c8b463` | use is_initializer instead of undefined is_first_run variable | **Ported** | Fixed first-run completion check edge case for initializer runs. |

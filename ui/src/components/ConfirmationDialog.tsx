@@ -4,16 +4,19 @@
  * Neobrutalist styled modal for confirming destructive actions.
  */
 
+import type { ReactNode } from 'react'
 import { AlertTriangle } from 'lucide-react'
 
 interface ConfirmationDialogProps {
   isOpen: boolean
   title: string
-  message: string
+  message: ReactNode
   titleBadgeText?: string
   titleBadgeVariant?: 'success' | 'warning' | 'error' | 'info'
   confirmText?: string
   cancelText?: string
+  confirmDisabled?: boolean
+  cancelDisabled?: boolean
   onConfirm: () => void
   onCancel: () => void
   variant?: 'danger' | 'warning'
@@ -27,6 +30,8 @@ export function ConfirmationDialog({
   titleBadgeVariant = 'warning',
   confirmText = 'Confirm',
   cancelText = 'Cancel',
+  confirmDisabled = false,
+  cancelDisabled = false,
   onConfirm,
   onCancel,
   variant = 'danger',
@@ -82,12 +87,13 @@ export function ConfirmationDialog({
                 </span>
               )}
             </div>
-            <p className="text-[var(--color-neo-text-secondary)] mb-6">{message}</p>
+            <div className="text-[var(--color-neo-text-secondary)] mb-6">{message}</div>
 
             {/* Buttons */}
             <div className="flex gap-3 justify-end">
               <button
                 onClick={onCancel}
+                disabled={cancelDisabled}
                 className="
                   neo-btn
                   px-4 py-2
@@ -98,6 +104,7 @@ export function ConfirmationDialog({
               </button>
               <button
                 onClick={onConfirm}
+                disabled={confirmDisabled}
                 className={`
                   neo-btn
                   px-4 py-2

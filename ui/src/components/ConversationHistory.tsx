@@ -14,7 +14,9 @@ interface ConversationHistoryProps {
   isLoading: boolean
   currentConversationId: number | null
   onLoadConversation: (id: number) => void
-  onDeleteConversation: (id: number) => void
+  onDeleteConversation: (id: number) => Promise<unknown>
+  deleteInFlight?: boolean
+  deleteError?: string | null
   onNewConversation: () => void
 }
 
@@ -24,27 +26,37 @@ export function ConversationHistory({
   currentConversationId,
   onLoadConversation,
   onDeleteConversation,
+  deleteInFlight = false,
+  deleteError = null,
   onNewConversation,
 }: ConversationHistoryProps) {
   const [pendingDelete, setPendingDelete] = useState<number | null>(null)
   const [showConfirm, setShowConfirm] = useState(false)
+  const [localDeleteError, setLocalDeleteError] = useState<string | null>(null)
 
   const handleDeleteClick = (id: number) => {
     setPendingDelete(id)
     setShowConfirm(true)
+    setLocalDeleteError(null)
   }
 
-  const handleConfirmDelete = () => {
-    if (pendingDelete !== null) {
-      onDeleteConversation(pendingDelete)
+  const handleConfirmDelete = async () => {
+    if (pendingDelete === null) return
+    setLocalDeleteError(null)
+    try {
+      await onDeleteConversation(pendingDelete)
+      setShowConfirm(false)
+      setPendingDelete(null)
+    } catch (e: any) {
+      setLocalDeleteError(String(e?.message || e))
+      setShowConfirm(true)
     }
-    setShowConfirm(false)
-    setPendingDelete(null)
   }
 
   const handleCancelDelete = () => {
     setShowConfirm(false)
     setPendingDelete(null)
+    setLocalDeleteError(null)
   }
 
   const formatDate = (dateStr: string | null) => {
@@ -155,11 +167,22 @@ export function ConversationHistory({
       <ConfirmationDialog
         isOpen={showConfirm}
         title="Delete Conversation?"
-        message="This action cannot be undone. All messages in this conversation will be permanently deleted."
+        message={
+          <div className="space-y-3">
+            <div>This action cannot be undone. All messages in this conversation will be permanently deleted.</div>
+            {(localDeleteError || deleteError) && (
+              <div className="neo-card p-3 border-3 border-[var(--color-neo-danger)] text-sm text-[var(--color-neo-danger)]">
+                {localDeleteError || deleteError}
+              </div>
+            )}
+          </div>
+        }
         confirmText="Delete"
         cancelText="Cancel"
         onConfirm={handleConfirmDelete}
         onCancel={handleCancelDelete}
+        confirmDisabled={deleteInFlight}
+        cancelDisabled={deleteInFlight}
         variant="danger"
       />
     </div>

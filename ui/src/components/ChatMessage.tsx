@@ -5,6 +5,7 @@
  * Supports user, assistant, and system messages with neobrutalism styling.
  */
 
+import { memo, useMemo } from 'react'
 import { Bot, User, Info } from 'lucide-react'
 import type { ChatMessage as ChatMessageType } from '../lib/types'
 
@@ -12,14 +13,22 @@ interface ChatMessageProps {
   message: ChatMessageType
 }
 
-export function ChatMessage({ message }: ChatMessageProps) {
+const BOLD_REGEX = /\*\*(.*?)\*\*/g
+
+function ChatMessageInner({ message }: ChatMessageProps) {
   const { role, content, attachments, timestamp, isStreaming } = message
 
   // Format timestamp
-  const timeString = timestamp.toLocaleTimeString([], {
-    hour: '2-digit',
-    minute: '2-digit',
-  })
+  const timeString = useMemo(
+    () =>
+      timestamp.toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
+      }),
+    [timestamp],
+  )
+
+  const lines = useMemo(() => (content ? content.split('\n') : []), [content])
 
   // Role-specific styling using CSS variables for theme consistency
   const roleConfig = {
@@ -111,14 +120,14 @@ export function ChatMessage({ message }: ChatMessageProps) {
             {/* Parse content for basic markdown-like formatting */}
             {content && (
               <div className={`whitespace-pre-wrap text-sm leading-relaxed ${config.textColor}`}>
-                {content.split('\n').map((line, i) => {
+                {lines.map((line, i) => {
                   // Bold text
-                  const boldRegex = /\*\*(.*?)\*\*/g
                   const parts = []
                   let lastIndex = 0
                   let match
 
-                  while ((match = boldRegex.exec(line)) !== null) {
+                  BOLD_REGEX.lastIndex = 0
+                  while ((match = BOLD_REGEX.exec(line)) !== null) {
                     if (match.index > lastIndex) {
                       parts.push(line.slice(lastIndex, match.index))
                     }
@@ -137,7 +146,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
                   return (
                     <span key={i}>
                       {parts.length > 0 ? parts : line}
-                      {i < content.split('\n').length - 1 && '\n'}
+                      {i < lines.length - 1 && '\n'}
                     </span>
                   )
                 })}
@@ -197,3 +206,14 @@ export function ChatMessage({ message }: ChatMessageProps) {
     </div>
   )
 }
+
+export const ChatMessage = memo(
+  ChatMessageInner,
+  (prev, next) =>
+    prev.message.id === next.message.id &&
+    prev.message.role === next.message.role &&
+    prev.message.content === next.message.content &&
+    Boolean(prev.message.isStreaming) === Boolean(next.message.isStreaming) &&
+    (prev.message.timestamp?.getTime?.() ?? 0) === (next.message.timestamp?.getTime?.() ?? 0) &&
+    (prev.message.attachments?.length ?? 0) === (next.message.attachments?.length ?? 0),
+)

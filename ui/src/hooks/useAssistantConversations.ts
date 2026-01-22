@@ -34,7 +34,9 @@ export function useAssistantConversations(projectName: string | null) {
     conversations: conversations.data || [],
     isLoading: conversations.isLoading,
     error: conversations.error,
-    deleteConversation: deleteConversation.mutate,
+    deleteConversation: deleteConversation.mutateAsync,
+    isDeleting: deleteConversation.isPending,
+    deleteError: deleteConversation.error,
     refetch: conversations.refetch,
   }
 }

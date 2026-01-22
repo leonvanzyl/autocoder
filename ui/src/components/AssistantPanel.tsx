@@ -21,7 +21,7 @@ export function AssistantPanel({ projectName, isOpen, onClose }: AssistantPanelP
   const [showHistory, setShowHistory] = useState(false)
   const [loadConversationId, setLoadConversationId] = useState<number | null>(null)
   const [activeConversationId, setActiveConversationId] = useState<number | null>(null)
-  const { conversations, isLoading, deleteConversation, refetch } = useAssistantConversations(
+  const { conversations, isLoading, deleteConversation, isDeleting, deleteError, refetch } = useAssistantConversations(
     isOpen ? projectName : null
   )
 
@@ -127,6 +127,8 @@ export function AssistantPanel({ projectName, isOpen, onClose }: AssistantPanelP
                 currentConversationId={activeConversationId}
                 onLoadConversation={handleLoadConversation}
                 onDeleteConversation={deleteConversation}
+                deleteInFlight={isDeleting}
+                deleteError={deleteError instanceof Error ? deleteError.message : deleteError ? String(deleteError) : null}
                 onNewConversation={handleNewConversation}
               />
             </div>
