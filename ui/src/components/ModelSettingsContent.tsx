@@ -12,6 +12,17 @@ import { useApplyPreset, useModelSettings, usePresets, useUpdateModelSettings } 
 import { InlineNotice, type InlineNoticeType } from './InlineNotice'
 import { HelpModal } from './HelpModal'
 
+type HelpTopic =
+  | 'all'
+  | 'overview'
+  | 'mode'
+  | 'presets'
+  | 'custom'
+  | 'current'
+  | 'mapping'
+  | 'auto_detect'
+  | 'assistant'
+
 export function ModelSettingsContent({
   projectName,
   onPresetApplied,
@@ -34,6 +45,7 @@ export function ModelSettingsContent({
   })
   const [assistantModel, setAssistantModel] = useState<'auto' | 'opus' | 'sonnet' | 'haiku'>('auto')
   const [showHelp, setShowHelp] = useState(false)
+  const [helpTopic, setHelpTopic] = useState<HelpTopic>('all')
   const [notice, setNotice] = useState<{ type: InlineNoticeType; message: string } | null>(null)
   const noticeTimer = useRef<number | null>(null)
 
@@ -67,6 +79,54 @@ export function ModelSettingsContent({
     setNotice({ type, message })
     if (noticeTimer.current) window.clearTimeout(noticeTimer.current)
     noticeTimer.current = window.setTimeout(() => setNotice(null), 2500)
+  }
+
+  const helpContent: Record<Exclude<HelpTopic, 'all'>, { title: string; body: string }> = {
+    overview: {
+      title: 'What Models controls',
+      body:
+        'These settings control model selection for feature workers (your coding agents). The Assistant Chat model is separate and only affects the in-UI assistant.',
+    },
+    mode: {
+      title: 'Presets vs Custom',
+      body:
+        'Presets are curated bundles (best default). Custom lets you manually pick which tiers (Opus/Sonnet/Haiku) are available, mainly for cost control.',
+    },
+    presets: {
+      title: 'Model Presets',
+      body:
+        'Quality/Balanced/Economy presets decide which tiers are available and how AutoCoder maps tasks. Use this unless you have a specific reason to micromanage.',
+    },
+    custom: {
+      title: 'Custom selection',
+      body:
+        'Pick which tiers are allowed. AutoCoder will still choose between allowed tiers based on task complexity if Auto‑Detect is enabled.',
+    },
+    current: {
+      title: 'Current configuration',
+      body:
+        'Read-only summary of what the backend currently uses: preset, available tiers, and fallback tier. Useful for sanity checks.',
+    },
+    mapping: {
+      title: 'Category mapping',
+      body:
+        'Shows how categories (frontend/backend/docs/tests/etc.) map to model tiers. This is computed from the chosen preset/custom selection.',
+    },
+    auto_detect: {
+      title: 'Auto-Detect Simple Tasks',
+      body:
+        'When enabled, AutoCoder can pick cheaper tiers for low‑risk work (tests/docs). Disable if you want strict “always best tier” behavior.',
+    },
+    assistant: {
+      title: 'Assistant Chat Model',
+      body:
+        'Only affects the Web UI assistant chat panel. It does not change the feature workers (those use the settings above).',
+    },
+  }
+
+  const openHelp = (topic: HelpTopic) => {
+    setHelpTopic(topic)
+    setShowHelp(true)
   }
 
   const handlePresetChange = async (preset: string) => {
@@ -142,7 +202,7 @@ export function ModelSettingsContent({
         <div className="flex gap-2">
           <button
             className="neo-btn neo-btn-secondary text-sm"
-            onClick={() => setShowHelp(true)}
+            onClick={() => openHelp('all')}
             title="Explain model settings"
           >
             <Info size={16} />
@@ -162,8 +222,50 @@ export function ModelSettingsContent({
           >
             Custom
           </button>
+          <button
+            className="neo-btn neo-btn-ghost p-2"
+            onClick={() => openHelp('mode')}
+            title="About presets vs custom"
+            aria-label="About presets vs custom"
+          >
+            <Info size={18} />
+          </button>
         </div>
       </div>
+
+      <HelpModal isOpen={showHelp} title="Model Settings — what each knob does" onClose={() => setShowHelp(false)}>
+        <div className="space-y-4 text-sm">
+          {helpTopic !== 'all' && (
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-xs font-mono text-[var(--color-neo-text-secondary)]">Tip: click ⓘ for section-specific help.</div>
+              <button className="neo-btn neo-btn-secondary text-sm" onClick={() => setHelpTopic('all')}>
+                Show all
+              </button>
+            </div>
+          )}
+
+          {helpTopic === 'all' ? (
+            <div className="space-y-3">
+              {(Object.keys(helpContent) as Array<Exclude<HelpTopic, 'all'>>).map((key) => (
+                <div key={key} className="neo-card p-3 bg-[var(--color-neo-bg)]">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="font-display font-bold uppercase">{helpContent[key].title}</div>
+                    <button className="neo-btn neo-btn-secondary text-sm" onClick={() => setHelpTopic(key)}>
+                      Details
+                    </button>
+                  </div>
+                  <div className="text-[var(--color-neo-text-secondary)] mt-1">{helpContent[key].body}</div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="neo-card p-4 bg-[var(--color-neo-bg)]">
+              <div className="font-display font-bold uppercase">{helpContent[helpTopic].title}</div>
+              <div className="text-[var(--color-neo-text-secondary)] mt-2">{helpContent[helpTopic].body}</div>
+            </div>
+          )}
+        </div>
+      </HelpModal>
 
       {/* Preset Selection */}
       {mode === 'preset' && (
@@ -171,6 +273,14 @@ export function ModelSettingsContent({
         <div className="flex items-center gap-2 mb-3">
           <Brain className="text-[var(--color-neo-accent)]" size={18} />
           <h3 className="font-display font-bold text-lg uppercase">Model Presets</h3>
+          <button
+            className="neo-btn neo-btn-ghost p-1"
+            onClick={() => openHelp('presets')}
+            title="About presets"
+            aria-label="About presets"
+          >
+            <Info size={16} />
+          </button>
         </div>
 
         {/* Compact dropdown on small screens */}
@@ -219,7 +329,12 @@ export function ModelSettingsContent({
       {/* Custom model selection */}
       {mode === 'custom' && (
         <div className="neo-card p-4">
-          <div className="font-display font-bold uppercase mb-3">Custom Models</div>
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <div className="font-display font-bold uppercase">Custom Models</div>
+            <button className="neo-btn neo-btn-ghost p-2" onClick={() => openHelp('custom')} title="About custom selection" aria-label="About custom selection">
+              <Info size={18} />
+            </button>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <label className="neo-card p-3 flex items-center justify-between cursor-pointer">
               <span className="font-display font-bold text-sm">Opus</span>
@@ -270,6 +385,12 @@ export function ModelSettingsContent({
       {settings && (
         <details className="neo-card p-4 bg-[var(--color-neo-bg)]">
           <summary className="cursor-pointer font-display font-bold text-lg uppercase">Current Configuration</summary>
+          <div className="flex justify-end mt-2">
+            <button className="neo-btn neo-btn-secondary neo-btn-sm" onClick={() => openHelp('current')} title="About current configuration">
+              <Info size={14} />
+              What’s this?
+            </button>
+          </div>
           <div className="mt-3 space-y-2 font-mono text-sm">
             <div className="flex justify-between">
               <span className="text-[var(--color-neo-text-secondary)]">Preset:</span>
@@ -291,6 +412,12 @@ export function ModelSettingsContent({
       {settings?.category_mapping && (
         <details className="neo-card p-4">
           <summary className="cursor-pointer font-display font-bold text-lg uppercase">Category Mapping</summary>
+          <div className="flex justify-end mt-2">
+            <button className="neo-btn neo-btn-secondary neo-btn-sm" onClick={() => openHelp('mapping')} title="About category mapping">
+              <Info size={14} />
+              What’s this?
+            </button>
+          </div>
           <div className="mt-3 grid grid-cols-2 md:grid-cols-3 gap-2">
             {Object.entries(settings.category_mapping).map(([category, model]) => (
               <div key={category} className="neo-card p-3 flex justify-between items-center">
@@ -305,11 +432,26 @@ export function ModelSettingsContent({
       {/* Auto-Detect Toggle */}
       <div>
         <label className="neo-card p-4 flex items-center justify-between cursor-pointer">
-          <div>
-            <div className="font-display font-bold text-base mb-1">Auto-Detect Simple Tasks</div>
-            <div className="text-sm text-[var(--color-neo-text-secondary)]">
-              Automatically use cheaper models for simple tasks (tests, docs, etc.)
+          <div className="flex items-start gap-2">
+            <div>
+              <div className="font-display font-bold text-base mb-1">Auto-Detect Simple Tasks</div>
+              <div className="text-sm text-[var(--color-neo-text-secondary)]">
+                Automatically use cheaper models for simple tasks (tests, docs, etc.)
+              </div>
             </div>
+            <button
+              type="button"
+              className="neo-btn neo-btn-ghost p-1"
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                openHelp('auto_detect')
+              }}
+              title="About auto-detect"
+              aria-label="About auto-detect"
+            >
+              <Info size={16} />
+            </button>
           </div>
           <button
             onClick={handleAutoDetectToggle}
@@ -331,9 +473,16 @@ export function ModelSettingsContent({
 
       {/* Assistant model override */}
       <div className="neo-card p-4">
-        <div className="font-display font-bold text-base mb-1">Assistant Chat Model</div>
-        <div className="text-sm text-[var(--color-neo-text-secondary)] mb-3">
-          Controls the model used by the Web UI Assistant (not the feature workers).
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="font-display font-bold text-base mb-1">Assistant Chat Model</div>
+            <div className="text-sm text-[var(--color-neo-text-secondary)] mb-3">
+              Controls the model used by the Web UI Assistant (not the feature workers).
+            </div>
+          </div>
+          <button className="neo-btn neo-btn-ghost p-2" onClick={() => openHelp('assistant')} title="About assistant model" aria-label="About assistant model">
+            <Info size={18} />
+          </button>
         </div>
         <div className="flex flex-wrap gap-2">
           {(['auto', 'opus', 'sonnet', 'haiku'] as const).map((m) => (
@@ -349,36 +498,6 @@ export function ModelSettingsContent({
           ))}
         </div>
       </div>
-
-      <HelpModal isOpen={showHelp} title="Model Settings — what each knob does" onClose={() => setShowHelp(false)}>
-        <div className="space-y-3 text-sm">
-          <p>
-            These settings control <span className="font-bold">Claude model selection</span> for feature workers and UI
-            assistant chat.
-          </p>
-          <div className="neo-card p-3 bg-[var(--color-neo-bg)] space-y-2">
-            <div className="font-display font-bold uppercase text-xs">Presets</div>
-            <p className="text-[var(--color-neo-text-secondary)]">
-              Quick bundles (Quality/Balanced/Economy). Best default for most runs.
-            </p>
-          </div>
-          <div className="neo-card p-3 bg-[var(--color-neo-bg)] space-y-2">
-            <div className="font-display font-bold uppercase text-xs">Custom</div>
-            <p className="text-[var(--color-neo-text-secondary)]">
-              Manually choose which tiers are available (Opus/Sonnet/Haiku). Useful for cost control.
-            </p>
-          </div>
-          <div className="neo-card p-3 bg-[var(--color-neo-bg)] space-y-2">
-            <div className="font-display font-bold uppercase text-xs">Auto‑Detect Simple Tasks</div>
-            <p className="text-[var(--color-neo-text-secondary)]">
-              Lets AutoCoder pick cheaper models for low‑risk tasks (tests/docs). Turn off if you want strict quality.
-            </p>
-          </div>
-          <div className="text-xs text-[var(--color-neo-text-secondary)]">
-            Assistant Chat Model only affects the in‑UI assistant, not feature workers.
-          </div>
-        </div>
-      </HelpModal>
     </div>
   )
 }

@@ -7,7 +7,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Info, RotateCcw, Save, SlidersHorizontal } from 'lucide-react'
+import { CheckCircle2, Info, RotateCcw, Save, SlidersHorizontal } from 'lucide-react'
 import { useAdvancedSettings, useUpdateAdvancedSettings } from '../hooks/useAdvancedSettings'
 import { useSetupStatus } from '../hooks/useProjects'
 import type { AdvancedSettings } from '../lib/types'
@@ -86,6 +86,10 @@ type HelpTopic =
   | 'locks'
   | 'gatekeeper'
   | 'cli_defaults'
+  | 'logs'
+  | 'retry'
+  | 'ports'
+  | 'ui'
   | 'qa_controller'
   | 'regression_pool'
   | 'planner'
@@ -232,6 +236,113 @@ const HELP_CONTENT: Record<HelpTopic, { title: string; body: JSX.Element }> = {
       </div>
     ),
   },
+  logs: {
+    title: 'Logs + Activity — retention & auto-prune',
+    body: (
+      <div className="space-y-4 text-sm">
+        <p>
+          AutoCoder writes runtime logs under each project’s <span className="font-mono">.autocoder/</span>. These knobs
+          keep disk usage from creeping up over time.
+        </p>
+        <div className="neo-card p-4 bg-[var(--color-neo-bg)] space-y-2">
+          <div className="font-display font-bold uppercase text-xs">What gets pruned</div>
+          <ul className="list-disc pl-5 space-y-1">
+            <li>
+              <span className="font-bold">Logs</span>: old files + total size cap.
+            </li>
+            <li>
+              <span className="font-bold">Gatekeeper artifacts</span>: optional cleanup of historical{' '}
+              <span className="font-mono">gatekeeper/*.json</span> files (useful on long runs).
+            </li>
+            <li>
+              <span className="font-bold">Mission Control feed</span>: DB rows stored in{' '}
+              <span className="font-mono">agent_system.db</span> (keeps UI snappy).
+            </li>
+          </ul>
+        </div>
+        <p className="text-[var(--color-neo-text-secondary)]">
+          Tip: if you’re debugging a flaky project, temporarily disable auto-prune so artifacts stick around longer.
+        </p>
+      </div>
+    ),
+  },
+  retry: {
+    title: 'SDK Retry/Backoff — keep agents resilient',
+    body: (
+      <div className="space-y-4 text-sm">
+        <p>
+          These settings control how AutoCoder retries transient failures (rate limits, network hiccups, flaky CLI calls)
+          inside agent/sub-agent loops.
+        </p>
+        <div className="neo-card p-4 bg-[var(--color-neo-bg)] space-y-2">
+          <div className="font-display font-bold uppercase text-xs">How it behaves</div>
+          <ul className="list-disc pl-5 space-y-1">
+            <li>
+              <span className="font-bold">Max attempts</span>: total tries before the run is marked failed.
+            </li>
+            <li>
+              <span className="font-bold">Initial delay</span> + <span className="font-bold">exponential base</span>: backoff curve.
+            </li>
+            <li>
+              <span className="font-bold">Rate limit delay</span>: a “bigger first wait” for 429s.
+            </li>
+            <li>
+              <span className="font-bold">Jitter</span>: randomizes delays to avoid synchronized retries (recommended).
+            </li>
+          </ul>
+        </div>
+        <p className="text-[var(--color-neo-text-secondary)]">
+          If you see tight retry loops, increase Max delay or enable jitter.
+        </p>
+      </div>
+    ),
+  },
+  ports: {
+    title: 'Ports — parallel agent isolation',
+    body: (
+      <div className="space-y-4 text-sm">
+        <p>
+          Parallel agents often start dev servers (API + web). AutoCoder allocates unique port pairs per agent to avoid{' '}
+          <span className="font-mono">EADDRINUSE</span> crashes.
+        </p>
+        <div className="neo-card p-4 bg-[var(--color-neo-bg)] space-y-2">
+          <div className="font-display font-bold uppercase text-xs">Port pools</div>
+          <ul className="list-disc pl-5 space-y-1">
+            <li>
+              <span className="font-bold">API pool</span>: backend/dev API ports.
+            </li>
+            <li>
+              <span className="font-bold">WEB pool</span>: frontend/dev web ports.
+            </li>
+            <li>
+              <span className="font-bold">Skip availability check</span>: only if your environment blocks port probing (not recommended).
+            </li>
+          </ul>
+        </div>
+        <div className="neo-card p-4 bg-[var(--color-neo-bg)] space-y-2">
+          <div className="font-display font-bold uppercase text-xs">UI server</div>
+          <p className="text-[var(--color-neo-text-secondary)]">
+            Bind host controls where the UI listens. Keep it on <span className="font-mono">127.0.0.1</span> by default.
+            Enable LAN only if you understand the risk and you’re on a trusted network.
+          </p>
+        </div>
+      </div>
+    ),
+  },
+  ui: {
+    title: 'UI — Agent status colors',
+    body: (
+      <div className="space-y-4 text-sm">
+        <p>
+          Cosmetic only. These colors are used by the Agent Status cards (running/done/retrying) so you can match your taste
+          or improve contrast on your monitor.
+        </p>
+        <p className="text-[var(--color-neo-text-secondary)]">
+          Use 6‑digit hex colors like <span className="font-mono">#00b4d8</span>.
+        </p>
+      </div>
+    ),
+  },
   qa_controller: {
     title: 'QA + Controller — fixing failures without human babysitting',
     body: (
@@ -323,8 +434,10 @@ export function AdvancedSettingsContent() {
   const [draft, setDraft] = useState<AdvancedSettings>(DEFAULTS)
   const [tab, setTab] = useState<'automation' | 'gatekeeper' | 'logs' | 'retry' | 'ports' | 'ui'>('automation')
   const [helpTopic, setHelpTopic] = useState<HelpTopic | null>(null)
+  const [justSaved, setJustSaved] = useState(false)
   const [notice, setNotice] = useState<{ type: InlineNoticeType; message: string } | null>(null)
   const noticeTimer = useRef<number | null>(null)
+  const savedTimer = useRef<number | null>(null)
   const [confirmToggle, setConfirmToggle] = useState<{
     field: keyof AdvancedSettings
     next: boolean
@@ -341,6 +454,7 @@ export function AdvancedSettingsContent() {
   useEffect(() => {
     return () => {
       if (noticeTimer.current) window.clearTimeout(noticeTimer.current)
+      if (savedTimer.current) window.clearTimeout(savedTimer.current)
     }
   }, [])
 
@@ -433,6 +547,9 @@ export function AdvancedSettingsContent() {
     try {
       await update.mutateAsync(draft)
       flash('success', 'Advanced settings saved.')
+      setJustSaved(true)
+      if (savedTimer.current) window.clearTimeout(savedTimer.current)
+      savedTimer.current = window.setTimeout(() => setJustSaved(false), 2000)
     } catch (e: any) {
       flash('error', String(e?.message || e))
     }
@@ -471,8 +588,8 @@ export function AdvancedSettingsContent() {
               Reset
             </button>
             <button className="neo-btn neo-btn-primary text-sm" onClick={onSave} disabled={saveDisabled} title="Save">
-              <Save size={18} />
-              Save
+              {justSaved ? <CheckCircle2 size={18} /> : <Save size={18} />}
+              {justSaved ? 'Saved' : 'Save'}
             </button>
           </div>
         </div>
@@ -1110,7 +1227,18 @@ export function AdvancedSettingsContent() {
 
           {tab === 'logs' && (
             <div className="neo-card p-4">
-              <div className="font-display font-bold uppercase mb-3">Log Retention</div>
+              <div className="flex items-center gap-2 mb-3">
+                <div className="font-display font-bold uppercase">Log Retention</div>
+                <button
+                  type="button"
+                  className="inline-flex items-center justify-center p-1 rounded hover:bg-black/5"
+                  onClick={() => setHelpTopic('logs')}
+                  title="Help: Logs"
+                  aria-label="Help: Logs"
+                >
+                  <Info size={16} className="text-[var(--color-neo-text-secondary)]" aria-hidden="true" />
+                </button>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <Field label="Keep days" value={draft.logs_keep_days} onChange={(v) => setDraft({ ...draft, logs_keep_days: clampInt(v, 0, 3650) })} />
                 <Field label="Keep files" value={draft.logs_keep_files} onChange={(v) => setDraft({ ...draft, logs_keep_files: clampInt(v, 0, 100000) })} />
@@ -1154,7 +1282,18 @@ export function AdvancedSettingsContent() {
 
           {tab === 'retry' && (
             <div className="neo-card p-4">
-              <div className="font-display font-bold uppercase mb-3">SDK Retry/Backoff</div>
+              <div className="flex items-center gap-2 mb-3">
+                <div className="font-display font-bold uppercase">SDK Retry/Backoff</div>
+                <button
+                  type="button"
+                  className="inline-flex items-center justify-center p-1 rounded hover:bg-black/5"
+                  onClick={() => setHelpTopic('retry')}
+                  title="Help: Retry/Backoff"
+                  aria-label="Help: Retry/Backoff"
+                >
+                  <Info size={16} className="text-[var(--color-neo-text-secondary)]" aria-hidden="true" />
+                </button>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <Field label="Max attempts" value={draft.sdk_max_attempts} onChange={(v) => setDraft({ ...draft, sdk_max_attempts: clampInt(v, 1, 20) })} />
                 <Field label="Initial delay (s)" value={draft.sdk_initial_delay_s} onChange={(v) => setDraft({ ...draft, sdk_initial_delay_s: clampInt(v, 0, 600) })} />
@@ -1171,7 +1310,18 @@ export function AdvancedSettingsContent() {
 
           {tab === 'ports' && (
             <div className="neo-card p-4">
-              <div className="font-display font-bold uppercase mb-3">Port Pools</div>
+              <div className="flex items-center gap-2 mb-3">
+                <div className="font-display font-bold uppercase">Port Pools</div>
+                <button
+                  type="button"
+                  className="inline-flex items-center justify-center p-1 rounded hover:bg-black/5"
+                  onClick={() => setHelpTopic('ports')}
+                  title="Help: Ports"
+                  aria-label="Help: Ports"
+                >
+                  <Info size={16} className="text-[var(--color-neo-text-secondary)]" aria-hidden="true" />
+                </button>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                 <Field label="API start" value={draft.api_port_range_start} onChange={(v) => setDraft({ ...draft, api_port_range_start: clampInt(v, 1024, 65535) })} />
                 <Field
@@ -1224,7 +1374,18 @@ export function AdvancedSettingsContent() {
 
           {tab === 'ui' && (
             <div className="neo-card p-4">
-              <div className="font-display font-bold uppercase mb-3">Agent Status Colors</div>
+              <div className="flex items-center gap-2 mb-3">
+                <div className="font-display font-bold uppercase">Agent Status Colors</div>
+                <button
+                  type="button"
+                  className="inline-flex items-center justify-center p-1 rounded hover:bg-black/5"
+                  onClick={() => setHelpTopic('ui')}
+                  title="Help: UI"
+                  aria-label="Help: UI"
+                >
+                  <Info size={16} className="text-[var(--color-neo-text-secondary)]" aria-hidden="true" />
+                </button>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <ColorField
                   label="Running"

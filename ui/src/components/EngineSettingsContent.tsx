@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowDown, ArrowUp, Info, RefreshCcw, Save, Wrench } from 'lucide-react'
+import { ArrowDown, ArrowUp, CheckCircle2, Info, RefreshCcw, Save, Wrench } from 'lucide-react'
 import { useEngineSettings, useUpdateEngineSettings } from '../hooks/useEngineSettings'
 import { useSetupStatus } from '../hooks/useProjects'
 import type { EngineId, EngineSettings, EngineStage } from '../lib/types'
@@ -91,8 +91,10 @@ export function EngineSettingsContent({ projectName }: { projectName: string }) 
   const [draft, setDraft] = useState<EngineSettings | null>(null)
   const [showHelp, setShowHelp] = useState(false)
   const [helpTopic, setHelpTopic] = useState<HelpTopic>('all')
+  const [justSaved, setJustSaved] = useState(false)
   const [notice, setNotice] = useState<{ type: InlineNoticeType; message: string } | null>(null)
   const noticeTimer = useRef<number | null>(null)
+  const savedTimer = useRef<number | null>(null)
 
   useEffect(() => {
     if (data) setDraft(data)
@@ -102,6 +104,9 @@ export function EngineSettingsContent({ projectName }: { projectName: string }) 
     return () => {
       if (noticeTimer.current) {
         window.clearTimeout(noticeTimer.current)
+      }
+      if (savedTimer.current) {
+        window.clearTimeout(savedTimer.current)
       }
     }
   }, [])
@@ -169,6 +174,9 @@ export function EngineSettingsContent({ projectName }: { projectName: string }) 
     try {
       await update.mutateAsync({ projectName, settings: draft })
       flash('success', 'Engine settings saved.')
+      setJustSaved(true)
+      if (savedTimer.current) window.clearTimeout(savedTimer.current)
+      savedTimer.current = window.setTimeout(() => setJustSaved(false), 2000)
     } catch (e: any) {
       flash('error', String(e?.message || e))
     }
@@ -249,8 +257,8 @@ export function EngineSettingsContent({ projectName }: { projectName: string }) 
               disabled={!draft || update.isPending || validation.errors.length > 0}
               title="Save engine settings"
             >
-              <Save size={18} />
-              Save
+              {justSaved ? <CheckCircle2 size={18} /> : <Save size={18} />}
+              {justSaved ? 'Saved' : 'Save'}
             </button>
           </div>
         </div>

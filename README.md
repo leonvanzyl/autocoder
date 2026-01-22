@@ -151,6 +151,7 @@ autocoder-ui
 - If the UI looks stale after an update, hit refresh (we serve `index.html` with `Cache-Control: no-store` so rebuilds should invalidate cleanly).
 - If you run from a FAT32/exFAT drive and auto-build gets “sticky”, set `AUTOCODER_UI_MTIME_TOLERANCE_S=2` (or any non-negative seconds).
 - Scheduled runs: use the **Settings** modal (press `S`) to schedule a start time; schedules persist across UI restarts.
+- Settings UX: most Settings sections have a small ⓘ button for “what does this do?” context help. Save buttons briefly show **Saved** so you know it actually applied.
 - Stop-when-done: default is **stop** when the queue is empty; set `AUTOCODER_STOP_WHEN_DONE=0` to keep the agent alive for new features.
 - LAN access: set `AUTOCODER_UI_HOST=0.0.0.0` and `AUTOCODER_UI_ALLOW_REMOTE=1` (restart required).
 - Playwright MCP runs with an isolated in-memory profile by default (set `AUTOCODER_PLAYWRIGHT_ISOLATED=0` to disable).

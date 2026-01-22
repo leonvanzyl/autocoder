@@ -63,6 +63,9 @@ export function ProjectMaintenance({ projectName }: ProjectMaintenanceProps) {
     deleteInfo.data?.has_spec ||
     (deleteInfo.data && !deleteInfo.data.runtime_only)
   )
+  const deleteInfoErrorMessage =
+    deleteInfo.error instanceof Error ? deleteInfo.error.message : deleteInfo.error ? String(deleteInfo.error) : ''
+  const deleteInfoNotFound = deleteInfoErrorMessage.toLowerCase().includes('not found')
   const typedOk = !requiresTypedConfirm || confirmName.trim() === projectName
   const isBlocked = Boolean(deleteInfo.data?.agent_running)
 
@@ -174,10 +177,12 @@ export function ProjectMaintenance({ projectName }: ProjectMaintenanceProps) {
             ) : deleteInfo.error ? (
               <div className="mt-4 space-y-3">
                 <div className="neo-card p-3 border-3 border-[var(--color-neo-danger)] text-sm text-[var(--color-neo-danger)]">
-                  {deleteInfo.error instanceof Error ? deleteInfo.error.message : 'Failed to load delete info'}
+                  {deleteInfoErrorMessage || 'Failed to load delete info'}
                 </div>
                 <div className="text-xs text-[var(--color-neo-text-secondary)]">
-                  Delete metadata is unavailable. Restart AutoCoder to load the latest API, or continue with a manual delete.
+                  {deleteInfoNotFound
+                    ? 'This project is not in the registry anymore (stale tab). Go back to the dashboard and pick another project, or delete files manually from disk.'
+                    : 'Delete metadata is unavailable. Restart AutoCoder to load the latest API, or continue with a manual delete.'}
                 </div>
                 <label className="flex items-center gap-2 text-sm">
                   <input

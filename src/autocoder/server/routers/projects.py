@@ -490,25 +490,39 @@ async def delete_project(name: str, delete_files: bool = False):
             is_locked = False
             if isinstance(e, PermissionError):
                 is_locked = True
-            elif isinstance(e, OSError) and os.name == "nt" and getattr(e, "winerror", None) == 5:
+            elif isinstance(e, OSError) and os.name == "nt" and getattr(e, "winerror", None) in (5, 32):
                 is_locked = True
+            elif isinstance(e, shutil.Error) and os.name == "nt":
+                # shutil.Error args are typically a list of tuples: (src, dst, message)
+                try:
+                    items = e.args[0] if e.args else []
+                    if isinstance(items, list):
+                        for item in items:
+                            try:
+                                msg = str(item[2]) if isinstance(item, tuple) and len(item) >= 3 else str(item)
+                            except Exception:
+                                msg = str(item)
+                            if "WinError 5" in msg or "WinError 32" in msg or "Access is denied" in msg:
+                                is_locked = True
+                                break
+                except Exception:
+                    pass
             else:
                 try:
                     msg = str(e)
-                    if os.name == "nt" and ("WinError 5" in msg or "Access is denied" in msg):
+                    if os.name == "nt" and ("WinError 5" in msg or "WinError 32" in msg or "Access is denied" in msg):
                         is_locked = True
                 except Exception:
                     pass
 
             if is_locked:
                 queue_path = _enqueue_cleanup(project_dir, project_dir, reason="project delete failed (locked files)")
-                # Remove the project from the registry (UI stays clean) and queue cleanup for later.
-                unregister_project(name)
+                # Keep the project registered so the user can retry deletion or process the cleanup queue from the UI.
                 return {
-                    "success": True,
+                    "success": False,
                     "message": (
-                        f"Project '{name}' removed from registry. Files are locked; cleanup queued at {queue_path}. "
-                        "Close any apps using the project and the cleanup queue will retry."
+                        f"Files are locked (Windows). Cleanup queued at {queue_path}. "
+                        "Close any apps using the project and retry, or run the cleanup queue from Settings → Diagnostics."
                     ),
                 }
 

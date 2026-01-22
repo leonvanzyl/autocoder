@@ -155,7 +155,8 @@ async def get_cleanup_queue(project_name: str):
     try:
         mgr = WorktreeManager(str(project_dir))
         items = mgr._load_cleanup_queue()  # type: ignore[attr-defined]
-    except ValueError:
+    except Exception:
+        # Project may not be a git repo (or WorktreeManager may fail); fall back to plain JSON queue.
         items = _load_cleanup_queue_file(project_dir)
     normalized: list[CleanupQueueItem] = []
     for it in items if isinstance(items, list) else []:
@@ -192,7 +193,7 @@ async def process_cleanup_queue(project_name: str, req: ProcessCleanupQueueReque
         mgr = WorktreeManager(str(project_dir))
         processed = int(mgr.process_cleanup_queue(max_items=int(req.max_items)) or 0)
         remaining = len(mgr._load_cleanup_queue())  # type: ignore[attr-defined]
-    except ValueError:
+    except Exception:
         processed = int(_process_cleanup_queue(project_dir, max_items=int(req.max_items)) or 0)
         remaining = len(_load_cleanup_queue_file(project_dir))
     return ProcessCleanupQueueResponse(

@@ -183,7 +183,9 @@ def load_engine_settings(project_dir: str) -> EngineSettings:
         try:
             parsed = EngineSettings.model_validate(stored)
             legacy = EngineSettings.legacy_defaults()
-            if parsed.version < 2 and EngineSettings.chains_equal(parsed, legacy):
+            # If a project is still on the legacy Codex/Gemini-first ordering, upgrade it.
+            # This keeps defaults sane (Claude-first) unless the user explicitly diverged.
+            if EngineSettings.chains_equal(parsed, legacy):
                 upgraded = EngineSettings.defaults()
                 save_engine_settings(project_dir, upgraded)
                 return upgraded
