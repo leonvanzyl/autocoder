@@ -418,6 +418,26 @@ def set_dev_command(project_dir: Path, command: str) -> None:
     logger.info("Set custom dev command for %s: %s", project_dir.name, command)
 
 
+def get_dev_port(project_dir: Path) -> int | None:
+    """
+    Get the configured dev port for a project.
+
+    Args:
+        project_dir: Path to the project directory.
+
+    Returns:
+        The configured port number, or None if no port is configured.
+    """
+    project_dir = Path(project_dir).resolve()
+    config = _load_config(project_dir)
+    port = config.get("dev_port")
+
+    if port is not None and isinstance(port, int):
+        return port
+
+    return None
+
+
 def clear_dev_command(project_dir: Path) -> None:
     """
     Remove the custom dev command, reverting to auto-detection.
