@@ -445,6 +445,7 @@ class DevServerConfigResponse(BaseModel):
     detected_command: str | None = None
     custom_command: str | None = None
     effective_command: str | None = None
+    port: int | None = None
 
 
 class DevServerConfigUpdate(BaseModel):
