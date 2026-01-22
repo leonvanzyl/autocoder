@@ -31,7 +31,7 @@ import contextlib
 import errno
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple, Set
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 # Direct imports (system code = fast!)
 from .knowledge_base import KnowledgeBase, get_knowledge_base
@@ -403,6 +403,201 @@ class Orchestrator:
         logger.info(f"    API: {port_status['api_ports']['range']} ({port_status['api_ports']['available']} available)")
         logger.info(f"    Web: {port_status['web_ports']['range']} ({port_status['web_ports']['available']} available)")
 
+    @staticmethod
+    def _parse_db_timestamp(value: object) -> datetime | None:
+        """
+        Parse SQLite CURRENT_TIMESTAMP values into UTC datetimes.
+
+        SQLite `CURRENT_TIMESTAMP` is UTC with format `YYYY-MM-DD HH:MM:SS`.
+        """
+        if not isinstance(value, str) or not value.strip():
+            return None
+        raw = value.strip()
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S"):
+            with contextlib.suppress(Exception):
+                dt = datetime.strptime(raw, fmt)
+                return dt.replace(tzinfo=timezone.utc)
+        return None
+
+    def _is_expected_worker_process(self, agent_row: Dict[str, Any]) -> bool:
+        """
+        Guard against PID reuse.
+
+        `psutil.pid_exists(pid)` is not sufficient: OSes can reuse PIDs quickly. If a stale agent PID is
+        recycled by an unrelated process, the orchestrator can get stuck waiting forever.
+        """
+        pid = agent_row.get("pid")
+        agent_id = str(agent_row.get("agent_id") or "")
+        if not pid:
+            return False
+
+        try:
+            proc = psutil.Process(int(pid))
+        except Exception:
+            return False
+
+        cmdline = ""
+        with contextlib.suppress(Exception):
+            cmdline = " ".join(proc.cmdline() or [])
+        cmd_l = cmdline.lower()
+
+        # Workers are spawned via scripts (agent_worker.py / qa_worker.py) or module invocation.
+        is_worker = any(
+            needle in cmd_l
+            for needle in (
+                "agent_worker.py",
+                "autocoder.agent_worker",
+                "qa_worker.py",
+                "autocoder.qa_worker",
+            )
+        )
+        if not is_worker:
+            return False
+
+        # Ensure we're looking at the correct worker instance (PID reuse guard).
+        if agent_id and agent_id.lower() not in cmd_l:
+            return False
+
+        expected_ct = agent_row.get("proc_create_time")
+        if expected_ct is not None:
+            with contextlib.suppress(Exception):
+                created_s = float(proc.create_time())
+                if abs(created_s - float(expected_ct)) > 5.0:
+                    return False
+            return True
+
+        started_at = self._parse_db_timestamp(agent_row.get("started_at"))
+        if started_at is None:
+            return True
+
+        with contextlib.suppress(Exception):
+            created = datetime.fromtimestamp(float(proc.create_time()), tz=timezone.utc)
+            # Allow slack for timing jitter and DB insert delay.
+            if abs((created - started_at).total_seconds()) > 3600:
+                return False
+
+        return True
+
+    def _salvage_dead_agent(self, agent_row: Dict[str, Any], *, reason: str) -> None:
+        """
+        Handle an agent row whose PID is missing or not a valid worker process.
+
+        Prefer salvage (submit for Gatekeeper) over resetting (which clears branch_name).
+        """
+        agent_id = str(agent_row.get("agent_id") or "")
+        if not agent_id:
+            return
+
+        feature_id_raw = agent_row.get("feature_id")
+        feature_id = int(feature_id_raw) if feature_id_raw is not None else None
+
+        feature: Dict[str, Any] | None = None
+        if feature_id is not None:
+            with contextlib.suppress(Exception):
+                feature = self.database.get_feature(feature_id)
+
+        # If feature is already ready for Gatekeeper, keep it intact and just mark the agent completed.
+        if feature and feature.get("review_status") == "READY_FOR_VERIFICATION" and feature.get("branch_name"):
+            logger.warning("Dead agent %s had a feature ready for verification; salvaging", agent_id)
+            with contextlib.suppress(Exception):
+                self.database.mark_agent_completed(agent_id)
+            with contextlib.suppress(Exception):
+                self.database.add_activity_event(
+                    event_type="agent.salvaged",
+                    level="WARN",
+                    message=f"Salvaged {agent_id}: feature already ready for Gatekeeper",
+                    agent_id=str(agent_id),
+                    feature_id=int(feature_id) if feature_id is not None else None,
+                    data={"reason": str(reason), "mode": "already_ready"},
+                )
+        else:
+            base = self._detect_main_branch()
+            branch_name = str(feature.get("branch_name") or "") if feature else ""
+            worktree_path = str(agent_row.get("worktree_path") or "")
+
+            commit_count = 0
+            if worktree_path and Path(worktree_path).exists():
+                try:
+                    commit_count = int(
+                        subprocess.run(
+                            ["git", "rev-list", "--count", f"{base}..HEAD"],
+                            cwd=worktree_path,
+                            check=True,
+                            capture_output=True,
+                            text=True,
+                        ).stdout.strip()
+                    )
+                except Exception:
+                    commit_count = 0
+            elif branch_name:
+                try:
+                    commit_count = int(
+                        subprocess.run(
+                            ["git", "rev-list", "--count", f"{base}..{branch_name}"],
+                            cwd=self.project_dir,
+                            check=True,
+                            capture_output=True,
+                            text=True,
+                        ).stdout.strip()
+                    )
+                except Exception:
+                    commit_count = 0
+
+            if feature_id is not None and commit_count > 0 and branch_name:
+                logger.warning(
+                    "Dead agent %s had %s commit(s) on %s; submitting for Gatekeeper",
+                    agent_id,
+                    commit_count,
+                    branch_name,
+                )
+                with contextlib.suppress(Exception):
+                    self.database.mark_feature_ready_for_verification(feature_id)
+                with contextlib.suppress(Exception):
+                    self.database.mark_agent_completed(agent_id)
+                with contextlib.suppress(Exception):
+                    self.database.add_activity_event(
+                        event_type="agent.salvaged",
+                        level="WARN",
+                        message=f"Salvaged {agent_id}: submitted {branch_name} for Gatekeeper",
+                        agent_id=str(agent_id),
+                        feature_id=int(feature_id),
+                        data={
+                            "reason": str(reason),
+                            "mode": "commits_detected",
+                            "branch": str(branch_name),
+                            "commit_count": int(commit_count),
+                        },
+                    )
+            else:
+                logger.warning(
+                    "Dead agent %s has no salvageable commits; marking crashed (feature_id=%s, branch=%s)",
+                    agent_id,
+                    feature_id,
+                    branch_name or "",
+                )
+                with contextlib.suppress(Exception):
+                    self.database.mark_agent_crashed(agent_id)
+                with contextlib.suppress(Exception):
+                    self.database.add_activity_event(
+                        event_type="agent.crashed",
+                        level="ERROR",
+                        message=f"Agent {agent_id} crashed; no salvageable commits",
+                        agent_id=str(agent_id),
+                        feature_id=int(feature_id) if feature_id is not None else None,
+                        data={"reason": str(reason), "branch": str(branch_name or "")},
+                    )
+                if feature_id is not None:
+                    with contextlib.suppress(Exception):
+                        self.database.mark_feature_failed(
+                            feature_id=feature_id,
+                            reason=str(reason),
+                        )
+
+        with contextlib.suppress(Exception):
+            self.port_allocator.release_ports(agent_id)
+        with contextlib.suppress(Exception):
+            self.worktree_manager.delete_worktree(agent_id, force=True)
+
     def _bootstrap_ports_from_database(self) -> None:
         """
         Reserve ports for already-running agents.
@@ -425,22 +620,16 @@ class Orchestrator:
             if not agent_id or api_port is None or web_port is None:
                 continue
 
-            if pid and psutil.pid_exists(pid):
+            if pid and self._is_expected_worker_process(agent):
                 if self.port_allocator.reserve_ports(agent_id, int(api_port), int(web_port)):
                     reserved += 1
             else:
-                # Agent record exists but process is gone: mark crashed and release feature.
-                logger.warning(f"Active agent {agent_id} has no live PID; marking crashed")
-                with contextlib.suppress(Exception):
-                    self.database.mark_agent_crashed(agent_id)
-                if agent.get("feature_id"):
-                    with contextlib.suppress(Exception):
-                        self.database.mark_feature_failed(
-                            feature_id=agent["feature_id"],
-                            reason="Agent process missing on orchestrator startup",
-                        )
-                with contextlib.suppress(Exception):
-                    self.worktree_manager.delete_worktree(agent_id, force=True)
+                logger.warning(
+                    "Active agent %s has no valid worker process (pid=%s); salvaging",
+                    agent_id,
+                    pid,
+                )
+                self._salvage_dead_agent(agent, reason="Agent process missing on orchestrator startup")
 
         if reserved:
             logger.info(f"Bootstrapped {reserved} port allocation(s) from database")
@@ -934,11 +1123,15 @@ class Orchestrator:
                 logger.info(f"   PID: {pid}")
 
                 # Register agent in database with PID and ports
+                proc_create_time: float | None = None
+                with contextlib.suppress(Exception):
+                    proc_create_time = float(psutil.Process(int(pid)).create_time())
                 self.database.register_agent(
                     agent_id=agent_id,
                     worktree_path=worktree_info["worktree_path"],
                     feature_id=feature_id,
                     pid=pid,
+                    proc_create_time=proc_create_time,
                     api_port=api_port,
                     web_port=web_port,
                     log_file_path=str(log_file_path),
@@ -1284,11 +1477,15 @@ class Orchestrator:
                 log_handle.close()
 
             pid = process.pid
+            proc_create_time: float | None = None
+            with contextlib.suppress(Exception):
+                proc_create_time = float(psutil.Process(int(pid)).create_time())
             self.database.register_agent(
                 agent_id=qa_agent_id,
                 worktree_path=worktree_info["worktree_path"],
                 feature_id=feature_id,
                 pid=pid,
+                proc_create_time=proc_create_time,
                 api_port=api_port,
                 web_port=web_port,
                 log_file_path=str(log_file_path),
@@ -1489,11 +1686,15 @@ class Orchestrator:
                     log_handle.close()
 
                 pid = process.pid
+                proc_create_time: float | None = None
+                with contextlib.suppress(Exception):
+                    proc_create_time = float(psutil.Process(int(pid)).create_time())
                 self.database.register_agent(
                     agent_id=agent_id,
                     worktree_path=worktree_info["worktree_path"],
                     feature_id=None,
                     pid=pid,
+                    proc_create_time=proc_create_time,
                     api_port=api_port,
                     web_port=web_port,
                     log_file_path=str(log_file_path),
@@ -1762,67 +1963,17 @@ class Orchestrator:
         for agent in stale_agents:
             logger.warning(f"⚠️ Detected stale agent: {agent['agent_id']}")
 
-            # Check if process is still running using psutil
-            if agent.get("pid"):
-                pid = agent["pid"]
-                if not psutil.pid_exists(pid):
-                    # Process is dead
-                    logger.warning(f"   Process {pid} is dead (PID no longer exists)")
+            pid = agent.get("pid")
+            if pid and self._is_expected_worker_process(agent):
+                logger.info(f"   Process {pid} still running, waiting for heartbeat...")
+                continue
 
-                    # Release allocated ports
-                    agent_id = agent["agent_id"]
-                    if self.port_allocator.release_ports(agent_id):
-                        logger.info(f"   Released ports for {agent_id}")
-
-                    # Mark as crashed
-                    self.database.mark_agent_crashed(agent_id)
-                    with contextlib.suppress(Exception):
-                        self.database.add_activity_event(
-                            event_type="agent.crashed",
-                            level="ERROR",
-                            message=f"Agent {agent_id} crashed (pid {pid} missing)",
-                            agent_id=str(agent_id),
-                            feature_id=int(agent.get("feature_id") or 0) or None,
-                            data={"pid": int(pid)},
-                        )
-
-                    # Reset feature for retry
-                    if agent.get("feature_id"):
-                        feature = self.database.get_feature(agent["feature_id"])
-                        logger.info(f"   Resetting feature #{feature['id']} for retry")
-
-                        self.database.mark_feature_failed(
-                            feature_id=agent["feature_id"],
-                            reason="Agent crashed"
-                        )
-
-                    # Delete worktree
-                    if agent.get("agent_id"):
-                        self.worktree_manager.delete_worktree(
-                            agent_id,
-                            force=True
-                        )
-                else:
-                    logger.info(f"   Process {pid} still running, waiting for heartbeat...")
+            if pid:
+                logger.warning(f"   Process {pid} is dead or unexpected (PID missing/reused)")
+                self._salvage_dead_agent(agent, reason="Agent crashed (pid missing/reused)")
             else:
-                # No PID recorded - likely old-style agent, mark as crashed
-                logger.warning(f"   No PID recorded, marking as crashed")
-
-                # Release allocated ports if any
-                agent_id = agent["agent_id"]
-                if self.port_allocator.release_ports(agent_id):
-                    logger.info(f"   Released ports for {agent_id}")
-
-                self.database.mark_agent_crashed(agent_id)
-                with contextlib.suppress(Exception):
-                    self.database.add_activity_event(
-                        event_type="agent.crashed",
-                        level="ERROR",
-                        message=f"Agent {agent_id} crashed (missing pid)",
-                        agent_id=str(agent_id),
-                        feature_id=int(agent.get("feature_id") or 0) or None,
-                        data={},
-                    )
+                logger.warning("   No PID recorded; salvaging")
+                self._salvage_dead_agent(agent, reason="Agent crashed (missing pid)")
 
     def _recover_completed_agents(self):
         """

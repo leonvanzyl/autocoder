@@ -322,6 +322,12 @@ class Database:
             except sqlite3.OperationalError:
                 pass  # Column already exists
 
+            try:
+                cursor.execute("ALTER TABLE agent_heartbeats ADD COLUMN proc_create_time REAL")
+                logger.info("Added proc_create_time column to existing agent_heartbeats table")
+            except sqlite3.OperationalError:
+                pass  # Column already exists
+
             # Migration: Normalize legacy lowercase statuses to uppercase
             cursor.execute("""
                 UPDATE features
@@ -344,6 +350,7 @@ class Database:
                     -- Process tracking
                     pid INTEGER,
                     started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    proc_create_time REAL,
 
                     -- Port allocation
                     api_port INTEGER,
@@ -1991,6 +1998,7 @@ class Database:
         self,
         agent_id: str,
         pid: Optional[int] = None,
+        proc_create_time: Optional[float] = None,
         worktree_path: Optional[str] = None,
         feature_id: Optional[int] = None,
         api_port: Optional[int] = None,
@@ -2002,10 +2010,10 @@ class Database:
             cursor = conn.cursor()
             cursor.execute("""
                 INSERT INTO agent_heartbeats (
-                    agent_id, pid, worktree_path, feature_id, api_port, web_port, log_file_path
+                    agent_id, pid, proc_create_time, worktree_path, feature_id, api_port, web_port, log_file_path
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (agent_id, pid, worktree_path, feature_id, api_port, web_port, log_file_path))
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (agent_id, pid, proc_create_time, worktree_path, feature_id, api_port, web_port, log_file_path))
             conn.commit()
             return True
 
