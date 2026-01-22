@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Activity, CheckCircle2, Copy, Play, RefreshCcw, Save, XCircle } from 'lucide-react'
+import { Activity, CheckCircle2, Copy, Info, Play, RefreshCcw, Save, XCircle } from 'lucide-react'
 import { useAdvancedSettings, useUpdateAdvancedSettings } from '../hooks/useAdvancedSettings'
 import {
   useDiagnosticsFixturesDir,
@@ -21,6 +21,7 @@ import { useBackendVersion } from '../hooks/useVersion'
 import type { EngineId } from '../lib/types'
 import { UI_BUILD_ID } from '../lib/buildInfo'
 import { InlineNotice, type InlineNoticeType } from './InlineNotice'
+import { HelpModal } from './HelpModal'
 
 export function DiagnosticsContent() {
   const advanced = useAdvancedSettings()
@@ -47,6 +48,7 @@ export function DiagnosticsContent() {
   const [cleanupMaxItems, setCleanupMaxItems] = useState<number>(5)
   const [notice, setNotice] = useState<{ type: InlineNoticeType; message: string } | null>(null)
   const noticeTimer = useRef<number | null>(null)
+  const [showHelp, setShowHelp] = useState(false)
 
   const tail = useDiagnosticsRunTail(selectedRunName, tailMaxChars)
   const cleanup = useCleanupQueue(selectedProject)
@@ -189,16 +191,94 @@ export function DiagnosticsContent() {
               </div>
             </div>
           </div>
-          <button className="neo-btn neo-btn-secondary text-sm" onClick={() => fixtures.refetch()} title="Refresh">
-            <RefreshCcw size={18} />
-            Refresh
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              className="neo-btn neo-btn-secondary text-sm"
+              onClick={() => setShowHelp(true)}
+              title="Explain Diagnostics"
+            >
+              <Info size={18} />
+              Help
+            </button>
+            <button className="neo-btn neo-btn-secondary text-sm" onClick={() => fixtures.refetch()} title="Refresh">
+              <RefreshCcw size={18} />
+              Refresh
+            </button>
+          </div>
         </div>
       </div>
 
       {notice && (
         <InlineNotice type={notice.type} message={notice.message} onClose={() => setNotice(null)} />
       )}
+
+      <HelpModal isOpen={showHelp} title="Diagnostics: what this does" onClose={() => setShowHelp(false)}>
+        <div className="space-y-5 text-sm">
+          <div>
+            <div className="font-display font-bold uppercase mb-1">Why Diagnostics exists</div>
+            <div className="text-[var(--color-neo-text-secondary)]">
+              It’s a deterministic “does the machine work?” suite. These fixtures run in isolated directories and are
+              designed to validate the Gatekeeper + QA pipelines without depending on your real projects.
+            </div>
+          </div>
+
+          <div>
+            <div className="font-display font-bold uppercase mb-1">System Status</div>
+            <div className="text-[var(--color-neo-text-secondary)]">
+              Verifies the API is reachable and checks whether tools are detected on your PATH (Claude/Codex/Gemini,
+              node/npm). If a tool is missing, related engines will be disabled elsewhere.
+            </div>
+          </div>
+
+          <div>
+            <div className="font-display font-bold uppercase mb-1">Build Info</div>
+            <div className="text-[var(--color-neo-text-secondary)]">
+              Shows a UI build id and backend git SHA. If the UI looks “weird” after updating, hit Refresh. “Copy debug
+              info” puts a small JSON bundle on your clipboard for bug reports.
+            </div>
+          </div>
+
+          <div>
+            <div className="font-display font-bold uppercase mb-1">Fixtures Directory</div>
+            <div className="text-[var(--color-neo-text-secondary)]">
+              Where fixture projects are created. Changing this doesn’t move your real projects — it only affects where
+              Diagnostics writes its temporary repos/logs.
+            </div>
+          </div>
+
+          <div>
+            <div className="font-display font-bold uppercase mb-1">QA Provider E2E</div>
+            <div className="text-[var(--color-neo-text-secondary)]">
+              Creates a tiny repo with an intentional verification failure, then proves the QA chain can fix it and
+              resubmit until Gatekeeper merges. The “Engines” order is the order tried (Claude first by default).
+            </div>
+          </div>
+
+          <div>
+            <div className="font-display font-bold uppercase mb-1">Parallel Mini E2E</div>
+            <div className="text-[var(--color-neo-text-secondary)]">
+              Creates a small Python repo with a 3-feature dependency chain and runs parallel orchestration end-to-end:
+              worktrees → verification → merge → DONE. This is the “does parallel mode still behave?” smoke test.
+            </div>
+          </div>
+
+          <div>
+            <div className="font-display font-bold uppercase mb-1">Runs + Logs</div>
+            <div className="text-[var(--color-neo-text-secondary)]">
+              Shows recent Diagnostics runs and lets you tail logs. If something fails, copy the tail + debug info and
+              you’ll have enough context to reproduce.
+            </div>
+          </div>
+
+          <div>
+            <div className="font-display font-bold uppercase mb-1">Worktree Cleanup</div>
+            <div className="text-[var(--color-neo-text-secondary)]">
+              Windows sometimes locks files (especially node_modules). When cleanup/delete can’t remove a directory, we
+              queue it here. “Process queue” retries deletion; “Clear queue” drops entries (use only if you’re sure).
+            </div>
+          </div>
+        </div>
+      </HelpModal>
 
       <div className="neo-card p-4">
         <div className="font-display font-bold uppercase mb-3">System Status</div>
