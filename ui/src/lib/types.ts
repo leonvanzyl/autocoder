@@ -386,6 +386,15 @@ export interface TerminalInfo {
   created_at: string
 }
 
+// ============================================================================
+// Version Types
+// ============================================================================
+
+export interface BackendVersion {
+  package_version: string | null
+  git_sha: string | null
+}
+
 // WebSocket message types
 export type WSMessageType = 'progress' | 'feature_update' | 'log' | 'agent_status' | 'pong'
 

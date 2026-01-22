@@ -25,6 +25,20 @@ from ...core.knowledge_files import build_knowledge_bundle
 
 logger = logging.getLogger(__name__)
 
+# Fallback skill prompt used when `.claude/commands/create-spec.md` is missing (e.g., packaged installs).
+# Keep it short and deterministic; the full, editable prompt lives in `.claude/commands/create-spec.md`.
+DEFAULT_CREATE_SPEC_SKILL = """
+You are AutoCoder's Spec Creation Assistant.
+
+Goal: help the user produce a concrete project spec at $ARGUMENTS/prompts/app_spec.txt.
+
+Rules:
+- Ask focused questions (1–3 at a time) to clarify goals, target audience, tech stack, pages, and acceptance criteria.
+- When you have enough info, write a complete `prompts/app_spec.txt` that a coding agent can follow.
+- Prefer explicit requirements over vague wording. Include: pages/routes, data model, APIs, workflows, and tests/verification.
+- Keep the spec practical and implementation-ready.
+""".strip()
+
 # Environment variables to pass through to Claude CLI for API configuration.
 API_ENV_VARS = [
     "ANTHROPIC_BASE_URL",
@@ -143,17 +157,14 @@ class SpecChatSession:
         # Load the create-spec skill
         skill_path = ROOT_DIR / ".claude" / "commands" / "create-spec.md"
 
-        if not skill_path.exists():
-            yield {
-                "type": "error",
-                "content": f"Spec creation skill not found at {skill_path}"
-            }
-            return
-
-        try:
-            skill_content = skill_path.read_text(encoding="utf-8")
-        except UnicodeDecodeError:
-            skill_content = skill_path.read_text(encoding="utf-8", errors="replace")
+        if skill_path.exists():
+            try:
+                skill_content = skill_path.read_text(encoding="utf-8")
+            except UnicodeDecodeError:
+                skill_content = skill_path.read_text(encoding="utf-8", errors="replace")
+        else:
+            logger.warning("Spec creation skill missing at %s; using fallback prompt.", skill_path)
+            skill_content = DEFAULT_CREATE_SPEC_SKILL
 
         # Ensure project directory exists (like CLI does in start.py)
         self.project_dir.mkdir(parents=True, exist_ok=True)

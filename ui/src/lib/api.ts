@@ -36,6 +36,7 @@ import type {
   DevServerStartRequest,
   DevServerActionResponse,
   TerminalInfo,
+  BackendVersion,
 } from './types'
 
 const API_BASE = '/api'
@@ -89,6 +90,10 @@ export async function deleteProject(name: string, deleteFiles: boolean = false):
   return fetchJSON(`/projects/${encodeURIComponent(name)}${params}`, {
     method: 'DELETE',
   })
+}
+
+export async function getBackendVersion(): Promise<BackendVersion> {
+  return fetchJSON('/version')
 }
 
 export async function resetProject(name: string, fullReset: boolean = false): Promise<void> {

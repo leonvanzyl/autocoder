@@ -466,26 +466,37 @@ async def delete_project(name: str, delete_files: bool = False):
     if delete_files and project_dir.exists():
         try:
             _rmtree_force(project_dir)
-        except PermissionError as e:
-            # Windows file locking: queue cleanup for later.
-            queue_path = _enqueue_cleanup(project_dir, project_dir, reason="project delete failed (locked files)")
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=(
-                    f"Failed to delete project files (locked). Cleanup queued at {queue_path}. "
-                    "Close any apps using the project and retry."
-                ),
-            )
-        except OSError as e:
-            if os.name == "nt" and getattr(e, "winerror", None) == 5:
-                queue_path = _enqueue_cleanup(project_dir, project_dir, reason="project delete failed (WinError 5)")
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail=(
-                        f"Failed to delete project files (locked). Cleanup queued at {queue_path}. "
-                        "Close any apps using the project and retry."
+        except Exception as e:
+            # Windows file locking: queue cleanup for later rather than hard-failing.
+            #
+            # Notes:
+            # - shutil.rmtree can raise PermissionError/OSError OR shutil.Error (list of nested failures).
+            # - We treat access denied / WinError 5 as "locked" and queue cleanup.
+            is_locked = False
+            if isinstance(e, PermissionError):
+                is_locked = True
+            elif isinstance(e, OSError) and os.name == "nt" and getattr(e, "winerror", None) == 5:
+                is_locked = True
+            else:
+                try:
+                    msg = str(e)
+                    if os.name == "nt" and ("WinError 5" in msg or "Access is denied" in msg):
+                        is_locked = True
+                except Exception:
+                    pass
+
+            if is_locked:
+                queue_path = _enqueue_cleanup(project_dir, project_dir, reason="project delete failed (locked files)")
+                # Remove the project from the registry (UI stays clean) and queue cleanup for later.
+                unregister_project(name)
+                return {
+                    "success": True,
+                    "message": (
+                        f"Project '{name}' removed from registry. Files are locked; cleanup queued at {queue_path}. "
+                        "Close any apps using the project and the cleanup queue will retry."
                     ),
-                )
+                }
+
             raise HTTPException(status_code=500, detail=f"Failed to delete project files: {e}")
 
     # Unregister from registry

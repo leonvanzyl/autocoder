@@ -143,11 +143,12 @@ autocoder-ui
 - Advanced settings (Run/Advanced/Diagnostics defaults) are stored globally in `~/.autocoder/settings.db` (override path with `AUTOCODER_SETTINGS_DB_PATH`). Legacy `~/.autocoder/ui_settings.json` is read once and auto-migrated.
 - When the UI starts a run, **saved** advanced settings override `.env`/shell env vars. If you’ve never saved Advanced Settings, the UI does not override env vars.
 - Provider badge: when a project is selected, the header shows **ALT API** (custom endpoint) or **GLM** (z.ai/GLM-style endpoint) if configured via `.env`.
-- Diagnostics: open `http://127.0.0.1:8888/#/settings/diagnostics` (system status, configurable fixtures dir, deterministic E2E fixtures, recent run logs).
+- Diagnostics: open `http://127.0.0.1:8888/#/settings/diagnostics` (system status, deterministic E2E fixtures, recent run logs, UI build id + backend git SHA, “Copy debug info”).
 - The UI auto-opens your browser on launch (disable with `AUTOCODER_OPEN_UI=0`).
 - On Windows, terminal sessions auto-install `pywinpty` (disable with `AUTOCODER_AUTO_INSTALL_WINPTY=0`).
 - Hide the startup banner/checklist with `AUTOCODER_UI_BANNER=0` (set it before running `autocoder-ui`/`start_ui`).
 - If `ui/src` is newer than `ui/dist`, AutoCoder will auto-rebuild the UI on launch (disable with `AUTOCODER_UI_AUTO_BUILD=0`).
+- If the UI looks stale after an update, hit refresh (we serve `index.html` with `Cache-Control: no-store` so rebuilds should invalidate cleanly).
 - If you run from a FAT32/exFAT drive and auto-build gets “sticky”, set `AUTOCODER_UI_MTIME_TOLERANCE_S=2` (or any non-negative seconds).
 - Scheduled runs: use the **Settings** modal (press `S`) to schedule a start time; schedules persist across UI restarts.
 - Stop-when-done: default is **stop** when the queue is empty; set `AUTOCODER_STOP_WHEN_DONE=0` to keep the agent alive for new features.

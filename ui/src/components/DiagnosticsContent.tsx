@@ -17,7 +17,9 @@ import {
 } from '../hooks/useDiagnostics'
 import { useHealthCheck, useProjects, useSetupStatus } from '../hooks/useProjects'
 import { useCleanupQueue, useClearCleanupQueue, useProcessCleanupQueue } from '../hooks/useWorktrees'
+import { useBackendVersion } from '../hooks/useVersion'
 import type { EngineId } from '../lib/types'
+import { UI_BUILD_ID } from '../lib/buildInfo'
 import { InlineNotice, type InlineNoticeType } from './InlineNotice'
 
 export function DiagnosticsContent() {
@@ -30,9 +32,10 @@ export function DiagnosticsContent() {
   const setup = useSetupStatus()
   const health = useHealthCheck()
   const projects = useProjects()
+  const backendVersion = useBackendVersion()
 
   const [fixture, setFixture] = useState<'node' | 'python'>('node')
-  const [qaEngines, setQaEngines] = useState<EngineId[]>(['codex_cli', 'gemini_cli', 'claude_patch'])
+  const [qaEngines, setQaEngines] = useState<EngineId[]>(['claude_patch', 'codex_cli', 'gemini_cli'])
   const [timeoutS, setTimeoutS] = useState<number>(240)
   const [miniParallel, setMiniParallel] = useState<number>(3)
   const [miniPreset, setMiniPreset] = useState<string>('balanced')
@@ -153,6 +156,26 @@ export function DiagnosticsContent() {
     ]
   }, [setup.data])
 
+  // Keep QA engine defaults sane: Claude first, and only engines that are actually available.
+  useEffect(() => {
+    if (!setup.data) return
+    const available = new Set<EngineId>()
+    if (setup.data.claude_cli || setup.data.credentials) available.add('claude_patch')
+    if (setup.data.codex_cli) available.add('codex_cli')
+    if (setup.data.gemini_cli) available.add('gemini_cli')
+
+    setQaEngines((prev) => {
+      const next = prev.filter((e) => available.has(e))
+      const withClaude = next.includes('claude_patch') ? next : ['claude_patch', ...next]
+      // Keep stable order
+      const ordered: EngineId[] = []
+      for (const e of ['claude_patch', 'codex_cli', 'gemini_cli'] as const) {
+        if (withClaude.includes(e) && !ordered.includes(e)) ordered.push(e)
+      }
+      return ordered.length ? ordered : ['claude_patch']
+    })
+  }, [setup.data])
+
   return (
     <div className="space-y-6">
       <div className="neo-card p-4">
@@ -218,6 +241,64 @@ export function DiagnosticsContent() {
                   <span>{label as string}</span>
                 </div>
               ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="neo-card p-3 mt-3">
+          <div className="text-xs font-mono text-[var(--color-neo-text-secondary)] mb-2">Build Info</div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs font-mono">
+            <div className="neo-card p-2">
+              <div className="text-[var(--color-neo-text-muted)]">UI</div>
+              <div className="break-all">{UI_BUILD_ID}</div>
+            </div>
+            <div className="neo-card p-2">
+              <div className="text-[var(--color-neo-text-muted)]">Backend</div>
+              <div className="break-all">
+                {backendVersion.data?.git_sha || backendVersion.isLoading ? '…' : 'n/a'}
+              </div>
+            </div>
+            <div className="neo-card p-2">
+              <div className="text-[var(--color-neo-text-muted)]">Package</div>
+              <div className="break-all">
+                {backendVersion.data?.package_version || backendVersion.isLoading ? '…' : 'n/a'}
+              </div>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-2 mt-3">
+            <div className="text-xs text-[var(--color-neo-text-secondary)]">
+              If the UI looks broken, try a hard refresh (we disable caching for index.html, but browsers still get spicy sometimes).
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                className="neo-btn neo-btn-secondary text-sm"
+                onClick={() => window.location.reload()}
+                title="Hard refresh"
+              >
+                <RefreshCcw size={18} />
+                Refresh
+              </button>
+              <button
+                className="neo-btn neo-btn-secondary text-sm"
+                onClick={() =>
+                  copyToClipboard(
+                    JSON.stringify(
+                      {
+                        ui_build: UI_BUILD_ID,
+                        backend_git: backendVersion.data?.git_sha || null,
+                        backend_package: backendVersion.data?.package_version || null,
+                        tools: setup.data || null,
+                      },
+                      null,
+                      2,
+                    ),
+                  )
+                }
+                title="Copy debug info"
+              >
+                <Copy size={18} />
+                Copy
+              </button>
             </div>
           </div>
         </div>

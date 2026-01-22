@@ -41,6 +41,7 @@ from .routers import (
     worktrees_router,
     devserver_router,
     terminal_router,
+    version_router,
 )
 from .websocket import project_websocket
 from .services.process_manager import cleanup_all_managers
@@ -157,6 +158,7 @@ app.include_router(diagnostics_router)
 app.include_router(worktrees_router)
 app.include_router(devserver_router)
 app.include_router(terminal_router)
+app.include_router(version_router)
 
 
 # ============================================================================
@@ -247,10 +249,15 @@ if UI_DIST_DIR and UI_DIST_DIR.exists():
     # Mount static assets
     app.mount("/assets", StaticFiles(directory=UI_DIST_DIR / "assets"), name="assets")
 
+    def _ui_index_headers() -> dict[str, str]:
+        # Avoid serving stale index.html from browser caches after UI rebuilds.
+        # Vite outputs hashed assets, but index.html itself must not be cached aggressively.
+        return {"Cache-Control": "no-store"}
+
     @app.get("/")
     async def serve_index():
         """Serve the React app index.html."""
-        return FileResponse(UI_DIST_DIR / "index.html")
+        return FileResponse(UI_DIST_DIR / "index.html", headers=_ui_index_headers())
 
     @app.get("/{path:path}")
     async def serve_spa(path: str):
@@ -267,7 +274,7 @@ if UI_DIST_DIR and UI_DIST_DIR.exists():
             return FileResponse(file_path)
 
         # Fall back to index.html for SPA routing
-        return FileResponse(UI_DIST_DIR / "index.html")
+        return FileResponse(UI_DIST_DIR / "index.html", headers=_ui_index_headers())
 else:
     @app.get("/")
     async def missing_ui_build():

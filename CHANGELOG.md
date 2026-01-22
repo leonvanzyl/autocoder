@@ -8,12 +8,16 @@ All notable changes to this fork will be listed here.
 - Settings page now supports **Global** scope without selecting a project (Dashboard → Settings / `S`)
 - Project setup required banner with 24h snooze (Expand stays locked until spec is real)
 - Project reset endpoint (runtime reset + full reset) and UI Danger Zone controls
+- Project delete: if Windows file locks block deletion, the project is still removed from the registry and deletion is queued for the cleanup worker
 - Knowledge files (`/knowledge/*.md`) injected into prompts + UI editor modal
 - Single-agent loop exits when no pending/staged/verification features remain
 - Clarified prompt guidance: refactor/cleanup features are mandatory and override the original spec
 - Regression selection now prioritizes least-tested features (tracks `regression_count`)
 - UI auto-build now detects stale `ui/dist` and rebuilds when sources are newer
 - UI auto-build shows which file triggered rebuild; optional mtime tolerance for FAT32/exFAT (`AUTOCODER_UI_MTIME_TOLERANCE_S`)
+- UI static serving: disable caching for `index.html` to avoid stale bundles after rebuilds
+- UI reliability: global error boundary shows a recovery screen instead of a blank page
+- Diagnostics: show UI build id + backend git SHA; one-click “Copy debug info”
 - WebSocket debug logs deduplicate consecutive identical lines (prevents StrictMode double-connect noise)
 - Assistant chat: avoid history loss on conversation switch, disable input while loading, and reduce server log noise
 - Scheduled runs (UI) with persisted schedule state

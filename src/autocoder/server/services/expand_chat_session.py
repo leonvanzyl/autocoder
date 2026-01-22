@@ -34,6 +34,24 @@ from ...core.knowledge_files import build_knowledge_bundle
 
 logger = logging.getLogger(__name__)
 
+# Fallback skill prompt used when `.claude/commands/expand-project.md` is missing.
+DEFAULT_EXPAND_PROJECT_SKILL = """
+You are AutoCoder's Project Expansion Assistant.
+
+Goal: read the existing project spec (prompts/app_spec.txt) and create a batch of new features
+by emitting a <features_to_create> JSON array.
+
+Rules:
+- Ask the user what they want to add (sections/pages/tools) and clarify scope quickly.
+- Only create features that are concrete and testable.
+- Output format:
+  <features_to_create>
+  [
+    {"name": "...", "category": "functional|frontend|backend|database|docs|tests", "description": "..."}
+  ]
+  </features_to_create>
+""".strip()
+
 # Environment variables to pass through to Claude CLI for API configuration.
 API_ENV_VARS = [
     "ANTHROPIC_BASE_URL",
@@ -229,26 +247,24 @@ class ExpandChatSession:
 
     async def start(self) -> AsyncGenerator[dict, None]:
         """Initialize session and stream the initial greeting."""
-        if ROOT_DIR is None:
-            yield {
-                "type": "error",
-                "content": "Expand project skill not found (missing .claude/commands/expand-project.md at repo root).",
-            }
-            return
-        skill_path = ROOT_DIR / ".claude" / "commands" / "expand-project.md"
-        if not skill_path.exists():
-            yield {"type": "error", "content": f"Expand project skill not found at {skill_path}"}
-            return
+        skill_content: str
+        skill_path = (ROOT_DIR / ".claude" / "commands" / "expand-project.md") if ROOT_DIR else None
+        if skill_path and skill_path.exists():
+            try:
+                skill_content = skill_path.read_text(encoding="utf-8")
+            except UnicodeDecodeError:
+                skill_content = skill_path.read_text(encoding="utf-8", errors="replace")
+        else:
+            if skill_path:
+                logger.warning("Expand project skill missing at %s; using fallback prompt.", skill_path)
+            else:
+                logger.warning("Could not locate repo root for expand-project.md; using fallback prompt.")
+            skill_content = DEFAULT_EXPAND_PROJECT_SKILL
 
         spec_path = self.project_dir / "prompts" / "app_spec.txt"
         if not spec_path.exists():
             yield {"type": "error", "content": "Project has no app_spec.txt. Create a spec first."}
             return
-
-        try:
-            skill_content = skill_path.read_text(encoding="utf-8")
-        except UnicodeDecodeError:
-            skill_content = skill_path.read_text(encoding="utf-8", errors="replace")
 
         cli_command = (os.environ.get("AUTOCODER_CLI_COMMAND") or os.environ.get("CLI_COMMAND") or "claude").strip()
         system_cli = shutil.which(cli_command)

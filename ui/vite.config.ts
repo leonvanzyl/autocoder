@@ -2,12 +2,29 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import path from 'path'
+import { execSync } from 'child_process'
 
 // Backend port - can be overridden via AUTOCODER_UI_PORT or VITE_API_PORT env vars
 const apiPort = process.env.AUTOCODER_UI_PORT || process.env.VITE_API_PORT || '8888'
 
+function tryGitSha(): string | null {
+  try {
+    const sha = execSync('git rev-parse --short HEAD', { cwd: path.resolve(__dirname, '..'), stdio: ['ignore', 'pipe', 'ignore'] })
+      .toString('utf-8')
+      .trim()
+    return sha || null
+  } catch {
+    return null
+  }
+}
+
+const uiBuildId = process.env.VITE_UI_BUILD_ID || tryGitSha() || 'dev'
+
 // https://vite.dev/config/
 export default defineConfig({
+  define: {
+    __UI_BUILD_ID__: JSON.stringify(uiBuildId),
+  },
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
