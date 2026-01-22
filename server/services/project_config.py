@@ -351,6 +351,48 @@ def get_dev_command(project_dir: Path) -> str | None:
     return get_default_dev_command(project_dir)
 
 
+def inject_port_into_command(command: str, port: int, project_type: str | None) -> str:
+    """
+    Inject a port number into a dev command based on project type.
+
+    Different project types require different syntax for specifying ports:
+    - nodejs-vite: Append `-- --port {port}` to pass through npm scripts
+    - nodejs-cra: Prepend `PORT={port}` as environment variable
+    - python-django: Replace `runserver` with `runserver 0.0.0.0:{port}`
+    - python-fastapi/python-poetry: Append `--port {port}` for uvicorn
+    - rust/go: No modification (no standard port flag)
+
+    Args:
+        command: The base dev command to modify.
+        port: The port number to inject.
+        project_type: The detected project type, or None if unknown.
+
+    Returns:
+        The command with port injection applied, or the original command
+        if no port injection is applicable.
+    """
+    if project_type == "nodejs-vite":
+        # npm run dev -- --port 4000
+        return f"{command} -- --port {port}"
+
+    if project_type == "nodejs-cra":
+        # PORT=4000 npm start (works cross-platform with npm)
+        return f"PORT={port} {command}"
+
+    if project_type == "python-django":
+        # python manage.py runserver 0.0.0.0:4000
+        if "runserver" in command:
+            return command.replace("runserver", f"runserver 0.0.0.0:{port}")
+        return command
+
+    if project_type in ("python-fastapi", "python-poetry"):
+        # uvicorn commands: append --port flag
+        return f"{command} --port {port}"
+
+    # rust, go, or unknown: return unmodified
+    return command
+
+
 def set_dev_command(project_dir: Path, command: str) -> None:
     """
     Save a custom dev command for a project.

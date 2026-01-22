@@ -22,8 +22,10 @@ from ..schemas import (
 from ..services.dev_server_manager import get_devserver_manager
 from ..services.project_config import (
     clear_dev_command,
+    detect_project_type,
     get_dev_command,
     get_project_config,
+    inject_port_into_command,
     set_dev_command,
 )
 
@@ -166,6 +168,11 @@ async def start_devserver(
             status_code=400,
             detail="No dev command available. Configure a custom command or ensure project type can be detected."
         )
+
+    # Inject port into command if specified
+    if request.port is not None:
+        project_type = detect_project_type(project_dir)
+        command = inject_port_into_command(command, request.port, project_type)
 
     # Now command is definitely str
     success, message = await manager.start(command)

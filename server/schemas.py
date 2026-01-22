@@ -420,6 +420,7 @@ class SettingsUpdate(BaseModel):
 class DevServerStartRequest(BaseModel):
     """Request schema for starting the dev server."""
     command: str | None = None  # If None, uses effective command from config
+    port: int | None = None  # If provided, injects port into the command
 
 
 class DevServerStatus(BaseModel):

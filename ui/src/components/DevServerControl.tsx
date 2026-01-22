@@ -1,4 +1,5 @@
-import { Globe, Square, Loader2, ExternalLink, AlertTriangle } from 'lucide-react'
+import { useState } from 'react'
+import { Globe, Square, Loader2, ExternalLink, AlertTriangle, X } from 'lucide-react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { DevServerStatus } from '../lib/types'
 import { startDevServer, stopDevServer } from '../lib/api'
@@ -18,7 +19,7 @@ function useStartDevServer(projectName: string) {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: () => startDevServer(projectName),
+    mutationFn: (port?: number) => startDevServer(projectName, undefined, port),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['dev-server-status', projectName] })
     },
@@ -60,16 +61,28 @@ interface DevServerControlProps {
  * - Uses neobrutalism design with cyan accent when running
  */
 export function DevServerControl({ projectName, status, url }: DevServerControlProps) {
+  const [showPortDialog, setShowPortDialog] = useState(false)
+  const [portValue, setPortValue] = useState(3000)
   const startDevServerMutation = useStartDevServer(projectName)
   const stopDevServerMutation = useStopDevServer(projectName)
 
   const isLoading = startDevServerMutation.isPending || stopDevServerMutation.isPending
 
-  const handleStart = () => {
-    // Clear any previous errors before starting
+  const handleStartClick = () => {
+    // Clear any previous errors before showing dialog
     stopDevServerMutation.reset()
-    startDevServerMutation.mutate()
+    setShowPortDialog(true)
   }
+
+  const handleConfirmStart = () => {
+    setShowPortDialog(false)
+    startDevServerMutation.mutate(portValue)
+  }
+
+  const handleCancelStart = () => {
+    setShowPortDialog(false)
+  }
+
   const handleStop = () => {
     // Clear any previous errors before stopping
     startDevServerMutation.reset()
@@ -84,10 +97,10 @@ export function DevServerControl({ projectName, status, url }: DevServerControlP
   const isCrashed = status === 'crashed'
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-2 relative">
       {isStopped ? (
         <button
-          onClick={handleStart}
+          onClick={handleStartClick}
           disabled={isLoading}
           className="neo-btn text-sm py-2 px-3"
           style={isCrashed ? {
@@ -123,6 +136,53 @@ export function DevServerControl({ projectName, status, url }: DevServerControlP
             <Square size={18} />
           )}
         </button>
+      )}
+
+      {/* Port selection dialog */}
+      {showPortDialog && (
+        <div className="absolute top-full left-0 mt-2 z-50 neo-card p-3 min-w-[200px]">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-bold">Port</span>
+            <button
+              onClick={handleCancelStart}
+              className="p-1 hover:bg-[var(--color-neo-bg-secondary)] rounded"
+              aria-label="Cancel"
+            >
+              <X size={14} />
+            </button>
+          </div>
+          <input
+            type="number"
+            value={portValue}
+            onChange={(e) => setPortValue(parseInt(e.target.value) || 3000)}
+            className="w-full px-2 py-1 text-sm font-mono border-2 border-[var(--color-neo-border)] rounded mb-2"
+            min={1}
+            max={65535}
+            autoFocus
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleConfirmStart()
+              if (e.key === 'Escape') handleCancelStart()
+            }}
+          />
+          <div className="flex gap-2">
+            <button
+              onClick={handleConfirmStart}
+              className="neo-btn text-sm py-1 px-3 flex-1"
+              style={{
+                backgroundColor: 'var(--color-neo-progress)',
+                color: 'var(--color-neo-text-on-bright)',
+              }}
+            >
+              Start
+            </button>
+            <button
+              onClick={handleCancelStart}
+              className="neo-btn text-sm py-1 px-3"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
       )}
 
       {/* Show URL as clickable link when server is running */}

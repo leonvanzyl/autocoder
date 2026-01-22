@@ -392,11 +392,12 @@ export async function getDevServerStatus(projectName: string): Promise<DevServer
 
 export async function startDevServer(
   projectName: string,
-  command?: string
+  command?: string,
+  port?: number
 ): Promise<{ success: boolean; message: string }> {
   return fetchJSON(`/projects/${encodeURIComponent(projectName)}/devserver/start`, {
     method: 'POST',
-    body: JSON.stringify({ command }),
+    body: JSON.stringify({ command, port }),
   })
 }
 
