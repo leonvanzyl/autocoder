@@ -39,6 +39,14 @@ class ProjectStats(BaseModel):
     percentage: float = 0.0
 
 
+class DatabaseHealth(BaseModel):
+    """Database health check response."""
+    healthy: bool
+    journal_mode: str | None = None
+    integrity: str | None = None
+    error: str | None = None
+
+
 class ProjectSummary(BaseModel):
     """Summary of a project for list view."""
     name: str

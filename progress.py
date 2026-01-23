@@ -3,7 +3,7 @@ Progress Tracking Utilities
 ===========================
 
 Functions for tracking and displaying progress of the autonomous coding agent.
-Uses direct SQLite access for database queries.
+Uses direct SQLite access for database queries with robust connection handling.
 """
 
 import json
@@ -12,6 +12,9 @@ import sqlite3
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
+
+# Import robust connection utilities
+from api.database import robust_db_connection, execute_with_retry
 
 WEBHOOK_URL = os.environ.get("PROGRESS_N8N_WEBHOOK_URL")
 PROGRESS_CACHE_FILE = ".progress_cache"
@@ -31,8 +34,6 @@ def has_features(project_dir: Path) -> bool:
 
     Returns False if no features exist (initializer needs to run).
     """
-    import sqlite3
-
     # Check legacy JSON file first
     json_file = project_dir / "feature_list.json"
     if json_file.exists():
@@ -44,12 +45,12 @@ def has_features(project_dir: Path) -> bool:
         return False
 
     try:
-        conn = sqlite3.connect(db_file)
-        cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM features")
-        count = cursor.fetchone()[0]
-        conn.close()
-        return count > 0
+        result = execute_with_retry(
+            db_file,
+            "SELECT COUNT(*) FROM features",
+            fetch="one"
+        )
+        return result[0] > 0 if result else False
     except Exception:
         # Database exists but can't be read or has no features table
         return False
@@ -58,6 +59,8 @@ def has_features(project_dir: Path) -> bool:
 def count_passing_tests(project_dir: Path) -> tuple[int, int, int]:
     """
     Count passing, in_progress, and total tests via direct database access.
+
+    Uses robust connection with WAL mode and retry logic.
 
     Args:
         project_dir: Directory containing the project
@@ -70,20 +73,32 @@ def count_passing_tests(project_dir: Path) -> tuple[int, int, int]:
         return 0, 0, 0
 
     try:
-        conn = sqlite3.connect(db_file)
-        cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM features")
-        total = cursor.fetchone()[0]
-        cursor.execute("SELECT COUNT(*) FROM features WHERE passes = 1")
-        passing = cursor.fetchone()[0]
-        # Handle case where in_progress column doesn't exist yet
-        try:
-            cursor.execute("SELECT COUNT(*) FROM features WHERE in_progress = 1")
-            in_progress = cursor.fetchone()[0]
-        except sqlite3.OperationalError:
-            in_progress = 0
-        conn.close()
-        return passing, in_progress, total
+        with robust_db_connection(db_file) as conn:
+            cursor = conn.cursor()
+
+            cursor.execute("SELECT COUNT(*) FROM features")
+            total = cursor.fetchone()[0]
+
+            cursor.execute("SELECT COUNT(*) FROM features WHERE passes = 1")
+            passing = cursor.fetchone()[0]
+
+            # Handle case where in_progress column doesn't exist yet
+            try:
+                cursor.execute("SELECT COUNT(*) FROM features WHERE in_progress = 1")
+                in_progress = cursor.fetchone()[0]
+            except sqlite3.OperationalError:
+                in_progress = 0
+
+            return passing, in_progress, total
+
+    except sqlite3.DatabaseError as e:
+        error_msg = str(e).lower()
+        if "malformed" in error_msg or "corrupt" in error_msg:
+            print(f"[DATABASE CORRUPTION DETECTED in count_passing_tests: {e}]")
+            print(f"[Please run: sqlite3 {db_file} 'PRAGMA integrity_check;' to diagnose]")
+        else:
+            print(f"[Database error in count_passing_tests: {e}]")
+        return 0, 0, 0
     except Exception as e:
         print(f"[Database error in count_passing_tests: {e}]")
         return 0, 0, 0
@@ -92,6 +107,8 @@ def count_passing_tests(project_dir: Path) -> tuple[int, int, int]:
 def get_all_passing_features(project_dir: Path) -> list[dict]:
     """
     Get all passing features for webhook notifications.
+
+    Uses robust connection with WAL mode and retry logic.
 
     Args:
         project_dir: Directory containing the project
@@ -104,17 +121,16 @@ def get_all_passing_features(project_dir: Path) -> list[dict]:
         return []
 
     try:
-        conn = sqlite3.connect(db_file)
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT id, category, name FROM features WHERE passes = 1 ORDER BY priority ASC"
-        )
-        features = [
-            {"id": row[0], "category": row[1], "name": row[2]}
-            for row in cursor.fetchall()
-        ]
-        conn.close()
-        return features
+        with robust_db_connection(db_file) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT id, category, name FROM features WHERE passes = 1 ORDER BY priority ASC"
+            )
+            features = [
+                {"id": row[0], "category": row[1], "name": row[2]}
+                for row in cursor.fetchall()
+            ]
+            return features
     except Exception:
         return []
 
