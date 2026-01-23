@@ -39,6 +39,7 @@ export function NewProjectModal({
   const [projectPath, setProjectPath] = useState<string | null>(null)
   const [_specMethod, setSpecMethod] = useState<SpecMethod | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
   const [initializerStatus, setInitializerStatus] = useState<InitializerStatus>('idle')
   const [initializerError, setInitializerError] = useState<string | null>(null)
   const [yoloModeSelected, setYoloModeSelected] = useState(false)
@@ -59,21 +60,30 @@ export function NewProjectModal({
     onStepChange?.(next)
   }
 
+  const normalizeProjectName = (name: string): string => {
+    const trimmed = name.trim().toLowerCase()
+    const replaced = trimmed.replace(/[^a-z0-9_-]+/gi, '-')
+    const collapsed = replaced.replace(/[-_]{2,}/g, '-')
+    const stripped = collapsed.replace(/^[-_]+|[-_]+$/g, '')
+    return stripped.slice(0, 50)
+  }
+
   const handleNameSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    const trimmed = projectName.trim()
+    const normalized = normalizeProjectName(projectName)
 
-    if (!trimmed) {
+    if (!normalized) {
       setError('Please enter a project name')
       return
     }
 
-    if (!/^[a-zA-Z0-9_-]+$/.test(trimmed)) {
-      setError('Project name can only contain letters, numbers, hyphens, and underscores')
-      return
-    }
-
     setError(null)
+    if (normalized !== projectName.trim()) {
+      setNotice(`Normalized to "${normalized}" for filesystem-safe naming.`)
+    } else {
+      setNotice(null)
+    }
+    setProjectName(normalized)
     setStepAndNotify('folder')
   }
 
@@ -215,6 +225,7 @@ export function NewProjectModal({
     setProjectPath(null)
     setSpecMethod(null)
     setError(null)
+    setNotice(null)
     setInitializerStatus('idle')
     setInitializerError(null)
     setYoloModeSelected(false)
@@ -328,17 +339,31 @@ export function NewProjectModal({
                 <input
                   type="text"
                   value={projectName}
-                  onChange={(e) => setProjectName(e.target.value)}
-                  placeholder="my-awesome-app"
+                  onChange={(e) => {
+                    setProjectName(e.target.value)
+                    setError(null)
+                    setNotice(null)
+                  }}
+                  placeholder="task-management-system"
                   className="neo-input"
-                  pattern="^[a-zA-Z0-9_-]+$"
                   autoFocus
                 />
                 <p className="text-sm text-[var(--color-neo-text-secondary)] mt-2">
-                  Use letters, numbers, hyphens, and underscores only.
+                  We’ll normalize it for you (letters, numbers, hyphens, underscores).
                 </p>
+                {projectName.trim() && normalizeProjectName(projectName) !== projectName.trim() && (
+                  <div className="mt-2 text-sm">
+                    <span className="text-[var(--color-neo-text-secondary)]">Will be saved as:</span>{' '}
+                    <span className="font-mono font-bold">{normalizeProjectName(projectName)}</span>
+                  </div>
+                )}
               </div>
 
+              {notice && (
+                <div className="mb-4 p-3 bg-[var(--color-neo-card)] text-[var(--color-neo-text)] text-sm border-3 border-[var(--color-neo-border)]">
+                  {notice}
+                </div>
+              )}
               {error && (
                 <div className="mb-4 p-3 bg-[var(--color-neo-error-bg)] text-[var(--color-neo-error-text)] text-sm border-3 border-[var(--color-neo-error-border)]">
                   {error}

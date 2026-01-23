@@ -88,6 +88,15 @@ def validate_project_name(name: str) -> str:
     return name
 
 
+def normalize_project_name(name: str) -> str:
+    """Normalize a human-friendly name into a filesystem-safe slug."""
+    raw = (name or "").strip().lower()
+    raw = re.sub(r"[^a-z0-9_-]+", "-", raw)
+    raw = re.sub(r"[-_]{2,}", "-", raw)
+    raw = raw.strip("-_")
+    return raw[:50]
+
+
 def validate_knowledge_filename(name: str) -> str:
     """Validate knowledge file names to prevent path traversal."""
     if "/" in name or "\\" in name:
@@ -283,7 +292,13 @@ async def create_project(project: ProjectCreate):
     _init_imports()
     register_project, _, get_project_path, list_registered_projects, _ = _get_registry_functions()
 
-    name = validate_project_name(project.name)
+    normalized = normalize_project_name(project.name)
+    if not normalized:
+        raise HTTPException(
+            status_code=400,
+            detail="Project name is required"
+        )
+    name = validate_project_name(normalized)
     project_path = Path(project.path).resolve()
 
     # Check if project name already registered
