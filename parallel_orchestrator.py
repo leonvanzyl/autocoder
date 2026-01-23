@@ -548,21 +548,29 @@ class ParallelOrchestrator:
         marked_in_progress = False
         session = self.get_session()
         try:
-            feature = session.query(Feature).filter(Feature.id == feature_id).first()
-            if not feature:
-                return False, "Feature not found"
-            if feature.passes:
-                return False, "Feature already complete"
-
             if resume:
-                # Resuming: feature should already be in_progress
+                # Resuming: verify feature is already in_progress
+                feature = session.query(Feature).filter(Feature.id == feature_id).first()
+                if not feature:
+                    return False, "Feature not found"
                 if not feature.in_progress:
                     return False, "Feature not in progress, cannot resume"
+                if feature.passes:
+                    return False, "Feature already complete"
             else:
-                # Starting fresh: feature should not be in_progress
-                if feature.in_progress:
-                    return False, "Feature already in progress"
-                feature.in_progress = True
+                # Starting fresh: atomic claim using UPDATE-WHERE pattern (same as testing agent)
+                # This prevents race conditions where multiple agents try to claim the same feature
+                from sqlalchemy import text
+                result = session.execute(
+                    text("""
+                        UPDATE features
+                        SET in_progress = 1
+                        WHERE id = :feature_id
+                          AND passes = 0
+                          AND in_progress = 0
+                    """),
+                    {"feature_id": feature_id}
+                )
                 session.commit()
                 marked_in_progress = True
         finally:
@@ -1376,6 +1384,32 @@ async def run_parallel_orchestrator(
         yolo_mode=yolo_mode,
         testing_agent_ratio=testing_agent_ratio,
     )
+
+    # Clear any stuck features from previous interrupted sessions
+    # This is the RIGHT place to clear - BEFORE spawning any agents
+    # Agents will NO LONGER clear features on their individual startups (see agent.py fix)
+    try:
+        session = orchestrator.get_session()
+        cleared_count = 0
+
+        # Get all features marked in_progress
+        from api.database import Feature
+        stuck_features = session.query(Feature).filter(
+            Feature.in_progress == True
+        ).all()
+
+        for feature in stuck_features:
+            feature.in_progress = False
+            cleared_count += 1
+
+        session.commit()
+        session.close()
+
+        if cleared_count > 0:
+            print(f"[ORCHESTRATOR] Cleared {cleared_count} stuck features from previous session", flush=True)
+
+    except Exception as e:
+        print(f"[ORCHESTRATOR] Warning: Failed to clear stuck features: {e}", flush=True)
 
     try:
         await orchestrator.run_loop()
