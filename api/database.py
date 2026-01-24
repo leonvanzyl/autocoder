@@ -427,18 +427,69 @@ def _migrate_add_dependencies_column(engine) -> None:
 
 
 def _migrate_add_testing_columns(engine) -> None:
-    """Legacy migration - no longer adds testing columns.
+    """Legacy migration - handles testing columns that were removed from the model.
 
     The testing_in_progress and last_tested_at columns were removed from the
     Feature model as part of simplifying the testing agent architecture.
     Multiple testing agents can now test the same feature concurrently
     without coordination.
 
-    This function is kept for backwards compatibility but does nothing.
-    Existing databases with these columns will continue to work - the columns
-    are simply ignored.
+    This migration ensures these columns are nullable so INSERTs don't fail
+    on databases that still have them with NOT NULL constraints.
     """
-    pass
+    with engine.connect() as conn:
+        # Check if testing_in_progress column exists with NOT NULL
+        result = conn.execute(text("PRAGMA table_info(features)"))
+        columns = {row[1]: {"notnull": row[3], "dflt_value": row[4]} for row in result.fetchall()}
+
+        if "testing_in_progress" in columns and columns["testing_in_progress"]["notnull"]:
+            # SQLite doesn't support ALTER COLUMN, need to recreate table
+            # Instead, we'll use a workaround: create a new table, copy data, swap
+            logger.info("Migrating testing_in_progress column to nullable...")
+
+            try:
+                # Step 1: Create new table without NOT NULL on testing columns
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS features_new (
+                        id INTEGER NOT NULL PRIMARY KEY,
+                        priority INTEGER NOT NULL,
+                        category VARCHAR(100) NOT NULL,
+                        name VARCHAR(255) NOT NULL,
+                        description TEXT NOT NULL,
+                        steps JSON NOT NULL,
+                        passes BOOLEAN NOT NULL DEFAULT 0,
+                        in_progress BOOLEAN NOT NULL DEFAULT 0,
+                        dependencies JSON,
+                        testing_in_progress BOOLEAN DEFAULT 0,
+                        last_tested_at DATETIME
+                    )
+                """))
+
+                # Step 2: Copy data
+                conn.execute(text("""
+                    INSERT INTO features_new
+                    SELECT id, priority, category, name, description, steps, passes, in_progress,
+                           dependencies, testing_in_progress, last_tested_at
+                    FROM features
+                """))
+
+                # Step 3: Drop old table and rename
+                conn.execute(text("DROP TABLE features"))
+                conn.execute(text("ALTER TABLE features_new RENAME TO features"))
+
+                # Step 4: Recreate indexes
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_features_id ON features (id)"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_features_priority ON features (priority)"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_features_passes ON features (passes)"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_features_in_progress ON features (in_progress)"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_feature_status ON features (passes, in_progress)"))
+
+                conn.commit()
+                logger.info("Successfully migrated testing columns to nullable")
+            except Exception as e:
+                logger.error(f"Failed to migrate testing columns: {e}")
+                conn.rollback()
+                raise
 
 
 def _is_network_path(path: Path) -> bool:
@@ -581,6 +632,7 @@ def get_db() -> Session:
     Dependency for FastAPI to get database session.
 
     Yields a database session and ensures it's closed after use.
+    Properly rolls back on error to prevent PendingRollbackError.
     """
     if _session_maker is None:
         raise RuntimeError("Database not initialized. Call set_session_maker first.")
@@ -588,5 +640,8 @@ def get_db() -> Session:
     db = _session_maker()
     try:
         yield db
+    except Exception:
+        db.rollback()
+        raise
     finally:
         db.close()

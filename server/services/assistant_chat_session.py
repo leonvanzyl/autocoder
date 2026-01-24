@@ -94,6 +94,8 @@ def get_system_prompt(project_name: str, project_dir: Path) -> str:
 
 Your role is to help users understand the codebase, answer questions about features, and manage the project backlog. You can READ files and CREATE/MANAGE features, but you cannot modify source code.
 
+**CRITICAL: You have MCP tools available for feature management. Use them directly by calling the tool - do NOT suggest CLI commands, bash commands, or npm commands. You can create features yourself using the feature_create and feature_create_bulk tools.**
+
 ## What You CAN Do
 
 **Codebase Analysis (Read-Only):**
@@ -138,19 +140,30 @@ If the user asks you to modify code, explain that you're a project assistant and
 
 ## Creating Features
 
-When a user asks to add a feature, gather the following information:
-1. **Category**: A grouping like "Authentication", "API", "UI", "Database"
-2. **Name**: A concise, descriptive name
-3. **Description**: What the feature should do
-4. **Steps**: How to verify/implement the feature (as a list)
+**IMPORTANT: You have MCP tools available. Use them directly - do NOT suggest bash commands, npm commands, or curl commands. You can call the tools yourself.**
 
-You can ask clarifying questions if the user's request is vague, or make reasonable assumptions for simple requests.
+When a user asks to add a feature, use the `feature_create` or `feature_create_bulk` MCP tools directly:
+
+For a **single feature**, call the `feature_create` tool with:
+- category: A grouping like "Authentication", "API", "UI", "Database"
+- name: A concise, descriptive name
+- description: What the feature should do
+- steps: List of verification/implementation steps
+
+For **multiple features**, call the `feature_create_bulk` tool with:
+- features: Array of feature objects, each with category, name, description, steps
 
 **Example interaction:**
 User: "Add a feature for S3 sync"
-You: I'll create that feature. Let me add it to the backlog...
-[calls feature_create with appropriate parameters]
-You: Done! I've added "S3 Sync Integration" to your backlog. It's now visible on the kanban board.
+You: I'll create that feature now.
+[YOU MUST CALL the feature_create tool directly - do NOT write bash commands]
+You: Done! I've added "S3 Sync Integration" to your backlog (ID: 123). It's now visible on the kanban board.
+
+**NEVER do any of these:**
+- Do NOT run `npx` commands
+- Do NOT suggest `curl` commands
+- Do NOT ask the user to run commands
+- Do NOT say you can't create features - you CAN, using the MCP tools
 
 ## Guidelines
 
@@ -238,18 +251,28 @@ class AssistantChatSession:
             json.dump(security_settings, f, indent=2)
 
         # Build MCP servers config - only features MCP for read-only access
-        mcp_servers = {
-            "features": {
-                "command": sys.executable,
-                "args": ["-m", "mcp_server.feature_mcp"],
-                "env": {
-                    # Only specify variables the MCP server needs
-                    # (subprocess inherits parent environment automatically)
-                    "PROJECT_DIR": str(self.project_dir.resolve()),
-                    "PYTHONPATH": str(ROOT_DIR.resolve()),
+        # Note: We write to a JSON file because the SDK/CLI handles file paths
+        # more reliably than dict objects for MCP config
+        mcp_config = {
+            "mcpServers": {
+                "features": {
+                    "command": sys.executable,
+                    "args": ["-m", "mcp_server.feature_mcp"],
+                    "env": {
+                        # Only specify variables the MCP server needs
+                        "PROJECT_DIR": str(self.project_dir.resolve()),
+                        "PYTHONPATH": str(ROOT_DIR.resolve()),
+                    },
                 },
             },
         }
+        mcp_config_file = self.project_dir / ".claude_mcp_config.json"
+        with open(mcp_config_file, "w") as f:
+            json.dump(mcp_config, f, indent=2)
+        logger.info(f"Wrote MCP config to {mcp_config_file}")
+
+        # Use file path for mcp_servers - more reliable than dict
+        mcp_servers = str(mcp_config_file)
 
         # Get system prompt with project context
         system_prompt = get_system_prompt(self.project_name, self.project_dir)
@@ -277,6 +300,10 @@ class AssistantChatSession:
 
         try:
             logger.info("Creating ClaudeSDKClient...")
+            logger.info(f"MCP servers config: {mcp_servers}")
+            logger.info(f"Allowed tools: {[*READONLY_BUILTIN_TOOLS, *ASSISTANT_FEATURE_TOOLS]}")
+            logger.info(f"Using CLI: {system_cli}")
+            logger.info(f"Working dir: {self.project_dir.resolve()}")
             self.client = ClaudeSDKClient(
                 options=ClaudeAgentOptions(
                     model=model,
