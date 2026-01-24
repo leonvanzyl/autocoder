@@ -11,6 +11,7 @@ Tools:
 - feature_get_summary: Get minimal feature info (id, name, status, deps)
 - feature_mark_passing: Mark a feature as passing
 - feature_mark_failing: Mark a feature as failing (regression detected)
+- feature_get_for_regression: Get passing features for regression testing (least-tested-first)
 - feature_skip: Skip a feature (move to end of queue)
 - feature_mark_in_progress: Mark a feature as in-progress
 - feature_claim_and_get: Atomically claim and get feature details
@@ -84,11 +85,6 @@ class MarkInProgressInput(BaseModel):
 class ClearInProgressInput(BaseModel):
     """Input for clearing in-progress status."""
     feature_id: int = Field(..., description="The ID of the feature to clear in-progress status", ge=1)
-
-
-class RegressionInput(BaseModel):
-    """Input for getting regression features."""
-    limit: int = Field(default=3, ge=1, le=10, description="Maximum number of passing features to return")
 
 
 class FeatureCreateItem(BaseModel):
@@ -323,6 +319,57 @@ def feature_mark_failing(
     except Exception as e:
         session.rollback()
         return json.dumps({"error": f"Failed to mark feature failing: {str(e)}"})
+    finally:
+        session.close()
+
+
+@mcp.tool()
+def feature_get_for_regression(
+    limit: Annotated[int, Field(default=3, ge=1, le=10, description="Maximum number of passing features to return")] = 3
+) -> str:
+    """Get passing features for regression testing, prioritizing least-tested features.
+
+    Returns features that are currently passing, ordered by regression_count (ascending)
+    so that features tested fewer times are prioritized. This ensures even distribution
+    of regression testing across all features, avoiding duplicate testing of the same
+    features while others are never tested.
+
+    Each returned feature has its regression_count incremented to track testing frequency.
+
+    Args:
+        limit: Maximum number of features to return (1-10, default 3)
+
+    Returns:
+        JSON with list of features for regression testing.
+    """
+    session = get_session()
+    try:
+        # Select features with lowest regression_count first (least tested)
+        # Use id as secondary sort for deterministic ordering when counts are equal
+        features = (
+            session.query(Feature)
+            .filter(Feature.passes == True)
+            .order_by(Feature.regression_count.asc(), Feature.id.asc())
+            .limit(limit)
+            .all()
+        )
+
+        # Increment regression_count for selected features
+        for feature in features:
+            feature.regression_count = (feature.regression_count or 0) + 1
+        session.commit()
+
+        # Refresh to get updated counts
+        for feature in features:
+            session.refresh(feature)
+
+        return json.dumps({
+            "features": [f.to_dict() for f in features],
+            "count": len(features)
+        })
+    except Exception as e:
+        session.rollback()
+        return json.dumps({"error": f"Failed to get regression features: {str(e)}"})
     finally:
         session.close()
 
