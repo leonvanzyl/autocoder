@@ -1,170 +1,411 @@
 /*
- * Custom Theme Overrides
- * ======================
- * This file overrides the default neobrutalism theme.
- * It loads AFTER globals.css, so these values take precedence.
- *
- * This file is safe from upstream merge conflicts since it doesn't
- * exist in the upstream repository.
+ * Clean Twitter-Style Theme
+ * =========================
+ * Based on user's exact design system values
  */
 
 :root {
-  --background: oklch(1.0000 0 0);
-  --foreground: oklch(0.1884 0.0128 248.5103);
-  --card: oklch(0.9784 0.0011 197.1387);
-  --card-foreground: oklch(0.1884 0.0128 248.5103);
-  --popover: oklch(1.0000 0 0);
-  --popover-foreground: oklch(0.1884 0.0128 248.5103);
-  --primary: oklch(0.6723 0.1606 244.9955);
-  --primary-foreground: oklch(1.0000 0 0);
-  --secondary: oklch(0.1884 0.0128 248.5103);
-  --secondary-foreground: oklch(1.0000 0 0);
-  --muted: oklch(0.9222 0.0013 286.3737);
-  --muted-foreground: oklch(0.1884 0.0128 248.5103);
-  --accent: oklch(0.9392 0.0166 250.8453);
-  --accent-foreground: oklch(0.6723 0.1606 244.9955);
-  --destructive: oklch(0.6188 0.2376 25.7658);
-  --destructive-foreground: oklch(1.0000 0 0);
-  --border: oklch(0.9317 0.0118 231.6594);
-  --input: oklch(0.9809 0.0025 228.7836);
-  --ring: oklch(0.6818 0.1584 243.3540);
-  --chart-1: oklch(0.6723 0.1606 244.9955);
-  --chart-2: oklch(0.6907 0.1554 160.3454);
-  --chart-3: oklch(0.8214 0.1600 82.5337);
-  --chart-4: oklch(0.7064 0.1822 151.7125);
-  --chart-5: oklch(0.5919 0.2186 10.5826);
-  --sidebar: oklch(0.9784 0.0011 197.1387);
-  --sidebar-foreground: oklch(0.1884 0.0128 248.5103);
-  --sidebar-primary: oklch(0.6723 0.1606 244.9955);
-  --sidebar-primary-foreground: oklch(1.0000 0 0);
-  --sidebar-accent: oklch(0.9392 0.0166 250.8453);
-  --sidebar-accent-foreground: oklch(0.6723 0.1606 244.9955);
-  --sidebar-border: oklch(0.9271 0.0101 238.5177);
-  --sidebar-ring: oklch(0.6818 0.1584 243.3540);
-  --font-sans: Open Sans, sans-serif;
-  --font-serif: Georgia, serif;
-  --font-mono: Menlo, monospace;
-  --radius: 1.3rem;
-  --shadow-x: 0px;
-  --shadow-y: 2px;
-  --shadow-blur: 0px;
-  --shadow-spread: 0px;
-  --shadow-opacity: 0;
-  --shadow-color: rgba(29,161,242,0.15);
-  --shadow-2xs: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00);
-  --shadow-xs: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00);
-  --shadow-sm: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00), 0px 1px 2px -1px hsl(202.8169 89.1213% 53.1373% / 0.00);
-  --shadow: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00), 0px 1px 2px -1px hsl(202.8169 89.1213% 53.1373% / 0.00);
-  --shadow-md: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00), 0px 2px 4px -1px hsl(202.8169 89.1213% 53.1373% / 0.00);
-  --shadow-lg: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00), 0px 4px 6px -1px hsl(202.8169 89.1213% 53.1373% / 0.00);
-  --shadow-xl: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00), 0px 8px 10px -1px hsl(202.8169 89.1213% 53.1373% / 0.00);
-  --shadow-2xl: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00);
-  --tracking-normal: 0em;
-  --spacing: 0.25rem;
+  /* Core colors */
+  --color-neo-bg: oklch(1.0000 0 0);
+  --color-neo-card: oklch(0.9784 0.0011 197.1387);
+  --color-neo-text: oklch(0.1884 0.0128 248.5103);
+  --color-neo-text-secondary: oklch(0.1884 0.0128 248.5103);
+  --color-neo-text-muted: oklch(0.5637 0.0078 247.9662);
+  --color-neo-text-on-bright: oklch(1.0000 0 0);
+
+  /* Primary accent - Twitter blue */
+  --color-neo-accent: oklch(0.6723 0.1606 244.9955);
+
+  /* Status colors - all use accent blue except danger */
+  --color-neo-pending: oklch(0.6723 0.1606 244.9955);
+  --color-neo-progress: oklch(0.6723 0.1606 244.9955);
+  --color-neo-done: oklch(0.6723 0.1606 244.9955);
+  --color-neo-danger: oklch(0.6188 0.2376 25.7658);
+
+  /* Borders and neutrals */
+  --color-neo-border: oklch(0.9317 0.0118 231.6594);
+  --color-neo-neutral-50: oklch(0.9809 0.0025 228.7836);
+  --color-neo-neutral-100: oklch(0.9392 0.0166 250.8453);
+  --color-neo-neutral-200: oklch(0.9222 0.0013 286.3737);
+  --color-neo-neutral-300: oklch(0.9317 0.0118 231.6594);
+
+  /* No shadows */
+  --shadow-neo-sm: none;
+  --shadow-neo-md: none;
+  --shadow-neo-lg: none;
+  --shadow-neo-xl: none;
+  --shadow-neo-left: none;
+  --shadow-neo-inset: none;
+
+  /* Typography */
+  --font-neo-sans: Open Sans, sans-serif;
+  --font-neo-mono: Menlo, monospace;
+
+  /* Radius - 1.3rem base */
+  --radius-neo-sm: calc(1.3rem - 4px);
+  --radius-neo-md: calc(1.3rem - 2px);
+  --radius-neo-lg: 1.3rem;
+  --radius-neo-xl: calc(1.3rem + 4px);
 }
 
 .dark {
-  --background: oklch(0 0 0);
-  --foreground: oklch(0.9328 0.0025 228.7857);
-  --card: oklch(0.2097 0.0080 274.5332);
-  --card-foreground: oklch(0.8853 0 0);
-  --popover: oklch(0 0 0);
-  --popover-foreground: oklch(0.9328 0.0025 228.7857);
-  --primary: oklch(0.6692 0.1607 245.0110);
-  --primary-foreground: oklch(1.0000 0 0);
-  --secondary: oklch(0.9622 0.0035 219.5331);
-  --secondary-foreground: oklch(0.1884 0.0128 248.5103);
-  --muted: oklch(0.2090 0 0);
-  --muted-foreground: oklch(0.5637 0.0078 247.9662);
-  --accent: oklch(0.1928 0.0331 242.5459);
-  --accent-foreground: oklch(0.6692 0.1607 245.0110);
-  --destructive: oklch(0.6188 0.2376 25.7658);
-  --destructive-foreground: oklch(1.0000 0 0);
-  --border: oklch(0.2674 0.0047 248.0045);
-  --input: oklch(0.3020 0.0288 244.8244);
-  --ring: oklch(0.6818 0.1584 243.3540);
-  --chart-1: oklch(0.6723 0.1606 244.9955);
-  --chart-2: oklch(0.6907 0.1554 160.3454);
-  --chart-3: oklch(0.8214 0.1600 82.5337);
-  --chart-4: oklch(0.7064 0.1822 151.7125);
-  --chart-5: oklch(0.5919 0.2186 10.5826);
-  --sidebar: oklch(0.2097 0.0080 274.5332);
-  --sidebar-foreground: oklch(0.8853 0 0);
-  --sidebar-primary: oklch(0.6818 0.1584 243.3540);
-  --sidebar-primary-foreground: oklch(1.0000 0 0);
-  --sidebar-accent: oklch(0.1928 0.0331 242.5459);
-  --sidebar-accent-foreground: oklch(0.6692 0.1607 245.0110);
-  --sidebar-border: oklch(0.3795 0.0220 240.5943);
-  --sidebar-ring: oklch(0.6818 0.1584 243.3540);
-  --font-sans: Open Sans, sans-serif;
-  --font-serif: Georgia, serif;
-  --font-mono: Menlo, monospace;
-  --radius: 1.3rem;
-  --shadow-x: 0px;
-  --shadow-y: 2px;
-  --shadow-blur: 0px;
-  --shadow-spread: 0px;
-  --shadow-opacity: 0;
-  --shadow-color: rgba(29,161,242,0.25);
-  --shadow-2xs: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00);
-  --shadow-xs: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00);
-  --shadow-sm: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00), 0px 1px 2px -1px hsl(202.8169 89.1213% 53.1373% / 0.00);
-  --shadow: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00), 0px 1px 2px -1px hsl(202.8169 89.1213% 53.1373% / 0.00);
-  --shadow-md: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00), 0px 2px 4px -1px hsl(202.8169 89.1213% 53.1373% / 0.00);
-  --shadow-lg: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00), 0px 4px 6px -1px hsl(202.8169 89.1213% 53.1373% / 0.00);
-  --shadow-xl: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00), 0px 8px 10px -1px hsl(202.8169 89.1213% 53.1373% / 0.00);
-  --shadow-2xl: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0.00);
+  /* Core colors - dark mode (Twitter dark style) */
+  --color-neo-bg: oklch(0.08 0 0);
+  --color-neo-card: oklch(0.16 0.005 250);
+  --color-neo-text: oklch(0.95 0 0);
+  --color-neo-text-secondary: oklch(0.75 0 0);
+  --color-neo-text-muted: oklch(0.55 0 0);
+  --color-neo-text-on-bright: oklch(1.0 0 0);
+
+  /* Primary accent */
+  --color-neo-accent: oklch(0.6692 0.1607 245.0110);
+
+  /* Status colors - all use accent blue except danger */
+  --color-neo-pending: oklch(0.6692 0.1607 245.0110);
+  --color-neo-progress: oklch(0.6692 0.1607 245.0110);
+  --color-neo-done: oklch(0.6692 0.1607 245.0110);
+  --color-neo-danger: oklch(0.6188 0.2376 25.7658);
+
+  /* Borders and neutrals - better contrast */
+  --color-neo-border: oklch(0.30 0 0);
+  --color-neo-neutral-50: oklch(0.20 0 0);
+  --color-neo-neutral-100: oklch(0.25 0.01 250);
+  --color-neo-neutral-200: oklch(0.22 0 0);
+  --color-neo-neutral-300: oklch(0.30 0 0);
+
+  /* No shadows */
+  --shadow-neo-sm: none;
+  --shadow-neo-md: none;
+  --shadow-neo-lg: none;
+  --shadow-neo-xl: none;
+  --shadow-neo-left: none;
+  --shadow-neo-inset: none;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
-  --color-popover: var(--popover);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-destructive: var(--destructive);
-  --color-destructive-foreground: var(--destructive-foreground);
-  --color-border: var(--border);
-  --color-input: var(--input);
-  --color-ring: var(--ring);
-  --color-chart-1: var(--chart-1);
-  --color-chart-2: var(--chart-2);
-  --color-chart-3: var(--chart-3);
-  --color-chart-4: var(--chart-4);
-  --color-chart-5: var(--chart-5);
-  --color-sidebar: var(--sidebar);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-ring: var(--sidebar-ring);
+/* ===== GLOBAL OVERRIDES ===== */
 
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-mono);
-  --font-serif: var(--font-serif);
+* {
+  box-shadow: none !important;
+}
 
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+/* ===== CARDS ===== */
+.neo-card,
+[class*="neo-card"] {
+  border: 1px solid var(--color-neo-border) !important;
+  box-shadow: none !important;
+  transform: none !important;
+  border-radius: var(--radius-neo-lg) !important;
+  background-color: var(--color-neo-card) !important;
+}
 
-  --shadow-2xs: var(--shadow-2xs);
-  --shadow-xs: var(--shadow-xs);
-  --shadow-sm: var(--shadow-sm);
-  --shadow: var(--shadow);
-  --shadow-md: var(--shadow-md);
-  --shadow-lg: var(--shadow-lg);
-  --shadow-xl: var(--shadow-xl);
-  --shadow-2xl: var(--shadow-2xl);
+.neo-card:hover,
+[class*="neo-card"]:hover {
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+/* ===== BUTTONS ===== */
+.neo-btn,
+[class*="neo-btn"],
+button {
+  border-width: 1px !important;
+  box-shadow: none !important;
+  text-transform: none !important;
+  font-weight: 500 !important;
+  transform: none !important;
+  border-radius: var(--radius-neo-lg) !important;
+  font-family: var(--font-neo-sans) !important;
+}
+
+.neo-btn:hover,
+[class*="neo-btn"]:hover,
+button:hover {
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+.neo-btn:active,
+[class*="neo-btn"]:active {
+  transform: none !important;
+}
+
+/* Primary button */
+.neo-btn-primary {
+  background-color: var(--color-neo-accent) !important;
+  border-color: var(--color-neo-accent) !important;
+  color: white !important;
+}
+
+/* Success button - use accent blue instead of green */
+.neo-btn-success {
+  background-color: var(--color-neo-accent) !important;
+  border-color: var(--color-neo-accent) !important;
+  color: white !important;
+}
+
+/* Danger button - subtle red */
+.neo-btn-danger {
+  background-color: var(--color-neo-danger) !important;
+  border-color: var(--color-neo-danger) !important;
+  color: white !important;
+}
+
+/* ===== INPUTS ===== */
+.neo-input,
+.neo-textarea,
+input,
+textarea,
+select {
+  border: 1px solid var(--color-neo-border) !important;
+  box-shadow: none !important;
+  border-radius: var(--radius-neo-md) !important;
+  background-color: var(--color-neo-neutral-50) !important;
+}
+
+.neo-input:focus,
+.neo-textarea:focus,
+input:focus,
+textarea:focus,
+select:focus {
+  box-shadow: none !important;
+  border-color: var(--color-neo-accent) !important;
+  outline: none !important;
+}
+
+/* ===== BADGES ===== */
+.neo-badge,
+[class*="neo-badge"] {
+  border: 1px solid var(--color-neo-border) !important;
+  box-shadow: none !important;
+  border-radius: var(--radius-neo-lg) !important;
+  font-weight: 500 !important;
+  text-transform: none !important;
+}
+
+/* ===== PROGRESS BAR ===== */
+.neo-progress {
+  border: none !important;
+  box-shadow: none !important;
+  border-radius: var(--radius-neo-lg) !important;
+  background-color: var(--color-neo-neutral-100) !important;
+  overflow: hidden !important;
+  height: 0.75rem !important;
+}
+
+.neo-progress-fill {
+  background-color: var(--color-neo-accent) !important;
+  border-radius: var(--radius-neo-lg) !important;
+}
+
+.neo-progress-fill::after {
+  display: none !important;
+}
+
+/* ===== KANBAN COLUMNS ===== */
+.kanban-column {
+  border: 1px solid var(--color-neo-border) !important;
+  border-radius: var(--radius-neo-lg) !important;
+  overflow: hidden;
+  background-color: var(--color-neo-bg) !important;
+  border-left: none !important;
+}
+
+/* Left accent border on the whole column */
+.kanban-column.kanban-header-pending {
+  border-left: 3px solid var(--color-neo-accent) !important;
+}
+
+.kanban-column.kanban-header-progress {
+  border-left: 3px solid var(--color-neo-accent) !important;
+}
+
+.kanban-column.kanban-header-done {
+  border-left: 3px solid var(--color-neo-accent) !important;
+}
+
+.kanban-header {
+  background-color: var(--color-neo-card) !important;
+  border-bottom: 1px solid var(--color-neo-border) !important;
+  border-left: none !important;
+}
+
+/* ===== MODALS & DROPDOWNS ===== */
+.neo-modal,
+[class*="neo-modal"],
+[role="dialog"] {
+  border: 1px solid var(--color-neo-border) !important;
+  border-radius: var(--radius-neo-xl) !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.1) !important;
+}
+
+.neo-dropdown,
+[class*="dropdown"],
+[role="menu"],
+[data-radix-popper-content-wrapper] {
+  border: 1px solid var(--color-neo-border) !important;
+  border-radius: var(--radius-neo-lg) !important;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.08) !important;
+}
+
+/* ===== STATUS BADGES ===== */
+[class*="bg-neo-pending"],
+.bg-\[var\(--color-neo-pending\)\] {
+  background-color: var(--color-neo-neutral-100) !important;
+  color: var(--color-neo-text-secondary) !important;
+}
+
+[class*="bg-neo-progress"],
+.bg-\[var\(--color-neo-progress\)\] {
+  background-color: oklch(0.9392 0.0166 250.8453) !important;
+  color: var(--color-neo-accent) !important;
+}
+
+[class*="bg-neo-done"],
+.bg-\[var\(--color-neo-done\)\] {
+  background-color: oklch(0.9392 0.0166 250.8453) !important;
+  color: var(--color-neo-accent) !important;
+}
+
+/* ===== REMOVE NEO EFFECTS ===== */
+[class*="shadow-neo"],
+[class*="shadow-"] {
+  box-shadow: none !important;
+}
+
+[class*="hover:translate"],
+[class*="hover:-translate"],
+[class*="translate-x"],
+[class*="translate-y"] {
+  transform: none !important;
+}
+
+/* ===== TEXT STYLING ===== */
+h1, h2, h3, h4, h5, h6,
+[class*="heading"],
+[class*="title"],
+[class*="font-display"] {
+  text-transform: none !important;
+  font-family: var(--font-neo-sans) !important;
+}
+
+.uppercase {
+  text-transform: none !important;
+}
+
+strong, b,
+[class*="font-bold"],
+[class*="font-black"] {
+  font-weight: 600 !important;
+}
+
+/* ===== SPECIFIC ELEMENT FIXES ===== */
+
+/* Green badges should use accent color */
+[class*="bg-green"],
+[class*="bg-emerald"],
+[class*="bg-lime"] {
+  background-color: oklch(0.9392 0.0166 250.8453) !important;
+  color: var(--color-neo-accent) !important;
+}
+
+/* Category badges */
+[class*="FUNCTIONAL"],
+[class*="functional"] {
+  background-color: oklch(0.9392 0.0166 250.8453) !important;
+  color: var(--color-neo-accent) !important;
+}
+
+/* Live/Status indicators - use accent instead of green */
+.text-\[var\(--color-neo-done\)\] {
+  color: var(--color-neo-accent) !important;
+}
+
+/* Override any remaining borders to be thin */
+[class*="border-3"],
+[class*="border-b-3"] {
+  border-width: 1px !important;
+}
+
+/* ===== DARK MODE SPECIFIC FIXES ===== */
+
+.dark .neo-card,
+.dark [class*="neo-card"] {
+  background-color: var(--color-neo-card) !important;
+  border-color: var(--color-neo-border) !important;
+}
+
+.dark .kanban-column {
+  background-color: var(--color-neo-card) !important;
+}
+
+.dark .kanban-header {
+  background-color: var(--color-neo-neutral-50) !important;
+}
+
+/* Feature cards in dark mode */
+.dark .neo-card .neo-card {
+  background-color: var(--color-neo-neutral-50) !important;
+}
+
+/* Badges in dark mode - lighter background for visibility */
+.dark .neo-badge,
+.dark [class*="neo-badge"] {
+  background-color: var(--color-neo-neutral-100) !important;
+  color: var(--color-neo-text) !important;
+  border-color: var(--color-neo-border) !important;
+}
+
+/* Status badges in dark mode */
+.dark [class*="bg-neo-done"],
+.dark .bg-\[var\(--color-neo-done\)\] {
+  background-color: oklch(0.25 0.05 245) !important;
+  color: var(--color-neo-accent) !important;
+}
+
+.dark [class*="bg-neo-progress"],
+.dark .bg-\[var\(--color-neo-progress\)\] {
+  background-color: oklch(0.25 0.05 245) !important;
+  color: var(--color-neo-accent) !important;
+}
+
+/* Green badges in dark mode */
+.dark [class*="bg-green"],
+.dark [class*="bg-emerald"],
+.dark [class*="bg-lime"] {
+  background-color: oklch(0.25 0.05 245) !important;
+  color: var(--color-neo-accent) !important;
+}
+
+/* Category badges in dark mode */
+.dark [class*="FUNCTIONAL"],
+.dark [class*="functional"] {
+  background-color: oklch(0.25 0.05 245) !important;
+  color: var(--color-neo-accent) !important;
+}
+
+/* Buttons in dark mode - better visibility */
+.dark .neo-btn,
+.dark button {
+  border-color: var(--color-neo-border) !important;
+}
+
+.dark .neo-btn-primary,
+.dark .neo-btn-success {
+  background-color: var(--color-neo-accent) !important;
+  border-color: var(--color-neo-accent) !important;
+  color: white !important;
+}
+
+/* Toggle buttons - fix "Graph" visibility */
+.dark [class*="text-neo-text"] {
+  color: var(--color-neo-text) !important;
+}
+
+/* Inputs in dark mode */
+.dark input,
+.dark textarea,
+.dark select {
+  background-color: var(--color-neo-neutral-50) !important;
+  border-color: var(--color-neo-border) !important;
+  color: var(--color-neo-text) !important;
 }

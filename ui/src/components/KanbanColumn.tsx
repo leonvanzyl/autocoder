@@ -18,9 +18,9 @@ interface KanbanColumnProps {
 }
 
 const colorMap = {
-  pending: 'var(--color-neo-pending)',
-  progress: 'var(--color-neo-progress)',
-  done: 'var(--color-neo-done)',
+  pending: 'kanban-header-pending',
+  progress: 'kanban-header-progress',
+  done: 'kanban-header-done',
 }
 
 export function KanbanColumn({
@@ -43,18 +43,16 @@ export function KanbanColumn({
   )
   return (
     <div
-      className="neo-card overflow-hidden"
-      style={{ borderColor: colorMap[color] }}
+      className={`neo-card overflow-hidden kanban-column ${colorMap[color]}`}
     >
       {/* Header */}
       <div
-        className="px-4 py-3 border-b-3 border-[var(--color-neo-border)]"
-        style={{ backgroundColor: colorMap[color] }}
+        className="kanban-header px-4 py-3 border-b border-[var(--color-neo-border)]"
       >
         <div className="flex items-center justify-between">
-          <h2 className="font-display text-lg font-bold uppercase flex items-center gap-2 text-[var(--color-neo-text-on-bright)]">
+          <h2 className="font-display text-lg font-semibold flex items-center gap-2 text-[var(--color-neo-text)]">
             {title}
-            <span className="neo-badge bg-[var(--color-neo-card)] text-[var(--color-neo-text)]">{count}</span>
+            <span className="neo-badge bg-[var(--color-neo-neutral-100)] text-[var(--color-neo-text-secondary)]">{count}</span>
           </h2>
           {(onAddFeature || onExpandProject) && (
             <div className="flex items-center gap-2">
