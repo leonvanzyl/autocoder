@@ -58,6 +58,12 @@ class Feature(Base):
     # NULL/empty = no dependencies (backwards compatible)
     dependencies = Column(JSON, nullable=True, default=None)
 
+    # DEPRECATED: Kept for backward compatibility with existing databases.
+    # These columns are no longer used but prevent NOT NULL violations on insert.
+    # Removed in commit 486979c but old databases still have them.
+    testing_in_progress = Column(Boolean, nullable=False, default=False)
+    last_tested_at = Column(DateTime, nullable=True, default=None)
+
     def to_dict(self) -> dict:
         """Convert feature to dictionary for JSON serialization."""
         return {
