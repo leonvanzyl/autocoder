@@ -344,22 +344,26 @@ def feature_get_for_regression(
     """
     session = get_session()
     try:
-        # Select features with lowest regression_count first (least tested)
-        # Use id as secondary sort for deterministic ordering when counts are equal
+        # Use with_for_update() to acquire row-level locks before reading.
+        # This prevents race conditions where concurrent requests both select
+        # the same features (with lowest regression_count) before either commits.
+        # The lock ensures requests are serialized: the second request will block
+        # until the first commits, then see the updated regression_count values.
         features = (
             session.query(Feature)
             .filter(Feature.passes == True)
             .order_by(Feature.regression_count.asc(), Feature.id.asc())
             .limit(limit)
+            .with_for_update()
             .all()
         )
 
-        # Increment regression_count for selected features
+        # Increment regression_count for selected features (now safe under lock)
         for feature in features:
             feature.regression_count = (feature.regression_count or 0) + 1
         session.commit()
 
-        # Refresh to get updated counts
+        # Refresh to get updated counts after commit releases the lock
         for feature in features:
             session.refresh(feature)
 
