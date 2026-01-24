@@ -8,18 +8,19 @@ Provides tools to manage features in the autonomous coding system.
 Tools:
 - feature_get_stats: Get progress statistics
 - feature_get_by_id: Get a specific feature by ID
+- feature_get_summary: Get minimal feature info (id, name, status, deps)
 - feature_mark_passing: Mark a feature as passing
 - feature_mark_failing: Mark a feature as failing (regression detected)
 - feature_skip: Skip a feature (move to end of queue)
 - feature_mark_in_progress: Mark a feature as in-progress
+- feature_claim_and_get: Atomically claim and get feature details
 - feature_clear_in_progress: Clear in-progress status
-- feature_release_testing: Release testing lock on a feature
 - feature_create_bulk: Create multiple features at once
 - feature_create: Create a single feature
 - feature_add_dependency: Add a dependency between features
 - feature_remove_dependency: Remove a dependency
 - feature_get_ready: Get features ready to implement
-- feature_get_blocked: Get features blocked by dependencies
+- feature_get_blocked: Get features blocked by dependencies (with limit)
 - feature_get_graph: Get the dependency graph
 
 Note: Feature selection (which feature to work on) is handled by the
@@ -31,7 +32,6 @@ import os
 import sys
 import threading
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated
 
@@ -142,11 +142,20 @@ def feature_get_stats() -> str:
     Returns:
         JSON with: passing (int), in_progress (int), total (int), percentage (float)
     """
+    from sqlalchemy import case, func
+
     session = get_session()
     try:
-        total = session.query(Feature).count()
-        passing = session.query(Feature).filter(Feature.passes == True).count()
-        in_progress = session.query(Feature).filter(Feature.in_progress == True).count()
+        # Single aggregate query instead of 3 separate COUNT queries
+        result = session.query(
+            func.count(Feature.id).label('total'),
+            func.sum(case((Feature.passes == True, 1), else_=0)).label('passing'),
+            func.sum(case((Feature.in_progress == True, 1), else_=0)).label('in_progress')
+        ).first()
+
+        total = result.total or 0
+        passing = int(result.passing or 0)
+        in_progress = int(result.in_progress or 0)
         percentage = round((passing / total) * 100, 1) if total > 0 else 0.0
 
         return json.dumps({
@@ -154,7 +163,7 @@ def feature_get_stats() -> str:
             "in_progress": in_progress,
             "total": total,
             "percentage": percentage
-        }, indent=2)
+        })
     finally:
         session.close()
 
@@ -181,58 +190,38 @@ def feature_get_by_id(
         if feature is None:
             return json.dumps({"error": f"Feature with ID {feature_id} not found"})
 
-        return json.dumps(feature.to_dict(), indent=2)
+        return json.dumps(feature.to_dict())
     finally:
         session.close()
 
 
 @mcp.tool()
-def feature_release_testing(
-    feature_id: Annotated[int, Field(description="The ID of the feature to release", ge=1)],
-    tested_ok: Annotated[bool, Field(description="True if the feature passed testing, False if regression found")] = True
+def feature_get_summary(
+    feature_id: Annotated[int, Field(description="The ID of the feature", ge=1)]
 ) -> str:
-    """Release a feature after regression testing completes.
+    """Get minimal feature info: id, name, status, and dependencies only.
 
-    Clears the testing_in_progress flag and updates last_tested_at timestamp.
-
-    This should be called after testing is complete, whether the feature
-    passed or failed. If tested_ok=False, the feature was marked as failing
-    by a previous call to feature_mark_failing.
+    Use this instead of feature_get_by_id when you only need status info,
+    not the full description and steps. This reduces response size significantly.
 
     Args:
-        feature_id: The ID of the feature that was being tested
-        tested_ok: True if testing passed, False if a regression was found
+        feature_id: The ID of the feature to retrieve
 
     Returns:
-        JSON with release confirmation or error message.
+        JSON with: id, name, passes, in_progress, dependencies
     """
     session = get_session()
     try:
         feature = session.query(Feature).filter(Feature.id == feature_id).first()
-
         if feature is None:
             return json.dumps({"error": f"Feature with ID {feature_id} not found"})
-
-        if not feature.testing_in_progress:
-            return json.dumps({
-                "warning": f"Feature {feature_id} was not being tested",
-                "feature": feature.to_dict()
-            })
-
-        # Clear testing flag and update timestamp
-        feature.testing_in_progress = False
-        feature.last_tested_at = datetime.now(timezone.utc)
-        session.commit()
-        session.refresh(feature)
-
-        status = "passed" if tested_ok else "failed (regression detected)"
         return json.dumps({
-            "message": f"Feature #{feature_id} testing {status}",
-            "feature": feature.to_dict()
-        }, indent=2)
-    except Exception as e:
-        session.rollback()
-        return json.dumps({"error": f"Failed to release testing claim: {str(e)}"})
+            "id": feature.id,
+            "name": feature.name,
+            "passes": feature.passes,
+            "in_progress": feature.in_progress,
+            "dependencies": feature.dependencies or []
+        })
     finally:
         session.close()
 
@@ -250,7 +239,7 @@ def feature_mark_passing(
         feature_id: The ID of the feature to mark as passing
 
     Returns:
-        JSON with the updated feature details, or error if not found.
+        JSON with success confirmation: {success, feature_id, name}
     """
     session = get_session()
     try:
@@ -262,9 +251,8 @@ def feature_mark_passing(
         feature.passes = True
         feature.in_progress = False
         session.commit()
-        session.refresh(feature)
 
-        return json.dumps(feature.to_dict(), indent=2)
+        return json.dumps({"success": True, "feature_id": feature_id, "name": feature.name})
     except Exception as e:
         session.rollback()
         return json.dumps({"error": f"Failed to mark feature passing: {str(e)}"})
@@ -309,7 +297,7 @@ def feature_mark_failing(
         return json.dumps({
             "message": f"Feature #{feature_id} marked as failing - regression detected",
             "feature": feature.to_dict()
-        }, indent=2)
+        })
     except Exception as e:
         session.rollback()
         return json.dumps({"error": f"Failed to mark feature failing: {str(e)}"})
@@ -368,7 +356,7 @@ def feature_skip(
             "old_priority": old_priority,
             "new_priority": new_priority,
             "message": f"Feature '{feature.name}' moved to end of queue"
-        }, indent=2)
+        })
     except Exception as e:
         session.rollback()
         return json.dumps({"error": f"Failed to skip feature: {str(e)}"})
@@ -408,10 +396,52 @@ def feature_mark_in_progress(
         session.commit()
         session.refresh(feature)
 
-        return json.dumps(feature.to_dict(), indent=2)
+        return json.dumps(feature.to_dict())
     except Exception as e:
         session.rollback()
         return json.dumps({"error": f"Failed to mark feature in-progress: {str(e)}"})
+    finally:
+        session.close()
+
+
+@mcp.tool()
+def feature_claim_and_get(
+    feature_id: Annotated[int, Field(description="The ID of the feature to claim", ge=1)]
+) -> str:
+    """Atomically claim a feature (mark in-progress) and return its full details.
+
+    Combines feature_mark_in_progress + feature_get_by_id into a single operation.
+    If already in-progress, still returns the feature details (idempotent).
+
+    Args:
+        feature_id: The ID of the feature to claim and retrieve
+
+    Returns:
+        JSON with feature details including claimed status, or error if not found.
+    """
+    session = get_session()
+    try:
+        feature = session.query(Feature).filter(Feature.id == feature_id).first()
+
+        if feature is None:
+            return json.dumps({"error": f"Feature with ID {feature_id} not found"})
+
+        if feature.passes:
+            return json.dumps({"error": f"Feature with ID {feature_id} is already passing"})
+
+        # Idempotent: if already in-progress, just return details
+        already_claimed = feature.in_progress
+        if not already_claimed:
+            feature.in_progress = True
+            session.commit()
+            session.refresh(feature)
+
+        result = feature.to_dict()
+        result["already_claimed"] = already_claimed
+        return json.dumps(result)
+    except Exception as e:
+        session.rollback()
+        return json.dumps({"error": f"Failed to claim feature: {str(e)}"})
     finally:
         session.close()
 
@@ -442,7 +472,7 @@ def feature_clear_in_progress(
         session.commit()
         session.refresh(feature)
 
-        return json.dumps(feature.to_dict(), indent=2)
+        return json.dumps(feature.to_dict())
     except Exception as e:
         session.rollback()
         return json.dumps({"error": f"Failed to clear in-progress status: {str(e)}"})
@@ -549,7 +579,7 @@ def feature_create_bulk(
         return json.dumps({
             "created": len(created_features),
             "with_dependencies": deps_count
-        }, indent=2)
+        })
     except Exception as e:
         session.rollback()
         return json.dumps({"error": str(e)})
@@ -604,7 +634,7 @@ def feature_create(
             "success": True,
             "message": f"Created feature: {name}",
             "feature": db_feature.to_dict()
-        }, indent=2)
+        })
     except Exception as e:
         session.rollback()
         return json.dumps({"error": str(e)})
@@ -754,20 +784,25 @@ def feature_get_ready(
             "features": ready[:limit],
             "count": len(ready[:limit]),
             "total_ready": len(ready)
-        }, indent=2)
+        })
     finally:
         session.close()
 
 
 @mcp.tool()
-def feature_get_blocked() -> str:
-    """Get all features that are blocked by unmet dependencies.
+def feature_get_blocked(
+    limit: Annotated[int, Field(default=20, ge=1, le=100, description="Max features to return")] = 20
+) -> str:
+    """Get features that are blocked by unmet dependencies.
 
     Returns features that have dependencies which are not yet passing.
     Each feature includes a 'blocked_by' field listing the blocking feature IDs.
 
+    Args:
+        limit: Maximum number of features to return (1-100, default 20)
+
     Returns:
-        JSON with: features (list with blocked_by field), count (int)
+        JSON with: features (list with blocked_by field), count (int), total_blocked (int)
     """
     session = get_session()
     try:
@@ -787,9 +822,10 @@ def feature_get_blocked() -> str:
                 })
 
         return json.dumps({
-            "features": blocked,
-            "count": len(blocked)
-        }, indent=2)
+            "features": blocked[:limit],
+            "count": len(blocked[:limit]),
+            "total_blocked": len(blocked)
+        })
     finally:
         session.close()
 
@@ -840,7 +876,7 @@ def feature_get_graph() -> str:
         return json.dumps({
             "nodes": nodes,
             "edges": edges
-        }, indent=2)
+        })
     finally:
         session.close()
 

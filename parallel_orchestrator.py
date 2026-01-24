@@ -23,11 +23,9 @@ import os
 import subprocess
 import sys
 import threading
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Literal
-
-from sqlalchemy import text
 
 from api.database import Feature, create_database
 from api.dependency_resolver import are_dependencies_satisfied, compute_scheduling_scores
@@ -126,7 +124,6 @@ DEFAULT_CONCURRENCY = 3
 POLL_INTERVAL = 5  # seconds between checking for ready features
 MAX_FEATURE_RETRIES = 3  # Maximum times to retry a failed feature
 INITIALIZER_TIMEOUT = 1800  # 30 minutes timeout for initializer
-STALE_TESTING_LOCK_MINUTES = 30  # Auto-release testing locks older than this
 
 
 class ParallelOrchestrator:
@@ -186,6 +183,12 @@ class ParallelOrchestrator:
         # Session tracking for logging/debugging
         self.session_start_time: datetime = None
 
+        # Event signaled when any agent completes, allowing the main loop to wake
+        # immediately instead of waiting for the full POLL_INTERVAL timeout.
+        # This reduces latency when spawning the next feature after completion.
+        self._agent_completed_event: asyncio.Event = None  # Created in run_loop
+        self._event_loop: asyncio.AbstractEventLoop = None  # Stored for thread-safe signaling
+
         # Database session for this orchestrator
         self._engine, self._session_maker = create_database(project_dir)
 
@@ -193,72 +196,28 @@ class ParallelOrchestrator:
         """Get a new database session."""
         return self._session_maker()
 
-    def claim_feature_for_testing(self) -> int | None:
-        """Claim a random passing feature for regression testing.
+    def _get_random_passing_feature(self) -> int | None:
+        """Get a random passing feature for regression testing (no claim needed).
 
-        Returns the feature ID if successful, None if no features available.
-        Sets testing_in_progress=True on the claimed feature.
+        Testing agents can test the same feature concurrently - it doesn't matter.
+        This simplifies the architecture by removing unnecessary coordination.
+
+        Returns the feature ID if available, None if no passing features exist.
         """
+        from sqlalchemy.sql.expression import func
+
         session = self.get_session()
         try:
-            from sqlalchemy.sql.expression import func
-
-            # Find a passing feature that's not being worked on
-            # Exclude features already being tested by this orchestrator
-            with self._lock:
-                testing_feature_ids = set(self.running_testing_agents.keys())
-
-            candidate = (
+            # Find a passing feature that's not currently being coded
+            # Multiple testing agents can test the same feature - that's fine
+            feature = (
                 session.query(Feature)
                 .filter(Feature.passes == True)
-                .filter(Feature.in_progress == False)
-                .filter(Feature.testing_in_progress == False)
-                .filter(~Feature.id.in_(testing_feature_ids) if testing_feature_ids else True)
+                .filter(Feature.in_progress == False)  # Don't test while coding
                 .order_by(func.random())
                 .first()
             )
-
-            if not candidate:
-                return None
-
-            # Atomic claim using UPDATE with WHERE clause
-            result = session.execute(
-                text("""
-                    UPDATE features
-                    SET testing_in_progress = 1
-                    WHERE id = :feature_id
-                      AND passes = 1
-                      AND in_progress = 0
-                      AND testing_in_progress = 0
-                """),
-                {"feature_id": candidate.id}
-            )
-            session.commit()
-
-            if result.rowcount == 0:
-                # Another process claimed it
-                return None
-
-            return candidate.id
-        except Exception as e:
-            session.rollback()
-            debug_log.log("TESTING", f"Failed to claim feature for testing: {e}")
-            return None
-        finally:
-            session.close()
-
-    def release_testing_claim(self, feature_id: int):
-        """Release a testing claim on a feature (called when testing agent exits)."""
-        session = self.get_session()
-        try:
-            session.execute(
-                text("UPDATE features SET testing_in_progress = 0 WHERE id = :feature_id"),
-                {"feature_id": feature_id}
-            )
-            session.commit()
-        except Exception as e:
-            session.rollback()
-            debug_log.log("TESTING", f"Failed to release testing claim for feature {feature_id}: {e}")
+            return feature.id if feature else None
         finally:
             session.close()
 
@@ -311,6 +270,9 @@ class ParallelOrchestrator:
             all_features = session.query(Feature).all()
             all_dicts = [f.to_dict() for f in all_features]
 
+            # Pre-compute passing_ids once to avoid O(n^2) in the loop
+            passing_ids = {f.id for f in all_features if f.passes}
+
             ready = []
             skipped_reasons = {"passes": 0, "in_progress": 0, "running": 0, "failed": 0, "deps": 0}
             for f in all_features:
@@ -329,8 +291,8 @@ class ParallelOrchestrator:
                 if self._failure_counts.get(f.id, 0) >= MAX_FEATURE_RETRIES:
                     skipped_reasons["failed"] += 1
                     continue
-                # Check dependencies
-                if are_dependencies_satisfied(f.to_dict(), all_dicts):
+                # Check dependencies (pass pre-computed passing_ids)
+                if are_dependencies_satisfied(f.to_dict(), all_dicts, passing_ids):
                     ready.append(f.to_dict())
                 else:
                     skipped_reasons["deps"] += 1
@@ -415,55 +377,6 @@ class ParallelOrchestrator:
         finally:
             session.close()
 
-    def _cleanup_stale_testing_locks(self) -> None:
-        """Release stale testing locks from crashed testing agents.
-
-        A feature is considered stale if:
-        - testing_in_progress=True AND
-        - last_tested_at is NOT NULL AND older than STALE_TESTING_LOCK_MINUTES
-
-        Note: We do NOT release features with last_tested_at=NULL because that would
-        incorrectly release features that are legitimately in the middle of their
-        first test. The last_tested_at is only set when testing completes.
-
-        This handles the case where a testing agent crashes mid-test, leaving
-        the feature locked until orchestrator restart. By checking periodically,
-        we can release these locks without requiring a restart.
-        """
-        session = self.get_session()
-        try:
-            # Use timezone-aware UTC, then strip timezone for SQLite compatibility
-            # (SQLite stores datetimes as naive strings, but we want consistency with
-            # datetime.now(timezone.utc) used elsewhere in the codebase)
-            cutoff_time = (datetime.now(timezone.utc) - timedelta(minutes=STALE_TESTING_LOCK_MINUTES)).replace(tzinfo=None)
-
-            # Find stale locks: testing_in_progress=True AND last_tested_at < cutoff
-            # Excludes NULL last_tested_at to avoid false positives on first-time tests
-            stale_features = (
-                session.query(Feature)
-                .filter(Feature.testing_in_progress == True)
-                .filter(Feature.last_tested_at.isnot(None))
-                .filter(Feature.last_tested_at < cutoff_time)
-                .all()
-            )
-
-            if stale_features:
-                stale_ids = [f.id for f in stale_features]
-                # Use ORM update instead of raw SQL for SQLite IN clause compatibility
-                session.query(Feature).filter(Feature.id.in_(stale_ids)).update(
-                    {"testing_in_progress": False},
-                    synchronize_session=False
-                )
-                session.commit()
-                print(f"[CLEANUP] Released {len(stale_ids)} stale testing locks: {stale_ids}", flush=True)
-                debug_log.log("CLEANUP", "Released stale testing locks", feature_ids=stale_ids)
-        except Exception as e:
-            session.rollback()
-            print(f"[CLEANUP] Error cleaning stale locks: {e}", flush=True)
-            debug_log.log("CLEANUP", f"Error cleaning stale locks: {e}")
-        finally:
-            session.close()
-
     def _maintain_testing_agents(self) -> None:
         """Maintain the desired count of testing agents independently.
 
@@ -471,8 +384,8 @@ class ParallelOrchestrator:
         the configured testing_agent_ratio. Testing agents run independently from
         coding agents and continuously re-test passing features to catch regressions.
 
-        Also periodically releases stale testing locks (features stuck in
-        testing_in_progress=True for more than STALE_TESTING_LOCK_MINUTES).
+        Multiple testing agents can test the same feature concurrently - this is
+        intentional and simplifies the architecture by removing claim coordination.
 
         Stops spawning when:
         - YOLO mode is enabled
@@ -482,11 +395,6 @@ class ParallelOrchestrator:
         # Skip if testing is disabled
         if self.yolo_mode or self.testing_agent_ratio == 0:
             return
-
-        # Periodically clean up stale testing locks (features stuck mid-test due to crash)
-        # A feature is considered stale if testing_in_progress=True and last_tested_at
-        # is either NULL or older than STALE_TESTING_LOCK_MINUTES
-        self._cleanup_stale_testing_locks()
 
         # No testing until there are passing features
         passing_count = self.get_passing_count()
@@ -632,8 +540,9 @@ class ParallelOrchestrator:
     def _spawn_testing_agent(self) -> tuple[bool, str]:
         """Spawn a testing agent subprocess for regression testing.
 
-        Claims a feature BEFORE spawning the agent (same pattern as coding agents).
-        This ensures we know which feature is being tested for UI display.
+        Picks a random passing feature to test. Multiple testing agents can test
+        the same feature concurrently - this is intentional and simplifies the
+        architecture by removing claim coordination.
         """
         # Check limits first (under lock)
         with self._lock:
@@ -646,20 +555,19 @@ class ParallelOrchestrator:
                 debug_log.log("TESTING", f"Skipped spawn - at max total agents ({total_agents}/{MAX_TOTAL_AGENTS})")
                 return False, f"At max total agents ({total_agents})"
 
-        # Claim a feature for testing (outside lock to avoid holding during DB ops)
-        feature_id = self.claim_feature_for_testing()
+        # Pick a random passing feature (no claim needed - concurrent testing is fine)
+        feature_id = self._get_random_passing_feature()
         if feature_id is None:
             debug_log.log("TESTING", "No features available for testing")
             return False, "No features available for testing"
 
-        debug_log.log("TESTING", f"Claimed feature #{feature_id} for testing")
+        debug_log.log("TESTING", f"Selected feature #{feature_id} for testing")
 
-        # Now spawn with the claimed feature ID
+        # Spawn the testing agent
         with self._lock:
-            # Re-check limits in case another thread spawned while we were claiming
+            # Re-check limits in case another thread spawned while we were selecting
             current_testing_count = len(self.running_testing_agents)
             if current_testing_count >= self.max_concurrency:
-                self.release_testing_claim(feature_id)
                 return False, f"At max testing agents ({current_testing_count})"
 
             cmd = [
@@ -685,7 +593,6 @@ class ParallelOrchestrator:
                 )
             except Exception as e:
                 debug_log.log("TESTING", f"FAILED to spawn testing agent: {e}")
-                self.release_testing_claim(feature_id)
                 return False, f"Failed to start testing agent: {e}"
 
             # Register process with feature ID (same pattern as coding agents)
@@ -794,6 +701,52 @@ class ParallelOrchestrator:
         finally:
             self._on_agent_complete(feature_id, proc.returncode, agent_type, proc)
 
+    def _signal_agent_completed(self):
+        """Signal that an agent has completed, waking the main loop.
+
+        This method is safe to call from any thread. It schedules the event.set()
+        call to run on the event loop thread to avoid cross-thread issues with
+        asyncio.Event.
+        """
+        if self._agent_completed_event is not None and self._event_loop is not None:
+            try:
+                # Use the stored event loop reference to schedule the set() call
+                # This is necessary because asyncio.Event is not thread-safe and
+                # asyncio.get_event_loop() fails in threads without an event loop
+                if self._event_loop.is_running():
+                    self._event_loop.call_soon_threadsafe(self._agent_completed_event.set)
+                else:
+                    # Fallback: set directly if loop isn't running (shouldn't happen during normal operation)
+                    self._agent_completed_event.set()
+            except RuntimeError:
+                # Event loop closed, ignore (orchestrator may be shutting down)
+                pass
+
+    async def _wait_for_agent_completion(self, timeout: float = POLL_INTERVAL):
+        """Wait for an agent to complete or until timeout expires.
+
+        This replaces fixed `asyncio.sleep(POLL_INTERVAL)` calls with event-based
+        waiting. When an agent completes, _signal_agent_completed() sets the event,
+        causing this method to return immediately. If no agent completes within
+        the timeout, we return anyway to check for ready features.
+
+        Args:
+            timeout: Maximum seconds to wait (default: POLL_INTERVAL)
+        """
+        if self._agent_completed_event is None:
+            # Fallback if event not initialized (shouldn't happen in normal operation)
+            await asyncio.sleep(timeout)
+            return
+
+        try:
+            await asyncio.wait_for(self._agent_completed_event.wait(), timeout=timeout)
+            # Event was set - an agent completed. Clear it for the next wait cycle.
+            self._agent_completed_event.clear()
+            debug_log.log("EVENT", "Woke up immediately - agent completed")
+        except asyncio.TimeoutError:
+            # Timeout reached without agent completion - this is normal, just check anyway
+            pass
+
     def _on_agent_complete(
         self,
         feature_id: int | None,
@@ -810,21 +763,15 @@ class ParallelOrchestrator:
           is safe.
 
         For testing agents:
-        - Remove from running dict and release testing claim on feature.
+        - Remove from running dict (no claim to release - concurrent testing is allowed).
         """
         if agent_type == "testing":
             with self._lock:
                 # Remove from dict by finding the feature_id for this proc
-                found_feature_id = None
                 for fid, p in list(self.running_testing_agents.items()):
                     if p is proc:
-                        found_feature_id = fid
                         del self.running_testing_agents[fid]
                         break
-
-            # Release testing claim on the feature
-            if found_feature_id is not None:
-                self.release_testing_claim(found_feature_id)
 
             status = "completed" if return_code == 0 else "failed"
             print(f"Feature #{feature_id} testing {status}", flush=True)
@@ -832,6 +779,8 @@ class ParallelOrchestrator:
                 pid=proc.pid,
                 feature_id=feature_id,
                 status=status)
+            # Signal main loop that an agent slot is available
+            self._signal_agent_completed()
             return
 
         # Coding agent completion
@@ -843,40 +792,20 @@ class ParallelOrchestrator:
             self.running_coding_agents.pop(feature_id, None)
             self.abort_events.pop(feature_id, None)
 
-        # BEFORE dispose: Query database state to see if it's stale
-        session_before = self.get_session()
-        try:
-            session_before.expire_all()
-            feature_before = session_before.query(Feature).filter(Feature.id == feature_id).first()
-            all_before = session_before.query(Feature).all()
-            passing_before = sum(1 for f in all_before if f.passes)
-            debug_log.log("DB", f"BEFORE engine.dispose() - Feature #{feature_id} state",
-                passes=feature_before.passes if feature_before else None,
-                in_progress=feature_before.in_progress if feature_before else None,
-                total_passing_in_db=passing_before)
-        finally:
-            session_before.close()
-
-        # CRITICAL: Refresh database connection to see subprocess commits
+        # Refresh session cache to see subprocess commits
         # The coding agent runs as a subprocess and commits changes (e.g., passes=True).
-        # SQLAlchemy may have stale connections. Disposing the engine forces new connections
-        # that will see the subprocess's committed changes.
-        debug_log.log("DB", "Disposing database engine now...")
-        self._engine.dispose()
-
-        # AFTER dispose: Query again to compare
+        # Using session.expire_all() is lighter weight than engine.dispose() for SQLite WAL mode
+        # and is sufficient to invalidate cached data and force fresh reads.
+        # engine.dispose() is only called on orchestrator shutdown, not on every agent completion.
         session = self.get_session()
         try:
+            session.expire_all()
             feature = session.query(Feature).filter(Feature.id == feature_id).first()
-            all_after = session.query(Feature).all()
-            passing_after = sum(1 for f in all_after if f.passes)
             feature_passes = feature.passes if feature else None
             feature_in_progress = feature.in_progress if feature else None
-            debug_log.log("DB", f"AFTER engine.dispose() - Feature #{feature_id} state",
+            debug_log.log("DB", f"Feature #{feature_id} state after session.expire_all()",
                 passes=feature_passes,
-                in_progress=feature_in_progress,
-                total_passing_in_db=passing_after,
-                passing_changed=(passing_after != passing_before) if 'passing_before' in dir() else "unknown")
+                in_progress=feature_in_progress)
             if feature and feature.in_progress and not feature.passes:
                 feature.in_progress = False
                 session.commit()
@@ -899,6 +828,9 @@ class ParallelOrchestrator:
             self.on_status(feature_id, status)
         # CRITICAL: This print triggers the WebSocket to emit agent_update with state='error' or 'success'
         print(f"Feature #{feature_id} {status}", flush=True)
+
+        # Signal main loop that an agent slot is available
+        self._signal_agent_completed()
 
         # NOTE: Testing agents are now spawned in start_feature() when coding agents START,
         # not here when they complete. This ensures 1:1 ratio and proper termination.
@@ -934,13 +866,12 @@ class ParallelOrchestrator:
         for fid in feature_ids:
             self.stop_feature(fid)
 
-        # Stop testing agents
+        # Stop testing agents (no claim to release - concurrent testing is allowed)
         with self._lock:
             testing_items = list(self.running_testing_agents.items())
 
         for feature_id, proc in testing_items:
             result = kill_process_tree(proc, timeout=5.0)
-            self.release_testing_claim(feature_id)
             debug_log.log("STOP", f"Killed testing agent for feature #{feature_id} (PID {proc.pid})",
                 status=result.status, children_found=result.children_found,
                 children_terminated=result.children_terminated, children_killed=result.children_killed)
@@ -949,25 +880,18 @@ class ParallelOrchestrator:
         """Main orchestration loop."""
         self.is_running = True
 
+        # Initialize the agent completion event for this run
+        # Must be created in the async context where it will be used
+        self._agent_completed_event = asyncio.Event()
+        # Store the event loop reference for thread-safe signaling from output reader threads
+        self._event_loop = asyncio.get_running_loop()
+
         # Track session start for regression testing (UTC for consistency with last_tested_at)
         self.session_start_time = datetime.now(timezone.utc)
 
         # Start debug logging session FIRST (clears previous logs)
         # Must happen before any debug_log.log() calls
         debug_log.start_session()
-
-        # Clear stale testing_in_progress flags from crashed testing agents
-        # This ensures features aren't permanently locked if a previous session crashed
-        session = self.get_session()
-        try:
-            stale_count = session.query(Feature).filter(Feature.testing_in_progress == True).count()
-            if stale_count > 0:
-                session.execute(text("UPDATE features SET testing_in_progress = 0 WHERE testing_in_progress = 1"))
-                session.commit()
-                print(f"[STARTUP] Cleared {stale_count} stale testing_in_progress flags", flush=True)
-                debug_log.log("STARTUP", f"Cleared {stale_count} stale testing_in_progress flags")
-        finally:
-            session.close()
 
         # Log startup to debug file
         debug_log.section("ORCHESTRATOR STARTUP")
@@ -1100,8 +1024,8 @@ class ParallelOrchestrator:
                     at_capacity=(current >= self.max_concurrency))
 
                 if current >= self.max_concurrency:
-                    debug_log.log("CAPACITY", "At max capacity, sleeping...")
-                    await asyncio.sleep(POLL_INTERVAL)
+                    debug_log.log("CAPACITY", "At max capacity, waiting for agent completion...")
+                    await self._wait_for_agent_completion()
                     continue
 
                 # Priority 1: Resume features from previous session
@@ -1119,7 +1043,7 @@ class ParallelOrchestrator:
                 if not ready:
                     # Wait for running features to complete
                     if current > 0:
-                        await asyncio.sleep(POLL_INTERVAL)
+                        await self._wait_for_agent_completion()
                         continue
                     else:
                         # No ready features and nothing running
@@ -1138,7 +1062,7 @@ class ParallelOrchestrator:
 
                         # Still have pending features but all are blocked by dependencies
                         print("No ready features available. All remaining features may be blocked by dependencies.", flush=True)
-                        await asyncio.sleep(POLL_INTERVAL * 2)
+                        await self._wait_for_agent_completion(timeout=POLL_INTERVAL * 2)
                         continue
 
                 # Start features up to capacity
@@ -1174,7 +1098,7 @@ class ParallelOrchestrator:
 
             except Exception as e:
                 print(f"Orchestrator error: {e}", flush=True)
-                await asyncio.sleep(POLL_INTERVAL)
+                await self._wait_for_agent_completion()
 
         # Wait for remaining agents to complete
         print("Waiting for running agents to complete...", flush=True)
@@ -1184,7 +1108,8 @@ class ParallelOrchestrator:
                 testing_done = len(self.running_testing_agents) == 0
                 if coding_done and testing_done:
                     break
-            await asyncio.sleep(1)
+            # Use short timeout since we're just waiting for final agents to finish
+            await self._wait_for_agent_completion(timeout=1.0)
 
         print("Orchestrator finished.", flush=True)
 

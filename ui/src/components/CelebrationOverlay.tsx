@@ -4,7 +4,7 @@ import { AgentAvatar } from './AgentAvatar'
 import type { AgentMascot } from '../lib/types'
 
 interface CelebrationOverlayProps {
-  agentName: AgentMascot
+  agentName: AgentMascot | 'Unknown'
   featureName: string
   onComplete?: () => void
 }

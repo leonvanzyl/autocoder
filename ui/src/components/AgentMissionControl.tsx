@@ -2,12 +2,14 @@ import { Rocket, ChevronDown, ChevronUp, Activity } from 'lucide-react'
 import { useState } from 'react'
 import { AgentCard, AgentLogModal } from './AgentCard'
 import { ActivityFeed } from './ActivityFeed'
-import type { ActiveAgent, AgentLogEntry } from '../lib/types'
+import { OrchestratorStatusCard } from './OrchestratorStatusCard'
+import type { ActiveAgent, AgentLogEntry, OrchestratorStatus } from '../lib/types'
 
 const ACTIVITY_COLLAPSED_KEY = 'autocoder-activity-collapsed'
 
 interface AgentMissionControlProps {
   agents: ActiveAgent[]
+  orchestratorStatus: OrchestratorStatus | null
   recentActivity: Array<{
     agentName: string
     thought: string
@@ -20,6 +22,7 @@ interface AgentMissionControlProps {
 
 export function AgentMissionControl({
   agents,
+  orchestratorStatus,
   recentActivity,
   isExpanded: defaultExpanded = true,
   getAgentLogs,
@@ -45,8 +48,8 @@ export function AgentMissionControl({
     }
   }
 
-  // Don't render if no agents
-  if (agents.length === 0) {
+  // Don't render if no orchestrator status and no agents
+  if (!orchestratorStatus && agents.length === 0) {
     return null
   }
 
@@ -63,7 +66,14 @@ export function AgentMissionControl({
             Mission Control
           </span>
           <span className="neo-badge neo-badge-sm bg-white text-neo-text ml-2">
-            {agents.length} {agents.length === 1 ? 'agent' : 'agents'} active
+            {agents.length > 0
+              ? `${agents.length} ${agents.length === 1 ? 'agent' : 'agents'} active`
+              : orchestratorStatus?.state === 'initializing'
+                ? 'Initializing'
+                : orchestratorStatus?.state === 'complete'
+                  ? 'Complete'
+                  : 'Orchestrating'
+            }
           </span>
         </div>
         {isExpanded ? (
@@ -77,25 +87,32 @@ export function AgentMissionControl({
       <div
         className={`
           transition-all duration-300 ease-out overflow-hidden
-          ${isExpanded ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'}
+          ${isExpanded ? 'max-h-[600px] opacity-100' : 'max-h-0 opacity-0'}
         `}
       >
         <div className="p-4">
+          {/* Orchestrator Status Card */}
+          {orchestratorStatus && (
+            <OrchestratorStatusCard status={orchestratorStatus} />
+          )}
+
           {/* Agent Cards Row */}
-          <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-thin">
-            {agents.map((agent) => (
-              <AgentCard
-                key={`agent-${agent.agentIndex}`}
-                agent={agent}
-                onShowLogs={(agentIndex) => {
-                  const agentToShow = agents.find(a => a.agentIndex === agentIndex)
-                  if (agentToShow) {
-                    setSelectedAgentForLogs(agentToShow)
-                  }
-                }}
-              />
-            ))}
-          </div>
+          {agents.length > 0 && (
+            <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-thin">
+              {agents.map((agent) => (
+                <AgentCard
+                  key={`agent-${agent.agentIndex}`}
+                  agent={agent}
+                  onShowLogs={(agentIndex) => {
+                    const agentToShow = agents.find(a => a.agentIndex === agentIndex)
+                    if (agentToShow) {
+                      setSelectedAgentForLogs(agentToShow)
+                    }
+                  }}
+                />
+              ))}
+            </div>
+          )}
 
           {/* Collapsible Activity Feed */}
           {recentActivity.length > 0 && (

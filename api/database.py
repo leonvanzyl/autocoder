@@ -39,6 +39,7 @@ from sqlalchemy import (
     Column,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
@@ -57,6 +58,12 @@ class Feature(Base):
 
     __tablename__ = "features"
 
+    # Composite index for common status query pattern (passes, in_progress)
+    # Used by feature_get_stats, get_ready_features, and other status queries
+    __table_args__ = (
+        Index('ix_feature_status', 'passes', 'in_progress'),
+    )
+
     id = Column(Integer, primary_key=True, index=True)
     priority = Column(Integer, nullable=False, default=999, index=True)
     category = Column(String(100), nullable=False)
@@ -68,10 +75,6 @@ class Feature(Base):
     # Dependencies: list of feature IDs that must be completed before this feature
     # NULL/empty = no dependencies (backwards compatible)
     dependencies = Column(JSON, nullable=True, default=None)
-    # Regression testing: prevent concurrent testing of the same feature
-    testing_in_progress = Column(Boolean, nullable=False, default=False, index=True)
-    # Last time this feature was tested (for session-based regression tracking)
-    last_tested_at = Column(DateTime, nullable=True, default=None)
 
     def to_dict(self) -> dict:
         """Convert feature to dictionary for JSON serialization."""
@@ -87,9 +90,6 @@ class Feature(Base):
             "in_progress": self.in_progress if self.in_progress is not None else False,
             # Dependencies: NULL/empty treated as empty list for backwards compat
             "dependencies": self.dependencies if self.dependencies else [],
-            # Regression testing fields
-            "testing_in_progress": self.testing_in_progress if self.testing_in_progress is not None else False,
-            "last_tested_at": self.last_tested_at.isoformat() if self.last_tested_at else None,
         }
 
     def get_dependencies_safe(self) -> list[int]:
@@ -427,23 +427,18 @@ def _migrate_add_dependencies_column(engine) -> None:
 
 
 def _migrate_add_testing_columns(engine) -> None:
-    """Add testing_in_progress and last_tested_at columns for regression testing.
+    """Legacy migration - no longer adds testing columns.
 
-    These columns support atomic claiming of features for regression testing
-    and tracking when features were last tested in a session.
+    The testing_in_progress and last_tested_at columns were removed from the
+    Feature model as part of simplifying the testing agent architecture.
+    Multiple testing agents can now test the same feature concurrently
+    without coordination.
+
+    This function is kept for backwards compatibility but does nothing.
+    Existing databases with these columns will continue to work - the columns
+    are simply ignored.
     """
-    with engine.connect() as conn:
-        # Check existing columns
-        result = conn.execute(text("PRAGMA table_info(features)"))
-        columns = [row[1] for row in result.fetchall()]
-
-        if "testing_in_progress" not in columns:
-            conn.execute(text("ALTER TABLE features ADD COLUMN testing_in_progress BOOLEAN DEFAULT 0"))
-            conn.commit()
-
-        if "last_tested_at" not in columns:
-            conn.execute(text("ALTER TABLE features ADD COLUMN last_tested_at DATETIME DEFAULT NULL"))
-            conn.commit()
+    pass
 
 
 def _is_network_path(path: Path) -> bool:

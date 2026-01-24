@@ -6,6 +6,7 @@ Provides dependency resolution using Kahn's algorithm for topological sorting.
 Includes cycle detection, validation, and helper functions for dependency management.
 """
 
+import heapq
 from typing import TypedDict
 
 # Security: Prevent DoS via excessive dependencies
@@ -55,19 +56,27 @@ def resolve_dependencies(features: list[dict]) -> DependencyResult:
                 if not dep.get("passes"):
                     blocked.setdefault(feature["id"], []).append(dep_id)
 
-    # Kahn's algorithm with priority-aware selection
-    queue = [f for f in features if in_degree[f["id"]] == 0]
-    queue.sort(key=lambda f: (f.get("priority", 999), f["id"]))
+    # Kahn's algorithm with priority-aware selection using a heap
+    # Heap entries are tuples: (priority, id, feature_dict) for stable ordering
+    heap = [
+        (f.get("priority", 999), f["id"], f)
+        for f in features
+        if in_degree[f["id"]] == 0
+    ]
+    heapq.heapify(heap)
     ordered: list[dict] = []
 
-    while queue:
-        current = queue.pop(0)
+    while heap:
+        _, _, current = heapq.heappop(heap)
         ordered.append(current)
         for dependent_id in adjacency[current["id"]]:
             in_degree[dependent_id] -= 1
             if in_degree[dependent_id] == 0:
-                queue.append(feature_map[dependent_id])
-                queue.sort(key=lambda f: (f.get("priority", 999), f["id"]))
+                dep_feature = feature_map[dependent_id]
+                heapq.heappush(
+                    heap,
+                    (dep_feature.get("priority", 999), dependent_id, dep_feature)
+                )
 
     # Detect cycles (features not in ordered = part of cycle)
     cycles: list[list[int]] = []
@@ -84,12 +93,19 @@ def resolve_dependencies(features: list[dict]) -> DependencyResult:
     }
 
 
-def are_dependencies_satisfied(feature: dict, all_features: list[dict]) -> bool:
+def are_dependencies_satisfied(
+    feature: dict,
+    all_features: list[dict],
+    passing_ids: set[int] | None = None,
+) -> bool:
     """Check if all dependencies have passes=True.
 
     Args:
         feature: Feature dict to check
         all_features: List of all feature dicts
+        passing_ids: Optional pre-computed set of passing feature IDs.
+            If None, will be computed from all_features. Pass this when
+            calling in a loop to avoid O(n^2) complexity.
 
     Returns:
         True if all dependencies are satisfied (or no dependencies)
@@ -97,22 +113,31 @@ def are_dependencies_satisfied(feature: dict, all_features: list[dict]) -> bool:
     deps = feature.get("dependencies") or []
     if not deps:
         return True
-    passing_ids = {f["id"] for f in all_features if f.get("passes")}
+    if passing_ids is None:
+        passing_ids = {f["id"] for f in all_features if f.get("passes")}
     return all(dep_id in passing_ids for dep_id in deps)
 
 
-def get_blocking_dependencies(feature: dict, all_features: list[dict]) -> list[int]:
+def get_blocking_dependencies(
+    feature: dict,
+    all_features: list[dict],
+    passing_ids: set[int] | None = None,
+) -> list[int]:
     """Get list of incomplete dependency IDs.
 
     Args:
         feature: Feature dict to check
         all_features: List of all feature dicts
+        passing_ids: Optional pre-computed set of passing feature IDs.
+            If None, will be computed from all_features. Pass this when
+            calling in a loop to avoid O(n^2) complexity.
 
     Returns:
         List of feature IDs that are blocking this feature
     """
     deps = feature.get("dependencies") or []
-    passing_ids = {f["id"] for f in all_features if f.get("passes")}
+    if passing_ids is None:
+        passing_ids = {f["id"] for f in all_features if f.get("passes")}
     return [dep_id for dep_id in deps if dep_id not in passing_ids]
 
 

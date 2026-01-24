@@ -10,6 +10,8 @@ import type {
   ActiveAgent,
   AgentMascot,
   AgentLogEntry,
+  OrchestratorStatus,
+  OrchestratorEvent,
 } from '../lib/types'
 
 // Activity item for the feed
@@ -22,7 +24,7 @@ interface ActivityItem {
 
 // Celebration trigger for overlay
 interface CelebrationTrigger {
-  agentName: AgentMascot
+  agentName: AgentMascot | 'Unknown'
   featureName: string
   featureId: number
 }
@@ -48,6 +50,8 @@ interface WebSocketState {
   // Celebration queue to handle rapid successes without race conditions
   celebrationQueue: CelebrationTrigger[]
   celebration: CelebrationTrigger | null
+  // Orchestrator state for Mission Control
+  orchestratorStatus: OrchestratorStatus | null
 }
 
 const MAX_LOGS = 100 // Keep last 100 log lines
@@ -68,6 +72,7 @@ export function useProjectWebSocket(projectName: string | null) {
     agentLogs: new Map(),
     celebrationQueue: [],
     celebration: null,
+    orchestratorStatus: null,
   })
 
   const wsRef = useRef<WebSocket | null>(null)
@@ -112,8 +117,12 @@ export function useProjectWebSocket(projectName: string | null) {
               setState(prev => ({
                 ...prev,
                 agentStatus: message.status,
-                // Clear active agents when process stops OR crashes to prevent stale UI
-                ...((message.status === 'stopped' || message.status === 'crashed') && { activeAgents: [], recentActivity: [] }),
+                // Clear active agents and orchestrator status when process stops OR crashes to prevent stale UI
+                ...((message.status === 'stopped' || message.status === 'crashed') && {
+                  activeAgents: [],
+                  recentActivity: [],
+                  orchestratorStatus: null,
+                }),
               }))
               break
 
@@ -181,9 +190,18 @@ export function useProjectWebSocket(projectName: string | null) {
                 if (message.state === 'success' || message.state === 'error') {
                   // Remove agent from active list on completion (success or failure)
                   // But keep the logs in agentLogs map for debugging
-                  newAgents = prev.activeAgents.filter(
-                    a => a.agentIndex !== message.agentIndex
-                  )
+                  if (message.agentIndex === -1) {
+                    // Synthetic completion: remove by featureId
+                    // This handles agents that weren't tracked but still completed
+                    newAgents = prev.activeAgents.filter(
+                      a => a.featureId !== message.featureId
+                    )
+                  } else {
+                    // Normal completion: remove by agentIndex
+                    newAgents = prev.activeAgents.filter(
+                      a => a.agentIndex !== message.agentIndex
+                    )
+                  }
                 } else if (existingAgentIdx >= 0) {
                   // Update existing agent
                   newAgents = [...prev.activeAgents]
@@ -257,6 +275,33 @@ export function useProjectWebSocket(projectName: string | null) {
                   recentActivity: newActivity,
                   celebrationQueue: newCelebrationQueue,
                   celebration: newCelebration,
+                }
+              })
+              break
+
+            case 'orchestrator_update':
+              setState(prev => {
+                const newEvent: OrchestratorEvent = {
+                  eventType: message.eventType,
+                  message: message.message,
+                  timestamp: message.timestamp,
+                  featureId: message.featureId,
+                  featureName: message.featureName,
+                }
+
+                return {
+                  ...prev,
+                  orchestratorStatus: {
+                    state: message.state,
+                    message: message.message,
+                    codingAgents: message.codingAgents ?? prev.orchestratorStatus?.codingAgents ?? 0,
+                    testingAgents: message.testingAgents ?? prev.orchestratorStatus?.testingAgents ?? 0,
+                    maxConcurrency: message.maxConcurrency ?? prev.orchestratorStatus?.maxConcurrency ?? 3,
+                    readyCount: message.readyCount ?? prev.orchestratorStatus?.readyCount ?? 0,
+                    blockedCount: message.blockedCount ?? prev.orchestratorStatus?.blockedCount ?? 0,
+                    timestamp: message.timestamp,
+                    recentEvents: [newEvent, ...(prev.orchestratorStatus?.recentEvents ?? []).slice(0, 4)],
+                  },
                 }
               })
               break
@@ -346,6 +391,7 @@ export function useProjectWebSocket(projectName: string | null) {
       agentLogs: new Map(),
       celebrationQueue: [],
       celebration: null,
+      orchestratorStatus: null,
     })
 
     if (!projectName) {
@@ -373,6 +419,27 @@ export function useProjectWebSocket(projectName: string | null) {
       }
     }
   }, [projectName, connect, sendPing])
+
+  // Defense-in-depth: cleanup stale agents for users who leave UI open for hours
+  // This catches edge cases where completion messages are missed
+  useEffect(() => {
+    const STALE_THRESHOLD_MS = 30 * 60 * 1000 // 30 minutes
+
+    const cleanup = setInterval(() => {
+      setState(prev => {
+        const now = Date.now()
+        const fresh = prev.activeAgents.filter(a =>
+          now - new Date(a.timestamp).getTime() < STALE_THRESHOLD_MS
+        )
+        if (fresh.length !== prev.activeAgents.length) {
+          return { ...prev, activeAgents: fresh }
+        }
+        return prev
+      })
+    }, 60000) // Check every minute
+
+    return () => clearInterval(cleanup)
+  }, [])
 
   // Clear logs function
   const clearLogs = useCallback(() => {

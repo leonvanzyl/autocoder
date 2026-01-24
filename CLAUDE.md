@@ -169,19 +169,99 @@ Projects can be stored in any directory (registered in `~/.autocoder/registry.db
 - `prompts/coding_prompt.md` - Continuation session prompt
 - `features.db` - SQLite database with feature test cases
 - `.agent.lock` - Lock file to prevent multiple agent instances
+- `.autocoder/allowed_commands.yaml` - Project-specific bash command allowlist (optional)
 
 ### Security Model
 
 Defense-in-depth approach configured in `client.py`:
 1. OS-level sandbox for bash commands
 2. Filesystem restricted to project directory only
-3. Bash commands validated against `ALLOWED_COMMANDS` in `security.py`
+3. Bash commands validated using hierarchical allowlist system
+
+#### Per-Project Allowed Commands
+
+The agent's bash command access is controlled through a hierarchical configuration system:
+
+**Command Hierarchy (highest to lowest priority):**
+1. **Hardcoded Blocklist** (`security.py`) - NEVER allowed (dd, sudo, shutdown, etc.)
+2. **Org Blocklist** (`~/.autocoder/config.yaml`) - Cannot be overridden by projects
+3. **Org Allowlist** (`~/.autocoder/config.yaml`) - Available to all projects
+4. **Global Allowlist** (`security.py`) - Default commands (npm, git, curl, etc.)
+5. **Project Allowlist** (`.autocoder/allowed_commands.yaml`) - Project-specific commands
+
+**Project Configuration:**
+
+Each project can define custom allowed commands in `.autocoder/allowed_commands.yaml`:
+
+```yaml
+version: 1
+commands:
+  # Exact command names
+  - name: swift
+    description: Swift compiler
+
+  # Prefix wildcards (matches swiftc, swiftlint, swiftformat)
+  - name: swift*
+    description: All Swift development tools
+
+  # Local project scripts
+  - name: ./scripts/build.sh
+    description: Project build script
+```
+
+**Organization Configuration:**
+
+System administrators can set org-wide policies in `~/.autocoder/config.yaml`:
+
+```yaml
+version: 1
+
+# Commands available to ALL projects
+allowed_commands:
+  - name: jq
+    description: JSON processor
+
+# Commands blocked across ALL projects (cannot be overridden)
+blocked_commands:
+  - aws        # Prevent accidental cloud operations
+  - kubectl    # Block production deployments
+```
+
+**Pattern Matching:**
+- Exact: `swift` matches only `swift`
+- Wildcard: `swift*` matches `swift`, `swiftc`, `swiftlint`, etc.
+- Scripts: `./scripts/build.sh` matches the script by name from any directory
+
+**Limits:**
+- Maximum 100 commands per project config
+- Blocklisted commands (sudo, dd, shutdown, etc.) can NEVER be allowed
+- Org-level blocked commands cannot be overridden by project configs
+
+**Testing:**
+```bash
+# Unit tests (136 tests - fast)
+python test_security.py
+
+# Integration tests (9 tests - uses real hooks)
+python test_security_integration.py
+```
+
+**Files:**
+- `security.py` - Command validation logic and hardcoded blocklist
+- `test_security.py` - Unit tests for security system (136 tests)
+- `test_security_integration.py` - Integration tests with real hooks (9 tests)
+- `TEST_SECURITY.md` - Quick testing reference guide
+- `examples/project_allowed_commands.yaml` - Project config example (all commented by default)
+- `examples/org_config.yaml` - Org config example (all commented by default)
+- `examples/README.md` - Comprehensive guide with use cases, testing, and troubleshooting
+- `PHASE3_SPEC.md` - Specification for mid-session approval feature (future enhancement)
 
 ## Claude Code Integration
 
 - `.claude/commands/create-spec.md` - `/create-spec` slash command for interactive spec creation
 - `.claude/skills/frontend-design/SKILL.md` - Skill for distinctive UI design
 - `.claude/templates/` - Prompt templates copied to new projects
+- `examples/` - Configuration examples and documentation for security settings
 
 ## Key Patterns
 
