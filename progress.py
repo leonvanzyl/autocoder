@@ -72,15 +72,31 @@ def count_passing_tests(project_dir: Path) -> tuple[int, int, int]:
     try:
         conn = sqlite3.connect(db_file)
         cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM features")
-        total = cursor.fetchone()[0]
-        cursor.execute("SELECT COUNT(*) FROM features WHERE passes = 1")
-        passing = cursor.fetchone()[0]
-        # Handle case where in_progress column doesn't exist yet
+        # Single aggregate query instead of 3 separate COUNT queries
+        # Handle case where in_progress column doesn't exist yet (legacy DBs)
         try:
-            cursor.execute("SELECT COUNT(*) FROM features WHERE in_progress = 1")
-            in_progress = cursor.fetchone()[0]
+            cursor.execute("""
+                SELECT
+                    COUNT(*) as total,
+                    SUM(CASE WHEN passes = 1 THEN 1 ELSE 0 END) as passing,
+                    SUM(CASE WHEN in_progress = 1 THEN 1 ELSE 0 END) as in_progress
+                FROM features
+            """)
+            row = cursor.fetchone()
+            total = row[0] or 0
+            passing = row[1] or 0
+            in_progress = row[2] or 0
         except sqlite3.OperationalError:
+            # Fallback for databases without in_progress column
+            cursor.execute("""
+                SELECT
+                    COUNT(*) as total,
+                    SUM(CASE WHEN passes = 1 THEN 1 ELSE 0 END) as passing
+                FROM features
+            """)
+            row = cursor.fetchone()
+            total = row[0] or 0
+            passing = row[1] or 0
             in_progress = 0
         conn.close()
         return passing, in_progress, total

@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 
 from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
-from claude_agent_sdk.types import HookMatcher
+from claude_agent_sdk.types import HookContext, HookInput, HookMatcher, SyncHookJSONOutput
 from dotenv import load_dotenv
 
 from security import bash_security_hook
@@ -55,7 +55,9 @@ FEATURE_MCP_TOOLS = [
     # Core feature operations
     "mcp__features__feature_get_stats",
     "mcp__features__feature_get_by_id",  # Get assigned feature details
+    "mcp__features__feature_get_summary",  # Lightweight: id, name, status, deps only
     "mcp__features__feature_mark_in_progress",
+    "mcp__features__feature_claim_and_get",  # Atomic claim + get details
     "mcp__features__feature_mark_passing",
     "mcp__features__feature_mark_failing",  # Mark regression detected
     "mcp__features__feature_skip",
@@ -260,6 +262,53 @@ def create_client(
         if "ANTHROPIC_BASE_URL" in sdk_env:
             print(f"   - GLM Mode: Using {sdk_env['ANTHROPIC_BASE_URL']}")
 
+    # Create a wrapper for bash_security_hook that passes project_dir via context
+    async def bash_hook_with_context(input_data, tool_use_id=None, context=None):
+        """Wrapper that injects project_dir into context for security hook."""
+        if context is None:
+            context = {}
+        context["project_dir"] = str(project_dir.resolve())
+        return await bash_security_hook(input_data, tool_use_id, context)
+
+    # PreCompact hook for logging and customizing context compaction
+    # Compaction is handled automatically by Claude Code CLI when context approaches limits.
+    # This hook allows us to log when compaction occurs and optionally provide custom instructions.
+    async def pre_compact_hook(
+        input_data: HookInput,
+        tool_use_id: str | None,
+        context: HookContext,
+    ) -> SyncHookJSONOutput:
+        """
+        Hook called before context compaction occurs.
+
+        Compaction triggers:
+        - "auto": Automatic compaction when context approaches token limits
+        - "manual": User-initiated compaction via /compact command
+
+        The hook can customize compaction via hookSpecificOutput:
+        - customInstructions: String with focus areas for summarization
+        """
+        trigger = input_data.get("trigger", "auto")
+        custom_instructions = input_data.get("custom_instructions")
+
+        if trigger == "auto":
+            print("[Context] Auto-compaction triggered (context approaching limit)")
+        else:
+            print("[Context] Manual compaction requested")
+
+        if custom_instructions:
+            print(f"[Context] Custom instructions: {custom_instructions}")
+
+        # Return empty dict to allow compaction to proceed with default behavior
+        # To customize, return:
+        # {
+        #     "hookSpecificOutput": {
+        #         "hookEventName": "PreCompact",
+        #         "customInstructions": "Focus on preserving file paths and test results"
+        #     }
+        # }
+        return SyncHookJSONOutput()
+
     return ClaudeSDKClient(
         options=ClaudeAgentOptions(
             model=model,
@@ -271,12 +320,37 @@ def create_client(
             mcp_servers=mcp_servers,
             hooks={
                 "PreToolUse": [
-                    HookMatcher(matcher="Bash", hooks=[bash_security_hook]),
+                    HookMatcher(matcher="Bash", hooks=[bash_hook_with_context]),
+                ],
+                # PreCompact hook for context management during long sessions.
+                # Compaction is automatic when context approaches token limits.
+                # This hook logs compaction events and can customize summarization.
+                "PreCompact": [
+                    HookMatcher(hooks=[pre_compact_hook]),
                 ],
             },
             max_turns=1000,
             cwd=str(project_dir.resolve()),
             settings=str(settings_file.resolve()),  # Use absolute path
             env=sdk_env,  # Pass API configuration overrides to CLI subprocess
+            # Enable extended context beta for better handling of long sessions.
+            # This provides up to 1M tokens of context with automatic compaction.
+            # See: https://docs.anthropic.com/en/api/beta-headers
+            betas=["context-1m-2025-08-07"],
+            # Note on context management:
+            # The Claude Agent SDK handles context management automatically through the
+            # underlying Claude Code CLI. When context approaches limits, the CLI
+            # automatically compacts/summarizes previous messages.
+            #
+            # The SDK does NOT expose explicit compaction_control or context_management
+            # parameters. Instead, context is managed via:
+            # 1. betas=["context-1m-2025-08-07"] - Extended context window
+            # 2. PreCompact hook - Intercept and customize compaction behavior
+            # 3. max_turns - Limit conversation turns (set to 1000 for long sessions)
+            #
+            # Future SDK versions may add explicit compaction controls. When available,
+            # consider adding:
+            # - compaction_control={"enabled": True, "context_token_threshold": 80000}
+            # - context_management={"edits": [...]} for tool use clearing
         )
     )

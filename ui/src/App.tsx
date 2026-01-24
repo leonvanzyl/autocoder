@@ -348,14 +348,13 @@ function App() {
               isConnected={wsState.isConnected}
             />
 
-            {/* Agent Mission Control - shows active agents in parallel mode */}
-            {wsState.activeAgents.length > 0 && (
-              <AgentMissionControl
-                agents={wsState.activeAgents}
-                recentActivity={wsState.recentActivity}
-                getAgentLogs={wsState.getAgentLogs}
-              />
-            )}
+            {/* Agent Mission Control - shows orchestrator status and active agents in parallel mode */}
+            <AgentMissionControl
+              agents={wsState.activeAgents}
+              orchestratorStatus={wsState.orchestratorStatus}
+              recentActivity={wsState.recentActivity}
+              getAgentLogs={wsState.getAgentLogs}
+            />
 
             {/* Agent Thought - shows latest agent narrative (single agent mode) */}
             {wsState.activeAgents.length === 0 && (

@@ -961,6 +961,67 @@
 }
 
 /* ============================================================================
+   Orchestrator (Maestro) Animations
+   ============================================================================ */
+
+@keyframes conducting {
+  0%, 100% {
+    transform: rotate(-10deg);
+  }
+  25% {
+    transform: rotate(5deg);
+  }
+  50% {
+    transform: rotate(-5deg);
+  }
+  75% {
+    transform: rotate(10deg);
+  }
+}
+
+@keyframes baton-tap {
+  0%, 100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  25% {
+    transform: translateY(-3px) rotate(-2deg);
+  }
+  50% {
+    transform: translateY(0) rotate(0deg);
+  }
+  75% {
+    transform: translateY(-3px) rotate(2deg);
+  }
+}
+
+@keyframes maestro-idle {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-2px);
+  }
+}
+
+@keyframes maestro-complete {
+  0% {
+    transform: scale(1) rotate(0deg);
+  }
+  25% {
+    transform: scale(1.05) rotate(-3deg);
+  }
+  50% {
+    transform: scale(1.1) rotate(0deg);
+  }
+  75% {
+    transform: scale(1.05) rotate(3deg);
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+/* ============================================================================
    Utilities Layer
    ============================================================================ */
 
@@ -1088,6 +1149,23 @@
 
   .animate-confetti {
     animation: confetti 2s ease-out forwards;
+  }
+
+  /* Orchestrator (Maestro) animation utilities */
+  .animate-conducting {
+    animation: conducting 1s ease-in-out infinite;
+  }
+
+  .animate-baton-tap {
+    animation: baton-tap 0.6s ease-in-out infinite;
+  }
+
+  .animate-maestro-idle {
+    animation: maestro-idle 2s ease-in-out infinite;
+  }
+
+  .animate-maestro-complete {
+    animation: maestro-complete 0.8s ease-in-out;
   }
 }
 

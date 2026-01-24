@@ -1,11 +1,14 @@
 import { type AgentMascot, type AgentState } from '../lib/types'
 
 interface AgentAvatarProps {
-  name: AgentMascot
+  name: AgentMascot | 'Unknown'
   state: AgentState
   size?: 'sm' | 'md' | 'lg'
   showName?: boolean
 }
+
+// Fallback colors for unknown agents (neutral gray)
+const UNKNOWN_COLORS = { primary: '#6B7280', secondary: '#9CA3AF', accent: '#F3F4F6' }
 
 const AVATAR_COLORS: Record<AgentMascot, { primary: string; secondary: string; accent: string }> = {
   // Original 5
@@ -473,6 +476,19 @@ function FluxSVG({ colors, size }: { colors: typeof AVATAR_COLORS.Flux; size: nu
   )
 }
 
+// Unknown agent fallback - simple question mark icon
+function UnknownSVG({ colors, size }: { colors: typeof UNKNOWN_COLORS; size: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+      {/* Circle background */}
+      <circle cx="32" cy="32" r="28" fill={colors.primary} />
+      <circle cx="32" cy="32" r="24" fill={colors.secondary} />
+      {/* Question mark */}
+      <text x="32" y="44" textAnchor="middle" fontSize="32" fontWeight="bold" fill="white">?</text>
+    </svg>
+  )
+}
+
 const MASCOT_SVGS: Record<AgentMascot, typeof SparkSVG> = {
   // Original 5
   Spark: SparkSVG,
@@ -561,9 +577,11 @@ function getStateDescription(state: AgentState): string {
 }
 
 export function AgentAvatar({ name, state, size = 'md', showName = false }: AgentAvatarProps) {
-  const colors = AVATAR_COLORS[name]
+  // Handle 'Unknown' agents (synthetic completions from untracked agents)
+  const isUnknown = name === 'Unknown'
+  const colors = isUnknown ? UNKNOWN_COLORS : AVATAR_COLORS[name]
   const { svg: svgSize, font } = SIZES[size]
-  const SvgComponent = MASCOT_SVGS[name]
+  const SvgComponent = isUnknown ? UnknownSVG : MASCOT_SVGS[name]
   const stateDesc = getStateDescription(state)
   const ariaLabel = `Agent ${name} is ${stateDesc}`
 

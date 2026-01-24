@@ -93,12 +93,11 @@ def get_testing_prompt(project_dir: Path | None = None, testing_feature_id: int 
 
 **You are assigned to regression test Feature #{testing_feature_id}.**
 
-The orchestrator has already claimed this feature for you.
-
 ### Your workflow:
 1. Call `feature_get_by_id` with ID {testing_feature_id} to get the feature details
 2. Verify the feature through the UI using browser automation
-3. When done, call `feature_release_testing` with feature_id={testing_feature_id}
+3. If regression found, call `feature_mark_failing` with feature_id={testing_feature_id}
+4. Exit when done (no cleanup needed)
 
 ---
 
@@ -109,11 +108,11 @@ The orchestrator has already claimed this feature for you.
 
 
 def get_single_feature_prompt(feature_id: int, project_dir: Path | None = None, yolo_mode: bool = False) -> str:
-    """
-    Load the coding prompt with single-feature focus instructions prepended.
+    """Prepend single-feature assignment header to base coding prompt.
 
-    When the orchestrator assigns a specific feature to a coding agent,
-    this prompt ensures the agent works ONLY on that feature.
+    Used in parallel mode to assign a specific feature to an agent.
+    The base prompt already contains the full workflow - this just
+    identifies which feature to work on.
 
     Args:
         feature_id: The specific feature ID to work on
@@ -122,38 +121,20 @@ def get_single_feature_prompt(feature_id: int, project_dir: Path | None = None, 
                    handled by separate testing agents, not YOLO prompts.
 
     Returns:
-        The prompt with single-feature instructions prepended
+        The prompt with single-feature header prepended
     """
-    # Always use the standard coding prompt
-    # (Testing/regression is handled by separate testing agents)
     base_prompt = get_coding_prompt(project_dir)
 
-    # Prepend single-feature instructions
-    single_feature_header = f"""## ASSIGNED FEATURE
+    # Minimal header - the base prompt already contains the full workflow
+    single_feature_header = f"""## ASSIGNED FEATURE: #{feature_id}
 
-**You are assigned to work on Feature #{feature_id} ONLY.**
-
-This session is part of a parallel execution where multiple agents work on different features simultaneously.
-
-### Your workflow:
-
-1. **Get feature details** using `feature_get_by_id` with ID {feature_id}
-2. **Mark as in-progress** using `feature_mark_in_progress` with ID {feature_id}
-   - If you get "already in-progress" error, that's OK - continue with implementation
-3. **Implement the feature** following the steps from the feature details
-4. **Test your implementation** to verify it works correctly
-5. **Mark as passing** using `feature_mark_passing` with ID {feature_id}
-6. **Commit your changes** and end the session
-
-### Important rules:
-
-- **Do NOT** work on any other features - other agents are handling them
-- If blocked, use `feature_skip` and document the blocker in claude-progress.txt
+Work ONLY on this feature. Other agents are handling other features.
+Use `feature_claim_and_get` with ID {feature_id} to claim it and get details.
+If blocked, use `feature_skip` and document the blocker.
 
 ---
 
 """
-
     return single_feature_header + base_prompt
 
 
@@ -209,6 +190,10 @@ def scaffold_project_prompts(project_dir: Path) -> Path:
     project_prompts = get_project_prompts_dir(project_dir)
     project_prompts.mkdir(parents=True, exist_ok=True)
 
+    # Create .autocoder directory for configuration files
+    autocoder_dir = project_dir / ".autocoder"
+    autocoder_dir.mkdir(parents=True, exist_ok=True)
+
     # Define template mappings: (source_template, destination_name)
     templates = [
         ("app_spec.template.txt", "app_spec.txt"),
@@ -230,8 +215,19 @@ def scaffold_project_prompts(project_dir: Path) -> Path:
             except (OSError, PermissionError) as e:
                 print(f"  Warning: Could not copy {dest_name}: {e}")
 
+    # Copy allowed_commands.yaml template to .autocoder/
+    examples_dir = Path(__file__).parent / "examples"
+    allowed_commands_template = examples_dir / "project_allowed_commands.yaml"
+    allowed_commands_dest = autocoder_dir / "allowed_commands.yaml"
+    if allowed_commands_template.exists() and not allowed_commands_dest.exists():
+        try:
+            shutil.copy(allowed_commands_template, allowed_commands_dest)
+            copied_files.append(".autocoder/allowed_commands.yaml")
+        except (OSError, PermissionError) as e:
+            print(f"  Warning: Could not copy allowed_commands.yaml: {e}")
+
     if copied_files:
-        print(f"  Created prompt files: {', '.join(copied_files)}")
+        print(f"  Created project files: {', '.join(copied_files)}")
 
     return project_prompts
 

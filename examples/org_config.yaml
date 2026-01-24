@@ -1,0 +1,172 @@
+# Organization-Level AutoCoder Configuration
+# ============================================
+# Location: ~/.autocoder/config.yaml
+#
+# IMPORTANT: This file is OPTIONAL and must be manually created by you.
+# It does NOT exist by default.
+#
+# Org-level config applies to ALL projects and provides:
+#   1. Organization-wide allowed commands (available to all projects)
+#   2. Organization-wide blocked commands (cannot be overridden by projects)
+#   3. Global settings (approval timeout, etc.)
+#
+# Use this to:
+#   - Add commands that ALL your projects need (jq, python3, etc.)
+#   - Block dangerous commands across ALL projects (aws, kubectl, etc.)
+#   - Enforce organization-wide security policies
+
+version: 1
+
+
+# ==========================================
+# Organization-Wide Allowed Commands
+# ==========================================
+# These commands become available to ALL projects automatically.
+# Projects don't need to add them to their own .autocoder/allowed_commands.yaml
+#
+# By default, this is empty. Uncomment and add commands as needed.
+
+allowed_commands: []
+
+  # Common development utilities
+  # - name: jq
+  #   description: JSON processor for API responses
+
+  # - name: python3
+  #   description: Python 3 interpreter
+
+  # - name: pip3
+  #   description: Python package installer
+
+  # - name: pytest
+  #   description: Python testing framework
+
+  # - name: black
+  #   description: Python code formatter
+
+  # Database CLIs (if safe in your environment)
+  # - name: psql
+  #   description: PostgreSQL client
+
+  # - name: mysql
+  #   description: MySQL client
+
+
+# ==========================================
+# Organization-Wide Blocked Commands
+# ==========================================
+# Commands listed here are BLOCKED across ALL projects.
+# Projects CANNOT override these blocks - this is the final word.
+#
+# Use this to enforce security policies, such as:
+#   - Preventing accidental production deployments
+#   - Blocking cloud CLI tools to avoid infrastructure changes
+#   - Preventing access to production databases
+#
+# By default, this is empty. Uncomment commands you want to block.
+
+blocked_commands: []
+
+  # Block cloud CLIs to prevent accidental production changes
+  # - aws
+  # - gcloud
+  # - az
+
+  # Block container orchestration to prevent production deployments
+  # - kubectl
+  # - docker-compose
+
+  # Block infrastructure-as-code tools
+  # - terraform
+  # - pulumi
+
+  # Block database CLIs to prevent production data access
+  # - psql
+  # - mysql
+  # - mongosh
+
+  # Block other potentially dangerous tools
+  # - ansible
+  # - chef
+  # - puppet
+
+
+# ==========================================
+# Global Settings (Phase 3 feature)
+# ==========================================
+# These settings control approval behavior when agents request
+# commands that aren't in the allowlist.
+
+# How long to wait for user approval before denying a command request
+approval_timeout_minutes: 5
+
+
+# ==========================================
+# Command Hierarchy (for reference)
+# ==========================================
+# When the agent tries to run a bash command, the system checks in this order:
+#
+# 1. Hardcoded Blocklist (in security.py) - HIGHEST PRIORITY
+#    Commands like: sudo, dd, shutdown, reboot, etc.
+#    These can NEVER be allowed, even with user approval.
+#
+# 2. Org Blocked Commands (this file)
+#    Commands you specify in "blocked_commands:" above.
+#    Projects cannot override these.
+#
+# 3. Org Allowed Commands (this file)
+#    Commands you specify in "allowed_commands:" above.
+#    Available to all projects automatically.
+#
+# 4. Global Allowed Commands (in security.py)
+#    Default commands: npm, git, curl, ls, cat, etc.
+#    Always available to all projects.
+#
+# 5. Project Allowed Commands (.autocoder/allowed_commands.yaml)
+#    Project-specific commands defined in each project.
+#    LOWEST PRIORITY (can't override blocks above).
+#
+# If a command is in BOTH allowed and blocked lists, BLOCKED wins.
+
+
+# ==========================================
+# Example Configurations by Organization Type
+# ==========================================
+
+# Startup / Small Team (permissive):
+# allowed_commands:
+#   - name: python3
+#   - name: jq
+# blocked_commands: []  # Empty - rely on hardcoded blocklist only
+
+# Enterprise / Regulated (restrictive):
+# allowed_commands: []  # Empty - projects must explicitly request each tool
+# blocked_commands:
+#   - aws
+#   - gcloud
+#   - az
+#   - kubectl
+#   - terraform
+#   - psql
+#   - mysql
+#   - mongosh
+
+# Development Team (balanced):
+# allowed_commands:
+#   - name: jq
+#   - name: python3
+#   - name: pytest
+# blocked_commands:
+#   - aws      # Block production access
+#   - kubectl  # Block deployments
+#   - terraform
+
+
+# ==========================================
+# To Create This File
+# ==========================================
+# 1. Copy this example to: ~/.autocoder/config.yaml
+# 2. Uncomment and customize the sections you need
+# 3. Leave empty lists if you don't need org-level controls
+#
+# To learn more, see: examples/README.md

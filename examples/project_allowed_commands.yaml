@@ -1,0 +1,139 @@
+# Project-Specific Allowed Commands
+# ==================================
+# Location: {project_dir}/.autocoder/allowed_commands.yaml
+#
+# This file defines bash commands that the autonomous coding agent can use
+# for THIS SPECIFIC PROJECT, beyond the default allowed commands.
+#
+# When you create a new project, AutoCoder automatically creates this file
+# in your project's .autocoder/ directory. You can customize it for your
+# project's specific needs (iOS, Rust, Python, etc.).
+
+version: 1
+
+# Uncomment the commands you need for your specific project.
+# By default, this file has NO commands enabled - you must explicitly add them.
+
+commands: []
+
+  # ==========================================
+  # iOS Development Example
+  # ==========================================
+  # Uncomment these if building an iOS app:
+
+  # - name: xcodebuild
+  #   description: Xcode build system for compiling iOS apps
+
+  # - name: swift
+  #   description: Swift compiler and REPL
+
+  # - name: swiftc
+  #   description: Swift compiler command-line interface
+
+  # - name: xcrun
+  #   description: Run Xcode developer tools
+
+  # - name: simctl
+  #   description: iOS Simulator control tool
+
+  # Pattern matching with wildcard
+  # This matches: swift, swiftc, swiftformat, swiftlint, etc.
+  # - name: swift*
+  #   description: All Swift development tools
+
+
+  # ==========================================
+  # Rust Development Example
+  # ==========================================
+  # Uncomment these if building a Rust project:
+
+  # - name: cargo
+  #   description: Rust package manager and build tool
+
+  # - name: rustc
+  #   description: Rust compiler
+
+  # - name: rustfmt
+  #   description: Rust code formatter
+
+  # - name: clippy
+  #   description: Rust linter
+
+
+  # ==========================================
+  # Python Development Example
+  # ==========================================
+  # Uncomment these if building a Python project:
+
+  # - name: python3
+  #   description: Python 3 interpreter
+
+  # - name: pip3
+  #   description: Python package installer
+
+  # - name: pytest
+  #   description: Python testing framework
+
+
+  # ==========================================
+  # Database Tools Example
+  # ==========================================
+  # Uncomment these if you need database access:
+
+  # - name: psql
+  #   description: PostgreSQL command-line client
+
+  # - name: sqlite3
+  #   description: SQLite database CLI
+
+
+  # ==========================================
+  # Project-Specific Scripts
+  # ==========================================
+  # Local scripts are matched by filename, so these work from any directory
+  # Uncomment and customize for your project:
+
+  # - name: ./scripts/build.sh
+  #   description: Project build script
+
+  # - name: ./scripts/test.sh
+  #   description: Run all project tests
+
+  # - name: ./scripts/deploy-staging.sh
+  #   description: Deploy to staging environment
+
+
+# ==========================================
+# Notes and Best Practices
+# ==========================================
+#
+# Pattern Matching:
+#   - Exact: "swift" matches only "swift"
+#   - Wildcard: "swift*" matches "swift", "swiftc", "swiftlint", etc.
+#   - Scripts: "./scripts/build.sh" matches the script by name
+#
+# Limits:
+#   - Maximum 100 commands per project
+#   - Commands in the blocklist (sudo, dd, shutdown, etc.) can NEVER be allowed
+#   - Org-level blocked commands (see ~/.autocoder/config.yaml) cannot be overridden
+#
+# Default Allowed Commands (always available):
+#   File operations: ls, cat, head, tail, wc, grep, cp, mkdir, mv, rm, touch
+#   Shell: pwd, echo, sh, bash, sleep
+#   Version control: git
+#   Process management: ps, lsof, kill, pkill (dev processes only)
+#   Network: curl
+#   Node.js: npm, npx, pnpm, node
+#   Docker: docker
+#   chmod: Only +x mode (making scripts executable)
+#
+# Hardcoded Blocklist (NEVER allowed):
+#   Disk operations: dd, mkfs, fdisk, parted
+#   System control: shutdown, reboot, poweroff, halt, init
+#   Privilege escalation: sudo, su, doas
+#   System services: systemctl, service, launchctl
+#   Network security: iptables, ufw
+#   Ownership changes: chown, chgrp
+#   Dangerous commands: aws, gcloud, az, kubectl (unless org allows)
+#
+# To learn more, see: examples/README.md
