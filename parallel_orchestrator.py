@@ -772,6 +772,12 @@ class ParallelOrchestrator:
                     print(f"[Feature #{feature_id}] {line}", flush=True)
             proc.wait()
         finally:
+            # CRITICAL: Kill the process tree to clean up any child processes (e.g., Claude CLI)
+            # This prevents zombie processes from accumulating
+            try:
+                _kill_process_tree(proc, timeout=2.0)
+            except Exception as e:
+                debug_log.log("CLEANUP", f"Error killing process tree for {agent_type} agent", error=str(e))
             self._on_agent_complete(feature_id, proc.returncode, agent_type, proc)
 
     def _signal_agent_completed(self):
