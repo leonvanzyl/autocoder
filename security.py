@@ -559,36 +559,45 @@ def load_org_config() -> Optional[dict]:
             config = yaml.safe_load(f)
 
         if not config:
+            logger.warning(f"Org config at {config_path} is empty")
             return None
 
         # Validate structure
         if not isinstance(config, dict):
+            logger.warning(f"Org config at {config_path} must be a YAML dictionary")
             return None
 
         if "version" not in config:
+            logger.warning(f"Org config at {config_path} missing required 'version' field")
             return None
 
         # Validate allowed_commands if present
         if "allowed_commands" in config:
             allowed = config["allowed_commands"]
             if not isinstance(allowed, list):
+                logger.warning(f"Org config at {config_path}: 'allowed_commands' must be a list")
                 return None
-            for cmd in allowed:
+            for i, cmd in enumerate(allowed):
                 if not isinstance(cmd, dict):
+                    logger.warning(f"Org config at {config_path}: allowed_commands[{i}] must be a dict")
                     return None
                 if "name" not in cmd:
+                    logger.warning(f"Org config at {config_path}: allowed_commands[{i}] missing 'name'")
                     return None
                 # Validate that name is a non-empty string
                 if not isinstance(cmd["name"], str) or cmd["name"].strip() == "":
+                    logger.warning(f"Org config at {config_path}: allowed_commands[{i}] has invalid 'name'")
                     return None
 
         # Validate blocked_commands if present
         if "blocked_commands" in config:
             blocked = config["blocked_commands"]
             if not isinstance(blocked, list):
+                logger.warning(f"Org config at {config_path}: 'blocked_commands' must be a list")
                 return None
-            for cmd in blocked:
+            for i, cmd in enumerate(blocked):
                 if not isinstance(cmd, str):
+                    logger.warning(f"Org config at {config_path}: blocked_commands[{i}] must be a string")
                     return None
 
         # Validate pkill_processes if present
@@ -610,7 +619,11 @@ def load_org_config() -> Optional[dict]:
 
         return config
 
-    except (yaml.YAMLError, IOError, OSError):
+    except yaml.YAMLError as e:
+        logger.warning(f"Failed to parse org config at {config_path}: {e}")
+        return None
+    except (IOError, OSError) as e:
+        logger.warning(f"Failed to read org config at {config_path}: {e}")
         return None
 
 
@@ -624,7 +637,7 @@ def load_project_commands(project_dir: Path) -> Optional[dict]:
     Returns:
         Dict with parsed YAML config, or None if file doesn't exist or is invalid
     """
-    config_path = project_dir / ".autocoder" / "allowed_commands.yaml"
+    config_path = project_dir.resolve() / ".autocoder" / "allowed_commands.yaml"
 
     if not config_path.exists():
         return None
@@ -634,31 +647,39 @@ def load_project_commands(project_dir: Path) -> Optional[dict]:
             config = yaml.safe_load(f)
 
         if not config:
+            logger.warning(f"Project config at {config_path} is empty")
             return None
 
         # Validate structure
         if not isinstance(config, dict):
+            logger.warning(f"Project config at {config_path} must be a YAML dictionary")
             return None
 
         if "version" not in config:
+            logger.warning(f"Project config at {config_path} missing required 'version' field")
             return None
 
         commands = config.get("commands", [])
         if not isinstance(commands, list):
+            logger.warning(f"Project config at {config_path}: 'commands' must be a list")
             return None
 
         # Enforce 100 command limit
         if len(commands) > 100:
+            logger.warning(f"Project config at {config_path} exceeds 100 command limit ({len(commands)} commands)")
             return None
 
         # Validate each command entry
-        for cmd in commands:
+        for i, cmd in enumerate(commands):
             if not isinstance(cmd, dict):
+                logger.warning(f"Project config at {config_path}: commands[{i}] must be a dict")
                 return None
             if "name" not in cmd:
+                logger.warning(f"Project config at {config_path}: commands[{i}] missing 'name'")
                 return None
-            # Validate name is a string
-            if not isinstance(cmd["name"], str):
+            # Validate name is a non-empty string
+            if not isinstance(cmd["name"], str) or cmd["name"].strip() == "":
+                logger.warning(f"Project config at {config_path}: commands[{i}] has invalid 'name'")
                 return None
 
         # Validate pkill_processes if present
@@ -680,7 +701,11 @@ def load_project_commands(project_dir: Path) -> Optional[dict]:
 
         return config
 
-    except (yaml.YAMLError, IOError, OSError):
+    except yaml.YAMLError as e:
+        logger.warning(f"Failed to parse project config at {config_path}: {e}")
+        return None
+    except (IOError, OSError) as e:
+        logger.warning(f"Failed to read project config at {config_path}: {e}")
         return None
 
 
