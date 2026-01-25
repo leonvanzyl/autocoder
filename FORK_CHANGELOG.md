@@ -9,6 +9,81 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - Fork documentation (FORK_README.md, FORK_CHANGELOG.md)
 - Configuration system via `.autocoder/config.json`
 
+## [2025-01-25] Infrastructure Features & Mock Data Prevention
+
+### Problem Addressed
+When creating projects, the coding agent could implement in-memory storage (e.g., `dev-store.ts` with `globalThis`) instead of a real database. These implementations passed all tests because data persisted during a single server run, but data was lost on server restart.
+
+### Added
+- **Infrastructure Features (Indices 0-4)** - 5 mandatory features that must pass before any functional features:
+  - Feature 0: Database connection established
+  - Feature 1: Database schema applied correctly
+  - Feature 2: Data persists across server restart (CRITICAL)
+  - Feature 3: No mock data patterns in codebase
+  - Feature 4: Backend API queries real database
+
+- **STEP 5.7: Server Restart Persistence Test** - Mandatory test in coding prompt that catches dev-store implementations by:
+  1. Creating test data
+  2. Stopping the server completely
+  3. Restarting the server
+  4. Verifying data still exists
+
+- **Extended Mock Data Detection (STEP 5.6)** - Comprehensive grep patterns to detect:
+  - `globalThis.` (in-memory storage)
+  - `devStore`, `dev-store`, `DevStore`, `mock-db`, `mockDb`
+  - `mockData`, `fakeData`, `sampleData`, `dummyData`, `testData`
+  - `TODO.*real`, `TODO.*database`, `STUB`, `MOCK`
+  - `isDevelopment`, `isDev`, `process.env.NODE_ENV.*development`
+  - `new Map()`, `new Set()` as data stores
+
+- **Phase 3b: Database Requirements Question** - Mandatory question in create-spec to determine if project needs database
+
+### Changed
+- **initializer_prompt.template.md**:
+  - Added Infrastructure category (Priority 0) to category distribution table
+  - Added MANDATORY INFRASTRUCTURE FEATURES section with detailed test steps
+  - Extended NO MOCK DATA section with prohibited patterns
+  - Updated dependency rules - infrastructure features block ALL other features
+  - Updated example to show infrastructure tier first
+  - Updated reference tiers: 155/255/405+ (includes 5 infrastructure)
+
+- **coding_prompt.template.md**:
+  - Extended STEP 5.6 with comprehensive grep patterns
+  - Added STEP 5.7: SERVER RESTART PERSISTENCE TEST
+  - Added checklist items for mock detection and server restart verification
+
+- **create-spec.md**:
+  - Added Phase 3b with mandatory database requirements question
+  - Updated Phase 4L to include infrastructure features in count and breakdown
+  - Added branching logic for stateless apps vs database apps
+
+### Files Modified
+| File | Changes |
+|------|---------|
+| `.claude/templates/initializer_prompt.template.md` | Infrastructure category, features 0-4, extended prohibited patterns |
+| `.claude/templates/coding_prompt.template.md` | Extended grep, STEP 5.7 server restart test, checklist updates |
+| `.claude/commands/create-spec.md` | Database question, infrastructure in feature count |
+
+### Dependency Pattern
+```
+Infrastructure (0-4): NO dependencies - run first
+├── Foundation (5-9): depend on [0,1,2,3,4]
+│   ├── Auth (10+): depend on [0,1,2,3,4] + foundation
+│   │   ├── Core Features: depend on auth + infrastructure
+```
+
+### Expected Result
+- **Before**: Agent could create dev-store.ts and "pass" tests with in-memory data
+- **After**: Feature #2 (persist across restart) and Feature #3 (no mock patterns) will FAIL if mock data is used, forcing real database implementation
+
+### YOLO Mode Compatibility
+Infrastructure features work in YOLO mode because:
+- Features 0-4 use bash/grep checks, not browser automation
+- Feature 2 (server restart) can use curl instead of browser
+- Feature 3 (no mock patterns) uses only grep
+
+---
+
 ## [2025-01-21] Visual Regression Testing
 
 ### Added
