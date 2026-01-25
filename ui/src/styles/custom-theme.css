@@ -172,6 +172,31 @@ select:focus {
   outline: none !important;
 }
 
+/* ===== KEYBOARD ACCESSIBILITY ===== */
+/* Focus-visible styles for keyboard navigation */
+.neo-btn:focus-visible,
+[class*="neo-btn"]:focus-visible,
+button:focus-visible {
+  outline: 2px solid var(--color-neo-accent) !important;
+  outline-offset: 2px !important;
+}
+
+.neo-input:focus-visible,
+.neo-textarea:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--color-neo-accent) !important;
+  outline-offset: 2px !important;
+  border-color: var(--color-neo-accent) !important;
+}
+
+a:focus-visible,
+[role="button"]:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--color-neo-accent) !important;
+  outline-offset: 2px !important;
+}
 /* ===== BADGES ===== */
 .neo-badge,
 [class*="neo-badge"] {

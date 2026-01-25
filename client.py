@@ -50,9 +50,13 @@ def get_playwright_headless() -> bool:
     Reads from PLAYWRIGHT_HEADLESS environment variable, defaults to True.
     Returns True for headless mode (invisible browser), False for visible browser.
     """
-    value = os.getenv("PLAYWRIGHT_HEADLESS", str(DEFAULT_PLAYWRIGHT_HEADLESS).lower()).lower()
-    # Accept various truthy/falsy values
-    return value in ("true", "1", "yes", "on")
+    value = os.getenv("PLAYWRIGHT_HEADLESS", str(DEFAULT_PLAYWRIGHT_HEADLESS).lower()).strip().lower()
+    truthy = {"true", "1", "yes", "on"}
+    falsy = {"false", "0", "no", "off"}
+    if value not in truthy | falsy:
+        print(f"   - Warning: Invalid PLAYWRIGHT_HEADLESS='{value}', defaulting to {DEFAULT_PLAYWRIGHT_HEADLESS}")
+        return DEFAULT_PLAYWRIGHT_HEADLESS
+    return value in truthy
 
 
 def get_playwright_browser() -> str:
