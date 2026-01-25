@@ -217,16 +217,24 @@ grep -r "new Map()\|new Set()" --include="*.ts" --include="*.tsx" src/lib/ src/s
 
 3. **STOP the server completely:**
    ```bash
+   # Send SIGTERM first, then SIGKILL if needed
    pkill -f "node" || pkill -f "npm" || pkill -f "next"
-   sleep 5
+   sleep 3
+   pkill -9 -f "node" 2>/dev/null || true
+   sleep 2
    # Verify server is stopped
-   pgrep -f "node" && echo "ERROR: Server still running!" && exit 1
+   if pgrep -f "node" > /dev/null; then
+     echo "ERROR: Server still running!"
+     exit 1
+   fi
    ```
 
 4. **RESTART the server:**
    ```bash
    ./init.sh &
    sleep 15  # Allow server to fully start
+   # Verify server is responding
+   curl -f http://localhost:3000/api/health || curl -f http://localhost:3000 || echo "WARNING: Health check failed"
    ```
 
 5. **Query for test data - it MUST still exist**
@@ -234,8 +242,8 @@ grep -r "new Map()\|new Set()" --include="*.ts" --include="*.tsx" src/lib/ src/s
    - Via API: `curl http://localhost:PORT/api/items` - verify data in response
 
 6. **If data is GONE:** Implementation uses in-memory storage → CRITICAL FAIL
-   - Search for: `grep -r "globalThis\|devStore\|dev-store" src/`
-   - You MUST fix the mock data implementation before proceeding
+   - Run all grep commands from STEP 5.6 to identify the mock pattern
+   - You MUST fix the in-memory storage implementation before proceeding
    - Replace in-memory storage with real database queries
 
 7. **Clean up test data** after successful verification

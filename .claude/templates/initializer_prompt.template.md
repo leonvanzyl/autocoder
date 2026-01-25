@@ -36,8 +36,8 @@ Use the feature_create_bulk tool to add all features at once. You can create fea
 
 - Feature count must match the `feature_count` specified in app_spec.txt
 - Reference tiers for other projects:
-  - **Simple apps**: ~155 tests (includes 5 infrastructure)
-  - **Medium apps**: ~255 tests (includes 5 infrastructure)
+  - **Simple apps**: ~165 tests (includes 5 infrastructure)
+  - **Medium apps**: ~265 tests (includes 5 infrastructure)
   - **Complex apps**: ~405+ tests (includes 5 infrastructure)
 - Both "functional" and "style" categories
 - Mix of narrow tests (2-5 steps) and comprehensive tests (10+ steps)
@@ -98,17 +98,17 @@ Create WIDE dependency graphs, not linear chains:
   // AUTH TIER (indices 8-10, depend on foundation + infrastructure)
   { "name": "User can register", "depends_on_indices": [0, 1, 2, 3, 4, 5] },
   { "name": "User can login", "depends_on_indices": [0, 1, 2, 3, 4, 5, 8] },
-  { "name": "User can logout", "depends_on_indices": [9] },
+  { "name": "User can logout", "depends_on_indices": [0, 1, 2, 3, 4, 9] },
 
   // CORE CRUD TIER (indices 11-14) - WIDE GRAPH: all 4 depend on login
-  { "name": "User can create todo", "depends_on_indices": [9] },
-  { "name": "User can view todos", "depends_on_indices": [9] },
-  { "name": "User can edit todo", "depends_on_indices": [9, 11] },
-  { "name": "User can delete todo", "depends_on_indices": [9, 11] },
+  { "name": "User can create todo", "depends_on_indices": [0, 1, 2, 3, 4, 9] },
+  { "name": "User can view todos", "depends_on_indices": [0, 1, 2, 3, 4, 9] },
+  { "name": "User can edit todo", "depends_on_indices": [0, 1, 2, 3, 4, 9, 11] },
+  { "name": "User can delete todo", "depends_on_indices": [0, 1, 2, 3, 4, 9, 11] },
 
   // ADVANCED TIER (indices 15-16) - both depend on view, not each other
-  { "name": "User can filter todos", "depends_on_indices": [12] },
-  { "name": "User can search todos", "depends_on_indices": [12] }
+  { "name": "User can filter todos", "depends_on_indices": [0, 1, 2, 3, 4, 12] },
+  { "name": "User can search todos", "depends_on_indices": [0, 1, 2, 3, 4, 12] }
 ]
 ```
 
@@ -167,12 +167,15 @@ Steps:
 **Feature 3 - No mock data patterns in codebase:**
 ```
 Steps:
-1. Run: grep -r "globalThis\." --include="*.ts" --include="*.tsx" src/
-2. Run: grep -r "dev-store\|devStore\|DevStore\|mock-db\|mockDb" --include="*.ts" src/
-3. Run: grep -r "mockData\|fakeData\|sampleData\|dummyData" --include="*.ts" src/
-4. Run: grep -r "new Map()\|new Set()" --include="*.ts" src/lib/ src/store/ src/data/
-5. ALL grep commands must return empty (exit code 1)
-6. If any returns results → investigate and fix before passing
+1. Run: grep -r "globalThis\." --include="*.ts" --include="*.tsx" --include="*.js" src/
+2. Run: grep -r "dev-store\|devStore\|DevStore\|mock-db\|mockDb" --include="*.ts" --include="*.tsx" src/
+3. Run: grep -r "mockData\|testData\|fakeData\|sampleData\|dummyData" --include="*.ts" --include="*.tsx" src/
+4. Run: grep -r "TODO.*real\|TODO.*database\|TODO.*API\|STUB\|MOCK" --include="*.ts" --include="*.tsx" src/
+5. Run: grep -r "isDevelopment\|isDev\|process\.env\.NODE_ENV.*development" --include="*.ts" --include="*.tsx" src/
+6. Run: grep -r "new Map()\|new Set()" --include="*.ts" --include="*.tsx" src/lib/ src/store/ src/data/ 2>/dev/null
+7. Run: grep -E "json-server|miragejs|msw" package.json
+8. ALL grep commands must return empty (exit code 1)
+9. If any returns results → investigate and fix before passing
 ```
 
 **Feature 4 - Backend API queries real database:**
@@ -216,7 +219,7 @@ The feature_list.json **MUST** include tests from ALL 20 categories. Minimum cou
 | R. Concurrency & Race Conditions | 5       | 8       | 15       |
 | S. Export/Import                 | 5       | 6       | 10       |
 | T. Performance                   | 5       | 5       | 10       |
-| **TOTAL**                        | **155** | **255** | **405+** |
+| **TOTAL**                        | **165** | **265** | **405+** |
 
 ---
 
