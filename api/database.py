@@ -52,6 +52,10 @@ from sqlalchemy.types import JSON
 
 Base = declarative_base()
 
+# Engine cache to avoid creating new engines for each request
+# Key: project directory path (as posix string), Value: (engine, SessionLocal)
+_engine_cache: dict[str, tuple] = {}
+
 
 class Feature(Base):
     """Feature model representing a test case/feature to implement."""
@@ -581,12 +585,21 @@ def create_database(project_dir: Path) -> tuple:
     """
     Create database and return engine + session maker.
 
+    Uses a cache to avoid creating new engines for each request, which prevents
+    file descriptor leaks and improves performance by reusing database connections.
+
     Args:
         project_dir: Directory containing the project
 
     Returns:
         Tuple of (engine, SessionLocal)
     """
+    cache_key = project_dir.resolve().as_posix()
+
+    # Return cached engine if available
+    if cache_key in _engine_cache:
+        return _engine_cache[cache_key]
+
     db_url = get_database_url(project_dir)
     engine = create_engine(db_url, connect_args={
         "check_same_thread": False,
@@ -614,6 +627,11 @@ def create_database(project_dir: Path) -> tuple:
     _migrate_add_schedules_tables(engine)
 
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+    # Cache the engine and session maker
+    _engine_cache[cache_key] = (engine, SessionLocal)
+    logger.debug(f"Created new database engine for {cache_key}")
+
     return engine, SessionLocal
 
 
