@@ -214,6 +214,48 @@ def send_progress_webhook(passing: int, total: int, project_dir: Path) -> None:
             )
 
 
+def clear_stuck_features(project_dir: Path) -> int:
+    """
+    Clear all in_progress flags from features at agent startup.
+
+    When an agent is stopped mid-work (e.g., user interrupt, crash),
+    features can be left with in_progress=True and become orphaned.
+    This function clears those flags so features return to the pending queue.
+
+    Args:
+        project_dir: Directory containing the project
+
+    Returns:
+        Number of features that were unstuck
+    """
+    db_file = project_dir / "features.db"
+    if not db_file.exists():
+        return 0
+
+    try:
+        conn = sqlite3.connect(db_file)
+        cursor = conn.cursor()
+
+        # Count how many will be cleared
+        cursor.execute("SELECT COUNT(*) FROM features WHERE in_progress = 1")
+        count = cursor.fetchone()[0]
+
+        if count > 0:
+            # Clear all in_progress flags
+            cursor.execute("UPDATE features SET in_progress = 0 WHERE in_progress = 1")
+            conn.commit()
+            print(f"[Auto-recovery] Cleared {count} stuck feature(s) from previous session")
+
+        conn.close()
+        return count
+    except sqlite3.OperationalError:
+        # Table doesn't exist or doesn't have in_progress column
+        return 0
+    except Exception as e:
+        print(f"[Warning] Could not clear stuck features: {e}")
+        return 0
+
+
 def print_session_header(session_num: int, is_initializer: bool) -> None:
     """Print a formatted header for the session."""
     session_type = "INITIALIZER" if is_initializer else "CODING AGENT"
