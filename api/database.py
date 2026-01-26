@@ -3,12 +3,30 @@ Database Models and Connection
 ==============================
 
 SQLite database schema for feature storage using SQLAlchemy.
+
+Concurrency Protection:
+- WAL mode for better concurrent read/write access
+- Busy timeout (30s) to handle lock contention
+- Connection-level retries for transient errors
 """
 
+import logging
+import sqlite3
 import sys
+import time
+from contextlib import contextmanager
 from datetime import datetime, timezone
+from functools import wraps
 from pathlib import Path
-from typing import Optional
+from typing import Any, Callable, Optional
+
+# Module logger
+logger = logging.getLogger(__name__)
+
+# SQLite configuration constants
+SQLITE_BUSY_TIMEOUT_MS = 30000  # 30 seconds
+SQLITE_MAX_RETRIES = 3
+SQLITE_RETRY_DELAY_MS = 100  # Start with 100ms, exponential backoff
 
 
 def _utc_now() -> datetime:
@@ -183,6 +201,182 @@ def get_database_path(project_dir: Path) -> Path:
     return project_dir / "features.db"
 
 
+def get_robust_connection(db_path: Path) -> sqlite3.Connection:
+    """
+    Get a robust SQLite connection with proper settings for concurrent access.
+
+    This should be used by all code that accesses the database directly via sqlite3
+    (not through SQLAlchemy). It ensures consistent settings across all access points.
+
+    Settings applied:
+    - WAL mode for better concurrency (unless on network filesystem)
+    - Busy timeout of 30 seconds
+    - Synchronous mode NORMAL for balance of safety and performance
+
+    Args:
+        db_path: Path to the SQLite database file
+
+    Returns:
+        Configured sqlite3.Connection
+
+    Raises:
+        sqlite3.Error: If connection cannot be established
+    """
+    conn = sqlite3.connect(str(db_path), timeout=SQLITE_BUSY_TIMEOUT_MS / 1000)
+
+    # Set busy timeout (in milliseconds for sqlite3)
+    conn.execute(f"PRAGMA busy_timeout = {SQLITE_BUSY_TIMEOUT_MS}")
+
+    # Enable WAL mode (only for local filesystems)
+    if not _is_network_path(db_path):
+        try:
+            conn.execute("PRAGMA journal_mode = WAL")
+        except sqlite3.Error:
+            # WAL mode might fail on some systems, fall back to default
+            pass
+
+    # Synchronous NORMAL provides good balance of safety and performance
+    conn.execute("PRAGMA synchronous = NORMAL")
+
+    return conn
+
+
+@contextmanager
+def robust_db_connection(db_path: Path):
+    """
+    Context manager for robust SQLite connections with automatic cleanup.
+
+    Usage:
+        with robust_db_connection(db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM features")
+
+    Args:
+        db_path: Path to the SQLite database file
+
+    Yields:
+        Configured sqlite3.Connection
+    """
+    conn = None
+    try:
+        conn = get_robust_connection(db_path)
+        yield conn
+    finally:
+        if conn:
+            conn.close()
+
+
+def execute_with_retry(
+    db_path: Path,
+    query: str,
+    params: tuple = (),
+    fetch: str = "none",
+    max_retries: int = SQLITE_MAX_RETRIES
+) -> Any:
+    """
+    Execute a SQLite query with automatic retry on transient errors.
+
+    Handles SQLITE_BUSY and SQLITE_LOCKED errors with exponential backoff.
+
+    Args:
+        db_path: Path to the SQLite database file
+        query: SQL query to execute
+        params: Query parameters (tuple)
+        fetch: What to fetch - "none", "one", "all"
+        max_retries: Maximum number of retry attempts
+
+    Returns:
+        Query result based on fetch parameter
+
+    Raises:
+        sqlite3.Error: If query fails after all retries
+    """
+    last_error = None
+    delay = SQLITE_RETRY_DELAY_MS / 1000  # Convert to seconds
+
+    for attempt in range(max_retries + 1):
+        try:
+            with robust_db_connection(db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute(query, params)
+
+                if fetch == "one":
+                    result = cursor.fetchone()
+                elif fetch == "all":
+                    result = cursor.fetchall()
+                else:
+                    conn.commit()
+                    result = cursor.rowcount
+
+                return result
+
+        except sqlite3.OperationalError as e:
+            error_msg = str(e).lower()
+            # Retry on lock/busy errors
+            if "locked" in error_msg or "busy" in error_msg:
+                last_error = e
+                if attempt < max_retries:
+                    logger.warning(
+                        f"Database busy/locked (attempt {attempt + 1}/{max_retries + 1}), "
+                        f"retrying in {delay:.2f}s: {e}"
+                    )
+                    time.sleep(delay)
+                    delay *= 2  # Exponential backoff
+                    continue
+            raise
+        except sqlite3.DatabaseError as e:
+            # Log corruption errors clearly
+            error_msg = str(e).lower()
+            if "malformed" in error_msg or "corrupt" in error_msg:
+                logger.error(f"DATABASE CORRUPTION DETECTED: {e}")
+            raise
+
+    # If we get here, all retries failed
+    raise last_error or sqlite3.OperationalError("Query failed after all retries")
+
+
+def check_database_health(db_path: Path) -> dict:
+    """
+    Check the health of a SQLite database.
+
+    Returns:
+        Dict with:
+        - healthy (bool): True if database passes integrity check
+        - journal_mode (str): Current journal mode (WAL/DELETE/etc)
+        - error (str, optional): Error message if unhealthy
+    """
+    if not db_path.exists():
+        return {"healthy": False, "error": "Database file does not exist"}
+
+    try:
+        with robust_db_connection(db_path) as conn:
+            cursor = conn.cursor()
+
+            # Check integrity
+            cursor.execute("PRAGMA integrity_check")
+            integrity = cursor.fetchone()[0]
+
+            # Get journal mode
+            cursor.execute("PRAGMA journal_mode")
+            journal_mode = cursor.fetchone()[0]
+
+            if integrity.lower() == "ok":
+                return {
+                    "healthy": True,
+                    "journal_mode": journal_mode,
+                    "integrity": integrity
+                }
+            else:
+                return {
+                    "healthy": False,
+                    "journal_mode": journal_mode,
+                    "error": f"Integrity check failed: {integrity}"
+                }
+
+    except sqlite3.Error as e:
+        return {"healthy": False, "error": str(e)}
+
+
 def get_database_url(project_dir: Path) -> str:
     """Return the SQLAlchemy database URL for a project.
 
@@ -233,18 +427,69 @@ def _migrate_add_dependencies_column(engine) -> None:
 
 
 def _migrate_add_testing_columns(engine) -> None:
-    """Legacy migration - no longer adds testing columns.
+    """Legacy migration - handles testing columns that were removed from the model.
 
     The testing_in_progress and last_tested_at columns were removed from the
     Feature model as part of simplifying the testing agent architecture.
     Multiple testing agents can now test the same feature concurrently
     without coordination.
 
-    This function is kept for backwards compatibility but does nothing.
-    Existing databases with these columns will continue to work - the columns
-    are simply ignored.
+    This migration ensures these columns are nullable so INSERTs don't fail
+    on databases that still have them with NOT NULL constraints.
     """
-    pass
+    with engine.connect() as conn:
+        # Check if testing_in_progress column exists with NOT NULL
+        result = conn.execute(text("PRAGMA table_info(features)"))
+        columns = {row[1]: {"notnull": row[3], "dflt_value": row[4]} for row in result.fetchall()}
+
+        if "testing_in_progress" in columns and columns["testing_in_progress"]["notnull"]:
+            # SQLite doesn't support ALTER COLUMN, need to recreate table
+            # Instead, we'll use a workaround: create a new table, copy data, swap
+            logger.info("Migrating testing_in_progress column to nullable...")
+
+            try:
+                # Step 1: Create new table without NOT NULL on testing columns
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS features_new (
+                        id INTEGER NOT NULL PRIMARY KEY,
+                        priority INTEGER NOT NULL,
+                        category VARCHAR(100) NOT NULL,
+                        name VARCHAR(255) NOT NULL,
+                        description TEXT NOT NULL,
+                        steps JSON NOT NULL,
+                        passes BOOLEAN NOT NULL DEFAULT 0,
+                        in_progress BOOLEAN NOT NULL DEFAULT 0,
+                        dependencies JSON,
+                        testing_in_progress BOOLEAN DEFAULT 0,
+                        last_tested_at DATETIME
+                    )
+                """))
+
+                # Step 2: Copy data
+                conn.execute(text("""
+                    INSERT INTO features_new
+                    SELECT id, priority, category, name, description, steps, passes, in_progress,
+                           dependencies, testing_in_progress, last_tested_at
+                    FROM features
+                """))
+
+                # Step 3: Drop old table and rename
+                conn.execute(text("DROP TABLE features"))
+                conn.execute(text("ALTER TABLE features_new RENAME TO features"))
+
+                # Step 4: Recreate indexes
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_features_id ON features (id)"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_features_priority ON features (priority)"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_features_passes ON features (passes)"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_features_in_progress ON features (in_progress)"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_feature_status ON features (passes, in_progress)"))
+
+                conn.commit()
+                logger.info("Successfully migrated testing columns to nullable")
+            except Exception as e:
+                logger.error(f"Failed to migrate testing columns: {e}")
+                conn.rollback()
+                raise
 
 
 def _is_network_path(path: Path) -> bool:
@@ -387,6 +632,7 @@ def get_db() -> Session:
     Dependency for FastAPI to get database session.
 
     Yields a database session and ensures it's closed after use.
+    Properly rolls back on error to prevent PendingRollbackError.
     """
     if _session_maker is None:
         raise RuntimeError("Database not initialized. Call set_session_maker first.")
@@ -394,5 +640,8 @@ def get_db() -> Session:
     db = _session_maker()
     try:
         yield db
+    except Exception:
+        db.rollback()
+        raise
     finally:
         db.close()

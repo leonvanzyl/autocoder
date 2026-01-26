@@ -12,6 +12,7 @@ import logging
 import os
 import re
 import shutil
+import sys
 import threading
 import uuid
 from datetime import datetime
@@ -54,6 +55,13 @@ async def _make_multimodal_message(content_blocks: list[dict]) -> AsyncGenerator
 # Root directory of the project
 ROOT_DIR = Path(__file__).parent.parent.parent
 
+# Feature MCP tools for creating features
+FEATURE_MCP_TOOLS = [
+    "mcp__features__feature_create",
+    "mcp__features__feature_create_bulk",
+    "mcp__features__feature_get_stats",
+]
+
 
 class ExpandChatSession:
     """
@@ -85,6 +93,7 @@ class ExpandChatSession:
         self.features_created: int = 0
         self.created_feature_ids: list[int] = []
         self._settings_file: Optional[Path] = None
+        self._mcp_config_file: Optional[Path] = None
         self._query_lock = asyncio.Lock()
 
     async def close(self) -> None:
@@ -104,6 +113,13 @@ class ExpandChatSession:
                 self._settings_file.unlink()
             except Exception as e:
                 logger.warning(f"Error removing settings file: {e}")
+
+        # Clean up temporary MCP config file
+        if self._mcp_config_file and self._mcp_config_file.exists():
+            try:
+                self._mcp_config_file.unlink()
+            except Exception as e:
+                logger.warning(f"Error removing MCP config file: {e}")
 
     async def start(self) -> AsyncGenerator[dict, None]:
         """
@@ -152,6 +168,7 @@ class ExpandChatSession:
                 "allow": [
                     "Read(./**)",
                     "Glob(./**)",
+                    *FEATURE_MCP_TOOLS,
                 ],
             },
         }
@@ -159,6 +176,25 @@ class ExpandChatSession:
         self._settings_file = settings_file
         with open(settings_file, "w", encoding="utf-8") as f:
             json.dump(security_settings, f, indent=2)
+
+        # Build MCP servers config for feature creation
+        mcp_config = {
+            "mcpServers": {
+                "features": {
+                    "command": sys.executable,
+                    "args": ["-m", "mcp_server.feature_mcp"],
+                    "env": {
+                        "PROJECT_DIR": str(self.project_dir.resolve()),
+                        "PYTHONPATH": str(ROOT_DIR.resolve()),
+                    },
+                },
+            },
+        }
+        mcp_config_file = self.project_dir / f".claude_mcp_config.expand.{uuid.uuid4().hex}.json"
+        self._mcp_config_file = mcp_config_file
+        with open(mcp_config_file, "w") as f:
+            json.dump(mcp_config, f, indent=2)
+        logger.info(f"Wrote MCP config to {mcp_config_file}")
 
         # Replace $ARGUMENTS with absolute project path
         project_path = str(self.project_dir.resolve())
@@ -181,7 +217,9 @@ class ExpandChatSession:
                     allowed_tools=[
                         "Read",
                         "Glob",
+                        *FEATURE_MCP_TOOLS,
                     ],
+                    mcp_servers=str(mcp_config_file),
                     permission_mode="acceptEdits",
                     max_turns=100,
                     cwd=str(self.project_dir.resolve()),

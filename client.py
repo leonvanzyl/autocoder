@@ -21,9 +21,14 @@ from security import bash_security_hook
 load_dotenv()
 
 # Default Playwright headless mode - can be overridden via PLAYWRIGHT_HEADLESS env var
-# When True, browser runs invisibly in background
-# When False, browser window is visible (default - useful for monitoring agent progress)
-DEFAULT_PLAYWRIGHT_HEADLESS = False
+# When True, browser runs invisibly in background (default - saves CPU)
+# When False, browser window is visible (useful for monitoring agent progress)
+DEFAULT_PLAYWRIGHT_HEADLESS = True
+
+# Default browser for Playwright - can be overridden via PLAYWRIGHT_BROWSER env var
+# Options: chrome, firefox, webkit, msedge
+# Firefox is recommended for lower CPU usage
+DEFAULT_PLAYWRIGHT_BROWSER = "firefox"
 
 # Environment variables to pass through to Claude CLI for API configuration
 # These allow using alternative API endpoints (e.g., GLM via z.ai) without
@@ -42,12 +47,23 @@ def get_playwright_headless() -> bool:
     """
     Get the Playwright headless mode setting.
 
-    Reads from PLAYWRIGHT_HEADLESS environment variable, defaults to False.
+    Reads from PLAYWRIGHT_HEADLESS environment variable, defaults to True.
     Returns True for headless mode (invisible browser), False for visible browser.
     """
-    value = os.getenv("PLAYWRIGHT_HEADLESS", "false").lower()
+    value = os.getenv("PLAYWRIGHT_HEADLESS", str(DEFAULT_PLAYWRIGHT_HEADLESS).lower()).lower()
     # Accept various truthy/falsy values
     return value in ("true", "1", "yes", "on")
+
+
+def get_playwright_browser() -> str:
+    """
+    Get the browser to use for Playwright.
+
+    Reads from PLAYWRIGHT_BROWSER environment variable, defaults to firefox.
+    Options: chrome, firefox, webkit, msedge
+    Firefox is recommended for lower CPU usage.
+    """
+    return os.getenv("PLAYWRIGHT_BROWSER", DEFAULT_PLAYWRIGHT_BROWSER).lower()
 
 
 # Feature MCP tools for feature/test management
@@ -228,10 +244,16 @@ def create_client(
     }
     if not yolo_mode:
         # Include Playwright MCP server for browser automation (standard mode only)
-        # Headless mode is configurable via PLAYWRIGHT_HEADLESS environment variable
-        playwright_args = ["@playwright/mcp@latest", "--viewport-size", "1280x720"]
+        # Browser and headless mode configurable via environment variables
+        browser = get_playwright_browser()
+        playwright_args = [
+            "@playwright/mcp@latest",
+            "--viewport-size", "1280x720",
+            "--browser", browser,
+        ]
         if get_playwright_headless():
             playwright_args.append("--headless")
+        print(f"   - Browser: {browser} (headless={get_playwright_headless()})")
 
         # Browser isolation for parallel execution
         # Each agent gets its own isolated browser context to prevent tab conflicts

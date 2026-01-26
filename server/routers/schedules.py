@@ -62,6 +62,8 @@ def _get_db_session(project_name: str) -> Generator[Tuple[Session, Path], None, 
         with _get_db_session(project_name) as (db, project_path):
             # ... use db ...
         # db is automatically closed
+
+    Properly rolls back on error to prevent PendingRollbackError.
     """
     from api.database import create_database
 
@@ -84,6 +86,9 @@ def _get_db_session(project_name: str) -> Generator[Tuple[Session, Path], None, 
     db = SessionLocal()
     try:
         yield db, project_path
+    except Exception:
+        db.rollback()
+        raise
     finally:
         db.close()
 
