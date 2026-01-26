@@ -21,6 +21,7 @@ Usage:
 import asyncio
 import logging
 import os
+import signal
 import subprocess
 import sys
 import threading
@@ -1359,6 +1360,31 @@ class ParallelOrchestrator:
                 "yolo_mode": self.yolo_mode,
             }
 
+    def cleanup(self) -> None:
+        """Clean up database resources.
+
+        CRITICAL: Must be called when orchestrator exits to prevent database corruption.
+        - Forces WAL checkpoint to flush pending writes to main database file
+        - Disposes engine to close all connections
+
+        This prevents stale cache issues when the orchestrator restarts.
+        """
+        if self._engine is not None:
+            try:
+                debug_log.log("CLEANUP", "Forcing WAL checkpoint before dispose")
+                with self._engine.connect() as conn:
+                    conn.execute(text("PRAGMA wal_checkpoint(FULL)"))
+                    conn.commit()
+                debug_log.log("CLEANUP", "WAL checkpoint completed, disposing engine")
+            except Exception as e:
+                debug_log.log("CLEANUP", f"WAL checkpoint failed (non-fatal): {e}")
+
+            try:
+                self._engine.dispose()
+                debug_log.log("CLEANUP", "Engine disposed successfully")
+            except Exception as e:
+                debug_log.log("CLEANUP", f"Engine dispose failed: {e}")
+
 
 async def run_parallel_orchestrator(
     project_dir: Path,
@@ -1416,6 +1442,10 @@ async def run_parallel_orchestrator(
     except KeyboardInterrupt:
         print("\n\nInterrupted by user. Stopping agents...", flush=True)
         orchestrator.stop_all()
+    finally:
+        # CRITICAL: Always clean up database resources on exit
+        # This forces WAL checkpoint and disposes connections
+        orchestrator.cleanup()
 
 
 def main():

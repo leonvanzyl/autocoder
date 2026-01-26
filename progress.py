@@ -19,6 +19,27 @@ from api.database import execute_with_retry, robust_db_connection
 WEBHOOK_URL = os.environ.get("PROGRESS_N8N_WEBHOOK_URL")
 PROGRESS_CACHE_FILE = ".progress_cache"
 
+# SQLite connection settings for parallel mode safety
+SQLITE_TIMEOUT = 30  # seconds to wait for locks
+SQLITE_BUSY_TIMEOUT_MS = 30000  # milliseconds for PRAGMA busy_timeout
+
+
+def _get_connection(db_file: Path) -> sqlite3.Connection:
+    """Get a SQLite connection with proper timeout settings.
+
+    Uses timeout=30s and PRAGMA busy_timeout=30000 for safe operation
+    in parallel mode where multiple processes access the same database.
+
+    Args:
+        db_file: Path to the SQLite database file
+
+    Returns:
+        sqlite3.Connection with proper timeout settings
+    """
+    conn = sqlite3.connect(db_file, timeout=SQLITE_TIMEOUT)
+    conn.execute(f"PRAGMA busy_timeout={SQLITE_BUSY_TIMEOUT_MS}")
+    return conn
+
 
 def send_session_event(
     event: str,
