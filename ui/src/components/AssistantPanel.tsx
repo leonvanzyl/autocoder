@@ -49,10 +49,18 @@ export function AssistantPanel({ projectName, isOpen, onClose }: AssistantPanelP
   )
 
   // Fetch conversation details when we have an ID
-  const { data: conversationDetail, isLoading: isLoadingConversation } = useConversation(
+  const { data: conversationDetail, isLoading: isLoadingConversation, error: conversationError } = useConversation(
     projectName,
     conversationId
   )
+
+  // Clear stored conversation ID if it no longer exists (404 error)
+  useEffect(() => {
+    if (conversationError && conversationId) {
+      console.warn(`Conversation ${conversationId} not found, clearing stored ID`)
+      setConversationId(null)
+    }
+  }, [conversationError, conversationId])
 
   // Convert API messages to ChatMessage format for the chat component
   const initialMessages: ChatMessage[] | undefined = conversationDetail?.messages.map((msg) => ({
