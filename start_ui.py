@@ -13,12 +13,16 @@ Automated launcher that handles all setup:
 7. Opens browser to the UI
 
 Usage:
-    python start_ui.py [--dev]
+    python start_ui.py [--dev] [--host HOST] [--port PORT]
 
 Options:
-    --dev    Run in development mode with Vite hot reload
+    --dev           Run in development mode with Vite hot reload
+    --host HOST     Host to bind to (default: 127.0.0.1)
+                    Use 0.0.0.0 for remote access (security warning will be shown)
+    --port PORT     Port to bind to (default: 8888)
 """
 
+import argparse
 import asyncio
 import os
 import shutil
@@ -235,26 +239,31 @@ def build_frontend() -> bool:
     return run_command([npm_cmd, "run", "build"], cwd=UI_DIR)
 
 
-def start_dev_server(port: int) -> tuple:
+def start_dev_server(port: int, host: str = "127.0.0.1") -> tuple:
     """Start both Vite and FastAPI in development mode."""
     venv_python = get_venv_python()
 
     print("\n  Starting development servers...")
-    print(f"  - FastAPI backend: http://127.0.0.1:{port}")
+    print(f"  - FastAPI backend: http://{host}:{port}")
     print("  - Vite frontend:   http://127.0.0.1:5173")
+
+    # Set environment for remote access if needed
+    env = os.environ.copy()
+    if host != "127.0.0.1":
+        env["AUTOCODER_ALLOW_REMOTE"] = "1"
 
     # Start FastAPI
     backend = subprocess.Popen([
         str(venv_python), "-m", "uvicorn",
         "server.main:app",
-        "--host", "127.0.0.1",
+        "--host", host,
         "--port", str(port),
         "--reload"
-    ], cwd=str(ROOT))
+    ], cwd=str(ROOT), env=env)
 
     # Start Vite with API port env var for proxy configuration
     npm_cmd = "npm.cmd" if sys.platform == "win32" else "npm"
-    vite_env = os.environ.copy()
+    vite_env = env.copy()
     vite_env["VITE_API_PORT"] = str(port)
     frontend = subprocess.Popen([
         npm_cmd, "run", "dev"
@@ -263,14 +272,17 @@ def start_dev_server(port: int) -> tuple:
     return backend, frontend
 
 
-def start_production_server(port: int):
-    """Start FastAPI server in production mode with hot reload."""
+def start_production_server(port: int, host: str = "127.0.0.1"):
+    """Start FastAPI server in production mode."""
     venv_python = get_venv_python()
 
-    print(f"\n  Starting server at http://127.0.0.1:{port} (with hot reload)")
+    print(f"\n  Starting server at http://{host}:{port}")
 
-    # Set PYTHONASYNCIODEBUG to help with Windows subprocess issues
     env = os.environ.copy()
+
+    # Enable remote access in server if not localhost
+    if host != "127.0.0.1":
+        env["AUTOCODER_ALLOW_REMOTE"] = "1"
 
     # NOTE: --reload is NOT used because on Windows it breaks asyncio subprocess
     # support (uvicorn's reload worker doesn't inherit the ProactorEventLoop policy).
@@ -279,14 +291,34 @@ def start_production_server(port: int):
     return subprocess.Popen([
         str(venv_python), "-m", "uvicorn",
         "server.main:app",
-        "--host", "127.0.0.1",
+        "--host", host,
         "--port", str(port),
     ], cwd=str(ROOT), env=env)
 
 
 def main() -> None:
     """Main entry point."""
-    dev_mode = "--dev" in sys.argv
+    parser = argparse.ArgumentParser(description="AutoCoder UI Launcher")
+    parser.add_argument("--dev", action="store_true", help="Run in development mode with Vite hot reload")
+    parser.add_argument("--host", default="127.0.0.1", help="Host to bind to (default: 127.0.0.1)")
+    parser.add_argument("--port", type=int, default=None, help="Port to bind to (default: auto-detect from 8888)")
+    args = parser.parse_args()
+
+    dev_mode = args.dev
+    host = args.host
+
+    # Security warning for remote access
+    if host != "127.0.0.1":
+        print("\n" + "!" * 50)
+        print("  SECURITY WARNING")
+        print("!" * 50)
+        print(f"  Remote access enabled on host: {host}")
+        print("  The AutoCoder UI will be accessible from other machines.")
+        print("  Ensure you understand the security implications:")
+        print("  - The agent has file system access to project directories")
+        print("  - The API can start/stop agents and modify files")
+        print("  - Consider using a firewall or VPN for protection")
+        print("!" * 50 + "\n")
 
     print("=" * 50)
     print("  AutoCoder UI Setup")
@@ -335,18 +367,20 @@ def main() -> None:
     step = 5 if dev_mode else 6
     print_step(step, total_steps, "Starting server")
 
-    port = find_available_port()
+    port = args.port if args.port else find_available_port()
 
     try:
         if dev_mode:
-            backend, frontend = start_dev_server(port)
+            backend, frontend = start_dev_server(port, host)
 
-            # Open browser to Vite dev server
+            # Open browser to Vite dev server (always localhost for Vite)
             time.sleep(3)
             webbrowser.open("http://127.0.0.1:5173")
 
             print("\n" + "=" * 50)
             print("  Development mode active")
+            if host != "127.0.0.1":
+                print(f"  Backend accessible at: http://{host}:{port}")
             print("  Press Ctrl+C to stop")
             print("=" * 50)
 
@@ -362,14 +396,15 @@ def main() -> None:
                 backend.wait()
                 frontend.wait()
         else:
-            server = start_production_server(port)
+            server = start_production_server(port, host)
 
-            # Open browser
+            # Open browser (only if localhost)
             time.sleep(2)
-            webbrowser.open(f"http://127.0.0.1:{port}")
+            if host == "127.0.0.1":
+                webbrowser.open(f"http://127.0.0.1:{port}")
 
             print("\n" + "=" * 50)
-            print(f"  Server running at http://127.0.0.1:{port}")
+            print(f"  Server running at http://{host}:{port}")
             print("  Press Ctrl+C to stop")
             print("=" * 50)
 

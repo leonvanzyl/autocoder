@@ -256,6 +256,39 @@ python test_security_integration.py
 - `examples/README.md` - Comprehensive guide with use cases, testing, and troubleshooting
 - `PHASE3_SPEC.md` - Specification for mid-session approval feature (future enhancement)
 
+### Ollama Local Models (Optional)
+
+Run coding agents using local models via Ollama v0.14.0+:
+
+1. Install Ollama: https://ollama.com
+2. Start Ollama: `ollama serve`
+3. Pull a coding model: `ollama pull qwen3-coder`
+4. Configure `.env`:
+   ```
+   ANTHROPIC_BASE_URL=http://localhost:11434
+   ANTHROPIC_AUTH_TOKEN=ollama
+   API_TIMEOUT_MS=3000000
+   ANTHROPIC_DEFAULT_SONNET_MODEL=qwen3-coder
+   ANTHROPIC_DEFAULT_OPUS_MODEL=qwen3-coder
+   ANTHROPIC_DEFAULT_HAIKU_MODEL=qwen3-coder
+   ```
+5. Run autocoder normally - it will use your local Ollama models
+
+**Recommended coding models:**
+- `qwen3-coder` - Good balance of speed and capability
+- `deepseek-coder-v2` - Strong coding performance
+- `codellama` - Meta's code-focused model
+
+**Model tier mapping:**
+- Use the same model for all tiers, or map different models per capability level
+- Larger models (70B+) work best for Opus tier
+- Smaller models (7B-20B) work well for Haiku tier
+
+**Known limitations:**
+- Smaller context windows than Claude (model-dependent)
+- Extended context beta disabled (not supported by Ollama)
+- Performance depends on local hardware (GPU recommended)
+
 ## Claude Code Integration
 
 - `.claude/commands/create-spec.md` - `/create-spec` slash command for interactive spec creation

@@ -428,7 +428,9 @@ class DevServerProcessManager:
 
 
 # Global registry of dev server managers per project with thread safety
-_managers: dict[str, DevServerProcessManager] = {}
+# Key is (project_name, resolved_project_dir) to prevent cross-project contamination
+# when different projects share the same name but have different paths
+_managers: dict[tuple[str, str], DevServerProcessManager] = {}
 _managers_lock = threading.Lock()
 
 
@@ -444,18 +446,11 @@ def get_devserver_manager(project_name: str, project_dir: Path) -> DevServerProc
         DevServerProcessManager instance for the project
     """
     with _managers_lock:
-        if project_name in _managers:
-            manager = _managers[project_name]
-            # Update project_dir in case project was moved
-            if manager.project_dir.resolve() != project_dir.resolve():
-                logger.info(
-                    f"Project {project_name} path updated: {manager.project_dir} -> {project_dir}"
-                )
-                manager.project_dir = project_dir
-                manager.lock_file = project_dir / ".devserver.lock"
-            return manager
-        _managers[project_name] = DevServerProcessManager(project_name, project_dir)
-        return _managers[project_name]
+        # Use composite key to prevent cross-project UI contamination (#71)
+        key = (project_name, str(project_dir.resolve()))
+        if key not in _managers:
+            _managers[key] = DevServerProcessManager(project_name, project_dir)
+        return _managers[key]
 
 
 async def cleanup_all_devservers() -> None:

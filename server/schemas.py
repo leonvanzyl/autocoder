@@ -390,6 +390,7 @@ class SettingsResponse(BaseModel):
     yolo_mode: bool = False
     model: str = DEFAULT_MODEL
     glm_mode: bool = False  # True if GLM API is configured via .env
+    ollama_mode: bool = False  # True if Ollama API is configured via .env
     testing_agent_ratio: int = 1  # Regression testing agents (0-3)
 
 

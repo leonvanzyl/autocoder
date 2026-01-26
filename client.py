@@ -283,9 +283,16 @@ def create_client(
         if value:
             sdk_env[var] = value
 
+    # Detect alternative API mode (Ollama or GLM)
+    base_url = sdk_env.get("ANTHROPIC_BASE_URL", "")
+    is_alternative_api = bool(base_url)
+    is_ollama = "localhost:11434" in base_url or "127.0.0.1:11434" in base_url
+
     if sdk_env:
         print(f"   - API overrides: {', '.join(sdk_env.keys())}")
-        if "ANTHROPIC_BASE_URL" in sdk_env:
+        if is_ollama:
+            print("   - Ollama Mode: Using local models")
+        elif "ANTHROPIC_BASE_URL" in sdk_env:
             print(f"   - GLM Mode: Using {sdk_env['ANTHROPIC_BASE_URL']}")
 
     # Create a wrapper for bash_security_hook that passes project_dir via context
@@ -362,7 +369,8 @@ def create_client(
             # Enable extended context beta for better handling of long sessions.
             # This provides up to 1M tokens of context with automatic compaction.
             # See: https://docs.anthropic.com/en/api/beta-headers
-            betas=["context-1m-2025-08-07"],
+            # Disabled for alternative APIs (Ollama, GLM) as they don't support Claude-specific betas.
+            betas=[] if is_alternative_api else ["context-1m-2025-08-07"],
             # Note on context management:
             # The Claude Agent SDK handles context management automatically through the
             # underlying Claude Code CLI. When context approaches limits, the CLI

@@ -77,6 +77,11 @@ ui/playwright-report/
 dmypy.json
 
 # ===================
+# Claude Code
+# ===================
+.claude/settings.local.json
+
+# ===================
 # IDE / Editors
 # ===================
 .vscode/

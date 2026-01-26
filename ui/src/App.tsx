@@ -298,6 +298,17 @@ function App() {
                     <Settings size={18} />
                   </button>
 
+                  {/* Ollama Mode Indicator */}
+                  {settings?.ollama_mode && (
+                    <div
+                      className="flex items-center gap-1.5 px-2 py-1 bg-white rounded border-2 border-neo-border shadow-neo-sm"
+                      title="Using Ollama local models (configured via .env)"
+                    >
+                      <img src="/ollama.png" alt="Ollama" className="w-5 h-5" />
+                      <span className="text-xs font-bold text-neo-text">Ollama</span>
+                    </div>
+                  )}
+
                   {/* GLM Mode Badge */}
                   {settings?.glm_mode && (
                     <span

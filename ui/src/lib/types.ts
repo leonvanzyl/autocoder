@@ -526,6 +526,7 @@ export interface Settings {
   yolo_mode: boolean
   model: string
   glm_mode: boolean
+  ollama_mode: boolean
   testing_agent_ratio: number  // Regression testing agents (0-3)
 }
 

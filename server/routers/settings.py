@@ -40,7 +40,15 @@ def _parse_yolo_mode(value: str | None) -> bool:
 
 def _is_glm_mode() -> bool:
     """Check if GLM API is configured via environment variables."""
-    return bool(os.getenv("ANTHROPIC_BASE_URL"))
+    base_url = os.getenv("ANTHROPIC_BASE_URL", "")
+    # GLM mode is when ANTHROPIC_BASE_URL is set but NOT pointing to Ollama
+    return bool(base_url) and not _is_ollama_mode()
+
+
+def _is_ollama_mode() -> bool:
+    """Check if Ollama API is configured via environment variables."""
+    base_url = os.getenv("ANTHROPIC_BASE_URL", "")
+    return "localhost:11434" in base_url or "127.0.0.1:11434" in base_url
 
 
 @router.get("/models", response_model=ModelsResponse)
@@ -82,6 +90,7 @@ async def get_settings():
         yolo_mode=_parse_yolo_mode(all_settings.get("yolo_mode")),
         model=all_settings.get("model", DEFAULT_MODEL),
         glm_mode=_is_glm_mode(),
+        ollama_mode=_is_ollama_mode(),
         testing_agent_ratio=_parse_int(all_settings.get("testing_agent_ratio"), 1),
     )
 
@@ -104,5 +113,6 @@ async def update_settings(update: SettingsUpdate):
         yolo_mode=_parse_yolo_mode(all_settings.get("yolo_mode")),
         model=all_settings.get("model", DEFAULT_MODEL),
         glm_mode=_is_glm_mode(),
+        ollama_mode=_is_ollama_mode(),
         testing_agent_ratio=_parse_int(all_settings.get("testing_agent_ratio"), 1),
     )

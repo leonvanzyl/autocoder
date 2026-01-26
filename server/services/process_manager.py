@@ -510,7 +510,9 @@ class AgentProcessManager:
 
 
 # Global registry of process managers per project with thread safety
-_managers: dict[str, AgentProcessManager] = {}
+# Key is (project_name, resolved_project_dir) to prevent cross-project contamination
+# when different projects share the same name but have different paths
+_managers: dict[tuple[str, str], AgentProcessManager] = {}
 _managers_lock = threading.Lock()
 
 
@@ -523,9 +525,11 @@ def get_manager(project_name: str, project_dir: Path, root_dir: Path) -> AgentPr
         root_dir: Root directory of the autonomous-coding-ui project
     """
     with _managers_lock:
-        if project_name not in _managers:
-            _managers[project_name] = AgentProcessManager(project_name, project_dir, root_dir)
-        return _managers[project_name]
+        # Use composite key to prevent cross-project UI contamination (#71)
+        key = (project_name, str(project_dir.resolve()))
+        if key not in _managers:
+            _managers[key] = AgentProcessManager(project_name, project_dir, root_dir)
+        return _managers[key]
 
 
 async def cleanup_all_managers() -> None:
