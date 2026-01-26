@@ -57,8 +57,12 @@ export function AssistantPanel({ projectName, isOpen, onClose }: AssistantPanelP
   // Clear stored conversation ID if it no longer exists (404 error)
   useEffect(() => {
     if (conversationError && conversationId) {
-      console.warn(`Conversation ${conversationId} not found, clearing stored ID`)
-      setConversationId(null)
+      const message = conversationError.message.toLowerCase()
+      // Only clear for 404 errors, not transient network issues
+      if (message.includes('not found') || message.includes('404')) {
+        console.warn(`Conversation ${conversationId} not found, clearing stored ID`)
+        setConversationId(null)
+      }
     }
   }, [conversationError, conversationId])
 
