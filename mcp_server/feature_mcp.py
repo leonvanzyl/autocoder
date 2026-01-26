@@ -62,6 +62,7 @@ from api.dependency_resolver import (
     would_create_circular_dependency,
 )
 from api.migration import migrate_json_to_sqlite
+from quality_gates import load_quality_config, verify_quality
 
 # Configuration from environment
 PROJECT_DIR = Path(os.environ.get("PROJECT_DIR", ".")).resolve()
@@ -240,6 +241,42 @@ def feature_get_summary(
 
 
 @mcp.tool()
+def feature_verify_quality() -> str:
+    """Run quality checks (lint, type-check) on the project.
+
+    Automatically detects and runs available linters and type checkers:
+    - Linters: ESLint, Biome (JS/TS), ruff, flake8 (Python)
+    - Type checkers: TypeScript (tsc), Python (mypy)
+    - Custom scripts: .autocoder/quality-checks.sh
+
+    Use this tool before marking a feature as passing to ensure code quality.
+    In strict mode (default), feature_mark_passing will block if quality checks fail.
+
+    Returns:
+        JSON with: passed (bool), checks (dict), summary (str)
+    """
+    config = load_quality_config(PROJECT_DIR)
+
+    if not config.get("enabled", True):
+        return json.dumps({
+            "passed": True,
+            "checks": {},
+            "summary": "Quality gates disabled"
+        })
+
+    checks_config = config.get("checks", {})
+    result = verify_quality(
+        PROJECT_DIR,
+        run_lint=checks_config.get("lint", True),
+        run_type_check=checks_config.get("type_check", True),
+        run_custom=True,
+        custom_script_path=checks_config.get("custom_script"),
+    )
+
+    return json.dumps(result)
+
+
+@mcp.tool()
 def feature_mark_passing(
     feature_id: Annotated[int, Field(description="The ID of the feature to mark as passing", ge=1)],
     quality_result: Annotated[dict | None, Field(description="Optional quality gate results to store as test evidence", default=None)] = None
@@ -260,7 +297,8 @@ def feature_mark_passing(
         quality_result: Optional dict with quality gate results (lint, type-check, etc.)
 
     Returns:
-        JSON with success confirmation: {success, feature_id, name}
+        JSON with success confirmation: {success, feature_id, name, quality_result}
+        If strict mode is enabled and quality checks fail, returns an error.
     """
     # Import quality gates module
     sys.path.insert(0, str(Path(__file__).parent.parent))
