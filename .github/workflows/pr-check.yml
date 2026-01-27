@@ -12,6 +12,20 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  repo-guards:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ensure .code is not tracked
+        shell: bash
+        run: |
+          tracked="$(git ls-files -- .code)"
+          if [ -n "$tracked" ]; then
+            echo "The .code/ directory must not be tracked."
+            echo "$tracked"
+            exit 1
+          fi
+
   python:
     runs-on: ubuntu-latest
     steps:
