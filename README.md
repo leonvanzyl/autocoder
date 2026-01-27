@@ -289,6 +289,26 @@ The UI receives live updates via WebSocket (`/ws/projects/{project_name}`):
 
 ## Configuration (Optional)
 
+### Web UI Authentication
+
+For deployments where the Web UI is exposed beyond localhost, you can enable HTTP Basic Authentication. Add these to your `.env` file:
+
+```bash
+# Both variables required to enable authentication
+BASIC_AUTH_USERNAME=admin
+BASIC_AUTH_PASSWORD=your-secure-password
+
+# Also enable remote access
+AUTOCODER_ALLOW_REMOTE=1
+```
+
+When enabled:
+- All HTTP requests require the `Authorization: Basic <credentials>` header
+- WebSocket connections support auth via header or `?token=base64(user:pass)` query parameter
+- The browser will prompt for username/password automatically
+
+**Note:** Basic Auth is only enforced when both username and password are set. For local-only development, you don't need to configure this.
+
 ### N8N Webhook Integration
 
 The agent can send progress notifications to an N8N webhook. Create a `.env` file:
