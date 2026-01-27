@@ -60,7 +60,7 @@ class Feature(Base):
     last_failed_at = Column(DateTime, nullable=True)  # Last time feature failed
 
     # Regression testing
-    regression_count = Column(Integer, nullable=False, default=0)  # How many times feature was regression tested
+    regression_count = Column(Integer, nullable=False, server_default='0', default=0)  # How many times feature was regression tested
 
     # Error tracking
     last_error = Column(Text, nullable=True)  # Last error message when feature failed

@@ -358,28 +358,28 @@ def feature_get_for_regression(
     """
     session = get_session()
     try:
-        # Use with_for_update() to acquire row-level locks before reading.
+        # Use application-level _claim_lock to serialize feature selection and updates.
         # This prevents race conditions where concurrent requests both select
         # the same features (with lowest regression_count) before either commits.
         # The lock ensures requests are serialized: the second request will block
         # until the first commits, then see the updated regression_count values.
-        features = (
-            session.query(Feature)
-            .filter(Feature.passes == True)
-            .order_by(Feature.regression_count.asc(), Feature.id.asc())
-            .limit(limit)
-            .with_for_update()
-            .all()
-        )
+        with _claim_lock:
+            features = (
+                session.query(Feature)
+                .filter(Feature.passes == True)
+                .order_by(Feature.regression_count.asc(), Feature.id.asc())
+                .limit(limit)
+                .all()
+            )
 
-        # Increment regression_count for selected features (now safe under lock)
-        for feature in features:
-            feature.regression_count = (feature.regression_count or 0) + 1
-        session.commit()
+            # Increment regression_count for selected features (now safe under lock)
+            for feature in features:
+                feature.regression_count = (feature.regression_count or 0) + 1
+            session.commit()
 
-        # Refresh to get updated counts after commit releases the lock
-        for feature in features:
-            session.refresh(feature)
+            # Refresh to get updated counts after commit
+            for feature in features:
+                session.refresh(feature)
 
         return json.dumps({
             "features": [f.to_dict() for f in features],
@@ -608,6 +608,18 @@ def feature_release_testing(
             return json.dumps({"error": f"Feature {feature_id} not found"})
 
         feature.in_progress = False
+        
+        # Persist the regression test outcome
+        if tested_ok:
+            # Feature still passes - clear failure markers
+            feature.passes = True
+            feature.last_failed_at = None
+            feature.last_error = None
+        else:
+            # Regression detected - mark as failing
+            feature.passes = False
+            feature.last_failed_at = _utc_now()
+        
         session.commit()
 
         return json.dumps({
