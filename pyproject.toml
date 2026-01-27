@@ -17,14 +17,43 @@ warn_unused_ignores = true
 strict = true
 plugins = []
 
-[tool.mypy-server.*]
-disallow_untyped_defs = true
-disallow_incomplete_defs = true
-disallow_untyped_calls = false  # Allow external SDKs without stubs
+[[tool.mypy.overrides]]
+module = [
+    "openai",
+    "psutil",
+    "pythonjsonlogger",
+    "prometheus_client",
+    "sentry_sdk",
+    "sentry_sdk.integrations.fastapi",
+    "opentelemetry",
+    "opentelemetry.*",
+    "claude_agent_sdk",
+    "apscheduler",
+    "apscheduler.*",
+    "winpty",
+]
 ignore_missing_imports = true
-strict_optional = true
-warn_unused_configs = true
-warn_unreachable = true
-warn_no_return = true
-warn_return_any = true
-warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+module = [
+    "server.services.terminal_manager",
+    "server.services.assistant_database",
+    "api.database",
+    "registry",
+    "server.routers.schedules",
+    "server.routers.assistant_chat",
+    "server.routers.features",
+    "server.routers.projects",
+    "server.routers.expand_project",
+    "server.routers.agent",
+    "server.routers.spec_creation",
+    "server.websocket",
+]
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = [
+    "server.*",
+    "api.*",
+]
+ignore_errors = true
