@@ -19,13 +19,17 @@ Usage:
 """
 
 import asyncio
+import atexit
 import os
+import signal
 import subprocess
 import sys
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Literal
+
+from sqlalchemy import text
 
 from api.database import Feature, create_database
 from api.dependency_resolver import are_dependencies_satisfied, compute_scheduling_scores
@@ -1172,6 +1176,31 @@ class ParallelOrchestrator:
                 "yolo_mode": self.yolo_mode,
             }
 
+    def cleanup(self) -> None:
+        """Clean up database resources.
+
+        CRITICAL: Must be called when orchestrator exits to prevent database corruption.
+        - Forces WAL checkpoint to flush pending writes to main database file
+        - Disposes engine to close all connections
+
+        This prevents stale cache issues when the orchestrator restarts.
+        """
+        if self._engine is not None:
+            try:
+                debug_log.log("CLEANUP", "Forcing WAL checkpoint before dispose")
+                with self._engine.connect() as conn:
+                    conn.execute(text("PRAGMA wal_checkpoint(FULL)"))
+                    conn.commit()
+                debug_log.log("CLEANUP", "WAL checkpoint completed, disposing engine")
+            except Exception as e:
+                debug_log.log("CLEANUP", f"WAL checkpoint failed (non-fatal): {e}")
+
+            try:
+                self._engine.dispose()
+                debug_log.log("CLEANUP", "Engine disposed successfully")
+            except Exception as e:
+                debug_log.log("CLEANUP", f"Engine dispose failed: {e}")
+
 
 async def run_parallel_orchestrator(
     project_dir: Path,
@@ -1224,11 +1253,34 @@ async def run_parallel_orchestrator(
     except Exception as e:
         print(f"[ORCHESTRATOR] Warning: Failed to clear stuck features: {e}", flush=True)
 
+    # Set up cleanup to run on exit (handles normal exit, exceptions, signals)
+    def cleanup_handler():
+        debug_log.log("CLEANUP", "Cleanup handler invoked")
+        orchestrator.cleanup()
+
+    atexit.register(cleanup_handler)
+
+    # Set up signal handlers for graceful shutdown (SIGTERM, SIGINT)
+    def signal_handler(signum, frame):
+        debug_log.log("SIGNAL", f"Received signal {signum}, initiating cleanup")
+        print(f"\nReceived signal {signum}. Stopping agents...", flush=True)
+        orchestrator.stop_all()
+        orchestrator.cleanup()
+        sys.exit(0)
+
+    # Register signal handlers (SIGTERM for process termination, SIGINT for Ctrl+C)
+    signal.signal(signal.SIGTERM, signal_handler)
+    signal.signal(signal.SIGINT, signal_handler)
+
     try:
         await orchestrator.run_loop()
     except KeyboardInterrupt:
         print("\n\nInterrupted by user. Stopping agents...", flush=True)
         orchestrator.stop_all()
+    finally:
+        # CRITICAL: Always clean up database resources on exit
+        # This forces WAL checkpoint and disposes connections
+        orchestrator.cleanup()
 
 
 def main():
