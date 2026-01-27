@@ -48,6 +48,7 @@ from api.dependency_resolver import (
     would_create_circular_dependency,
 )
 from api.migration import migrate_json_to_sqlite
+from quality_gates import load_quality_config, verify_quality
 
 # Configuration from environment
 PROJECT_DIR = Path(os.environ.get("PROJECT_DIR", ".")).resolve()
@@ -228,6 +229,42 @@ def feature_get_summary(
 
 
 @mcp.tool()
+def feature_verify_quality() -> str:
+    """Run quality checks (lint, type-check) on the project.
+
+    Automatically detects and runs available linters and type checkers:
+    - Linters: ESLint, Biome (JS/TS), ruff, flake8 (Python)
+    - Type checkers: TypeScript (tsc), Python (mypy)
+    - Custom scripts: .autocoder/quality-checks.sh
+
+    Use this tool before marking a feature as passing to ensure code quality.
+    In strict mode (default), feature_mark_passing will block if quality checks fail.
+
+    Returns:
+        JSON with: passed (bool), checks (dict), summary (str)
+    """
+    config = load_quality_config(PROJECT_DIR)
+
+    if not config.get("enabled", True):
+        return json.dumps({
+            "passed": True,
+            "checks": {},
+            "summary": "Quality gates disabled"
+        })
+
+    checks_config = config.get("checks", {})
+    result = verify_quality(
+        PROJECT_DIR,
+        run_lint=checks_config.get("lint", True),
+        run_type_check=checks_config.get("type_check", True),
+        run_custom=True,
+        custom_script_path=checks_config.get("custom_script"),
+    )
+
+    return json.dumps(result)
+
+
+@mcp.tool()
 def feature_mark_passing(
     feature_id: Annotated[int, Field(description="The ID of the feature to mark as passing", ge=1)]
 ) -> str:
@@ -238,11 +275,16 @@ def feature_mark_passing(
 
     Uses atomic SQL UPDATE for parallel safety.
 
+    IMPORTANT: In strict mode (default), this tool will run quality checks
+    (lint, type-check) and BLOCK if they fail. Run feature_verify_quality first
+    to see what checks will be performed.
+
     Args:
         feature_id: The ID of the feature to mark as passing
 
     Returns:
-        JSON with success confirmation: {success, feature_id, name}
+        JSON with success confirmation: {success, feature_id, name, quality_result}
+        If strict mode is enabled and quality checks fail, returns an error.
     """
     session = get_session()
     try:
@@ -253,6 +295,28 @@ def feature_mark_passing(
 
         name = feature.name
 
+        # Run quality checks
+        config = load_quality_config(PROJECT_DIR)
+        quality_result = None
+
+        if config.get("enabled", True):
+            checks_config = config.get("checks", {})
+            quality_result = verify_quality(
+                PROJECT_DIR,
+                run_lint=checks_config.get("lint", True),
+                run_type_check=checks_config.get("type_check", True),
+                run_custom=True,
+                custom_script_path=checks_config.get("custom_script"),
+            )
+
+            # In strict mode, block if quality checks failed
+            if config.get("strict_mode", True) and not quality_result["passed"]:
+                return json.dumps({
+                    "error": "Quality checks failed - cannot mark feature as passing",
+                    "quality_result": quality_result,
+                    "hint": "Fix the issues and try again, or disable strict_mode in .autocoder/config.json"
+                })
+
         # Atomic update - prevents race conditions in parallel mode
         session.execute(text("""
             UPDATE features
@@ -261,7 +325,11 @@ def feature_mark_passing(
         """), {"id": feature_id})
         session.commit()
 
-        return json.dumps({"success": True, "feature_id": feature_id, "name": name})
+        result = {"success": True, "feature_id": feature_id, "name": name}
+        if quality_result:
+            result["quality_result"] = quality_result
+
+        return json.dumps(result)
     except Exception as e:
         session.rollback()
         return json.dumps({"error": f"Failed to mark feature passing: {str(e)}"})
