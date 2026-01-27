@@ -61,6 +61,25 @@ export function useDeleteProject() {
   });
 }
 
+export function useCloneProjectRepository(projectName: string | null) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ repoUrl, targetDir }: { repoUrl: string; targetDir?: string }) => {
+      if (!projectName) {
+        throw new Error("No project selected");
+      }
+      return api.cloneProjectRepository(projectName, repoUrl, targetDir);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      if (projectName) {
+        queryClient.invalidateQueries({ queryKey: ["project", projectName] });
+      }
+    },
+  });
+}
+
 // ============================================================================
 // Features
 // ============================================================================

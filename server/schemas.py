@@ -70,6 +70,22 @@ class ProjectPromptsUpdate(BaseModel):
     coding_prompt: str | None = None
 
 
+class ProjectCloneRequest(BaseModel):
+    """Request schema for cloning a git repository into a project."""
+    repo_url: str = Field(..., min_length=1, description="Git repository URL to clone")
+    target_dir: str | None = Field(
+        default=None,
+        description="Optional directory name (relative to the project root) to clone into",
+    )
+
+
+class ProjectCloneResponse(BaseModel):
+    """Response schema for a git clone operation."""
+    success: bool = True
+    message: str
+    path: str
+
+
 # ============================================================================
 # Feature Schemas
 # ============================================================================

@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { ChevronDown, Plus, FolderOpen, Loader2, Trash2 } from "lucide-react";
+import { ChevronDown, Plus, FolderOpen, Loader2, Trash2, GitBranch } from "lucide-react";
 import type { ProjectSummary } from "../lib/types";
 import { NewProjectModal } from "./NewProjectModal";
+import { CloneRepoModal } from "./CloneRepoModal";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { useDeleteProject } from "../hooks/useProjects";
 import { Button } from "@/components/ui/button";
@@ -31,6 +32,7 @@ export function ProjectSelector({
 }: ProjectSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [showNewProjectModal, setShowNewProjectModal] = useState(false);
+  const [showCloneRepoModal, setShowCloneRepoModal] = useState(false);
   const [projectToDelete, setProjectToDelete] = useState<string | null>(null);
 
   const deleteProject = useDeleteProject();
@@ -147,6 +149,16 @@ export function ProjectSelector({
           <div className="p-1">
             <DropdownMenuItem
               onSelect={() => {
+                setShowCloneRepoModal(true);
+              }}
+              className="cursor-pointer font-semibold"
+              disabled={!selectedProject}
+            >
+              <GitBranch size={16} />
+              Clone Repository
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={() => {
                 setShowNewProjectModal(true);
               }}
               className="cursor-pointer font-semibold"
@@ -164,6 +176,12 @@ export function ProjectSelector({
         onClose={() => setShowNewProjectModal(false)}
         onProjectCreated={handleProjectCreated}
         onStepChange={(step) => onSpecCreatingChange?.(step === "chat")}
+      />
+
+      <CloneRepoModal
+        isOpen={showCloneRepoModal}
+        onClose={() => setShowCloneRepoModal(false)}
+        projectName={selectedProject}
       />
 
       {/* Delete Confirmation Dialog */}

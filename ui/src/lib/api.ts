@@ -6,6 +6,7 @@ import type {
   ProjectSummary,
   ProjectDetail,
   ProjectPrompts,
+  ProjectCloneResponse,
   FeatureListResponse,
   Feature,
   FeatureCreate,
@@ -85,6 +86,17 @@ export async function getProject(name: string): Promise<ProjectDetail> {
 export async function deleteProject(name: string): Promise<void> {
   await fetchJSON(`/projects/${encodeURIComponent(name)}`, {
     method: "DELETE",
+  });
+}
+
+export async function cloneProjectRepository(
+  name: string,
+  repoUrl: string,
+  targetDir?: string,
+): Promise<ProjectCloneResponse> {
+  return fetchJSON(`/projects/${encodeURIComponent(name)}/clone`, {
+    method: "POST",
+    body: JSON.stringify({ repo_url: repoUrl, target_dir: targetDir }),
   });
 }
 

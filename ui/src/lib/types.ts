@@ -21,6 +21,12 @@ export interface ProjectDetail extends ProjectSummary {
   prompts_dir: string;
 }
 
+export interface ProjectCloneResponse {
+  success: boolean;
+  message: string;
+  path: string;
+}
+
 // Filesystem types
 export interface DriveInfo {
   letter: string;
