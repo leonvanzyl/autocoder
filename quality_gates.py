@@ -139,7 +139,9 @@ def _detect_type_checker(project_dir: Path) -> tuple[str, list[str]] | None:
         if (project_dir / "node_modules/.bin/tsc").exists():
             return ("tsc", ["node_modules/.bin/tsc", "--noEmit"])
         if shutil.which("npx"):
-            return ("tsc", ["npx", "tsc", "--noEmit"])
+            # Use --no-install to fail fast if tsc is not locally installed
+            # rather than prompting/auto-downloading
+            return ("tsc", ["npx", "--no-install", "tsc", "--noEmit"])
 
     # Python (mypy)
     if (project_dir / "pyproject.toml").exists() or (project_dir / "setup.py").exists():
@@ -324,7 +326,7 @@ def verify_quality(
         if not type_result["passed"]:
             all_passed = False
 
-    if do_custom:
+    if run_custom:
         custom_result = run_custom_script(
             project_dir,
             custom_script_path,
