@@ -160,10 +160,10 @@ async def get_denied_commands_list():
     return DeniedCommandsResponse(
         commands=[
             DeniedCommandItem(
-                command=d.command,
-                reason=d.reason,
-                timestamp=d.timestamp,
-                project_dir=d.project_dir,
+                command=d["command"],
+                reason=d["reason"],
+                timestamp=d["timestamp"],
+                project_dir=d["project_dir"],
             )
             for d in denied
         ],
