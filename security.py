@@ -143,6 +143,45 @@ def split_command_segments(command_string: str) -> list[str]:
     return result
 
 
+def _extract_primary_command(segment: str) -> str | None:
+    """
+    Fallback command extraction when shlex fails.
+
+    Extracts the first word that looks like a command, handling cases
+    like complex docker exec commands with nested quotes.
+
+    Args:
+        segment: The command segment to parse
+
+    Returns:
+        The primary command name, or None if extraction fails
+    """
+    # Remove leading whitespace
+    segment = segment.lstrip()
+
+    if not segment:
+        return None
+
+    # Skip env var assignments at start (VAR=value cmd)
+    words = segment.split()
+    while words and "=" in words[0] and not words[0].startswith("="):
+        words = words[1:]
+
+    if not words:
+        return None
+
+    # Extract first token (the command)
+    first_word = words[0]
+
+    # Match valid command characters (alphanumeric, dots, underscores, hyphens, slashes)
+    match = re.match(r"^([a-zA-Z0-9_./-]+)", first_word)
+    if match:
+        cmd = match.group(1)
+        return os.path.basename(cmd)
+
+    return None
+
+
 def extract_commands(command_string: str) -> list[str]:
     """
     Extract command names from a shell command string.
@@ -159,7 +198,7 @@ def extract_commands(command_string: str) -> list[str]:
     commands = []
 
     # shlex doesn't treat ; as a separator, so we need to pre-process
-    import re
+    # (re is already imported at module level)
 
     # Split on semicolons that aren't inside quotes (simple heuristic)
     # This handles common cases like "echo hello; ls"
@@ -174,8 +213,11 @@ def extract_commands(command_string: str) -> list[str]:
             tokens = shlex.split(segment)
         except ValueError:
             # Malformed command (unclosed quotes, etc.)
-            # Return empty to trigger block (fail-safe)
-            return []
+            # Try fallback extraction instead of blocking entirely
+            fallback_cmd = _extract_primary_command(segment)
+            if fallback_cmd:
+                commands.append(fallback_cmd)
+            continue
 
         if not tokens:
             continue

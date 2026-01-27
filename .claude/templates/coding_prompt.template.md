@@ -284,17 +284,23 @@ Use the feature_mark_passing tool with feature_id=42
 
 ### STEP 7: COMMIT YOUR PROGRESS
 
-Make a descriptive git commit:
+Make a descriptive git commit.
+
+**Git Commit Rules:**
+- ALWAYS use simple `-m` flag for commit messages
+- NEVER use heredocs (`cat <<EOF` or `<<'EOF'`) - they fail in sandbox mode
+- For multi-line messages, use multiple `-m` flags:
 
 ```bash
 git add .
-git commit -m "Implement [feature name] - verified end-to-end
+git commit -m "Implement [feature name] - verified end-to-end" -m "- Added [specific changes]" -m "- Tested with browser automation" -m "- Marked feature #X as passing"
+```
 
-- Added [specific changes]
-- Tested with browser automation
-- Marked feature #X as passing
-- Screenshots in verification/ directory
-"
+Or use a single descriptive message:
+
+```bash
+git add .
+git commit -m "feat: implement [feature name] with browser verification"
 ```
 
 ### STEP 8: UPDATE PROGRESS NOTES
