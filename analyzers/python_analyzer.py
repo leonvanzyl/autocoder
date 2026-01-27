@@ -279,7 +279,7 @@ class PythonAnalyzer(BaseAnalyzer):
                     "method": "ALL",
                     "handler": "view",
                     "file": str(file.relative_to(self.project_dir)),
-                    "description": f"Django regex route",
+                    "description": "Django regex route",
                 })
 
         return endpoints

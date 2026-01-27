@@ -12,14 +12,13 @@ Endpoints:
 """
 
 import logging
-import tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Literal, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 

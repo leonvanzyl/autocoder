@@ -5,10 +5,9 @@ Template Library Module
 Load and manage application templates for quick project scaffolding.
 """
 
-import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Optional
+from typing import Optional
 
 import yaml
 

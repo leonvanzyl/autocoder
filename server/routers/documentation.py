@@ -13,12 +13,11 @@ Endpoints:
 
 import logging
 from pathlib import Path
-from typing import Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from auto_documentation import DocumentationGenerator, generate_documentation
+from auto_documentation import DocumentationGenerator
 from registry import get_project_path
 
 logger = logging.getLogger(__name__)

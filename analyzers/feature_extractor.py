@@ -211,7 +211,6 @@ def extract_features(detection_result: StackDetectionResult) -> FeatureExtractio
     """
     features: list[DetectedFeature] = []
     primary_frontend = detection_result.get("primary_frontend")
-    primary_backend = detection_result.get("primary_backend")
 
     # Track unique features to avoid duplicates
     seen_features: set[str] = set()

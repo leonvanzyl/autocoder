@@ -14,8 +14,6 @@ Endpoints:
 - GET /api/visual/snapshot/{project_name}/{type}/{filename} - Get snapshot image
 """
 
-import asyncio
-import base64
 import json
 import logging
 from pathlib import Path
@@ -27,10 +25,8 @@ from pydantic import BaseModel, Field
 
 from registry import get_project_path
 from visual_regression import (
-    TestReport,
     Viewport,
     VisualRegressionTester,
-    run_visual_tests,
 )
 
 logger = logging.getLogger(__name__)

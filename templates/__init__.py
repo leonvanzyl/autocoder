@@ -21,11 +21,11 @@ Available templates:
 from .library import (
     Template,
     TemplateCategory,
+    generate_app_spec,
+    generate_features,
     get_template,
     list_templates,
     load_template,
-    generate_app_spec,
-    generate_features,
 )
 
 __all__ = [

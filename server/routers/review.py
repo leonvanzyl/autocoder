@@ -20,7 +20,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from registry import get_project_path
-from review_agent import ReviewAgent, run_review
+from review_agent import ReviewAgent
 
 logger = logging.getLogger(__name__)
 

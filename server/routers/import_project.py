@@ -10,7 +10,6 @@ The import flow:
 3. POST /api/import/create-features - Create features in database
 """
 
-import json
 import logging
 import re
 import sys

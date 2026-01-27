@@ -15,10 +15,10 @@ Features:
 """
 
 from .github_actions import (
-    generate_github_workflow,
-    generate_all_workflows,
     GitHubWorkflow,
     WorkflowTrigger,
+    generate_all_workflows,
+    generate_github_workflow,
 )
 
 __all__ = [

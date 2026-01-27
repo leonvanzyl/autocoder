@@ -206,7 +206,7 @@ async def preview_template(request: PreviewRequest):
     Does not create any files - just returns the content.
     """
     try:
-        from templates import get_template, generate_app_spec, generate_features
+        from templates import generate_app_spec, generate_features, get_template
 
         template = get_template(request.template_id)
         if not template:
@@ -243,7 +243,7 @@ async def apply_template(request: ApplyRequest):
     Does NOT register the project or create features - use the projects API for that.
     """
     try:
-        from templates import get_template, generate_app_spec, generate_features
+        from templates import generate_app_spec, generate_features, get_template
 
         template = get_template(request.template_id)
         if not template:
@@ -291,7 +291,7 @@ async def get_template_features(template_id: str):
     Returns features in bulk_create format.
     """
     try:
-        from templates import get_template, generate_features
+        from templates import generate_features, get_template
 
         template = get_template(template_id)
         if not template:

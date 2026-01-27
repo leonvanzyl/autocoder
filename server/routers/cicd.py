@@ -12,7 +12,7 @@ Endpoints:
 
 import logging
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field

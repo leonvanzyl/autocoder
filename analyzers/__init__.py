@@ -11,7 +11,6 @@ Main entry points:
 - extract_from_project: One-step detection and feature extraction
 """
 
-from .stack_detector import StackDetector, StackDetectionResult
 from .base_analyzer import BaseAnalyzer
 from .feature_extractor import (
     DetectedFeature,
@@ -20,6 +19,7 @@ from .feature_extractor import (
     extract_from_project,
     features_to_bulk_create_format,
 )
+from .stack_detector import StackDetectionResult, StackDetector
 
 __all__ = [
     # Stack Detection

@@ -48,31 +48,31 @@ class ColorToken:
         """Convert hex to HSL."""
         hex_color = self.value.lstrip("#")
         r, g, b = tuple(int(hex_color[i : i + 2], 16) / 255 for i in (0, 2, 4))
-        h, l, s = colorsys.rgb_to_hls(r, g, b)
-        return (h * 360, s * 100, l * 100)
+        hue, lightness, sat = colorsys.rgb_to_hls(r, g, b)
+        return (hue * 360, sat * 100, lightness * 100)
 
     def generate_shades(self) -> dict:
         """Generate 50-950 shades from base color."""
-        h, s, l = self.to_hsl()
+        hue, sat, lightness = self.to_hsl()
 
         shades = {
-            "50": self._hsl_to_hex(h, max(10, s * 0.3), 95),
-            "100": self._hsl_to_hex(h, max(15, s * 0.5), 90),
-            "200": self._hsl_to_hex(h, max(20, s * 0.6), 80),
-            "300": self._hsl_to_hex(h, max(25, s * 0.7), 70),
-            "400": self._hsl_to_hex(h, max(30, s * 0.85), 60),
+            "50": self._hsl_to_hex(hue, max(10, sat * 0.3), 95),
+            "100": self._hsl_to_hex(hue, max(15, sat * 0.5), 90),
+            "200": self._hsl_to_hex(hue, max(20, sat * 0.6), 80),
+            "300": self._hsl_to_hex(hue, max(25, sat * 0.7), 70),
+            "400": self._hsl_to_hex(hue, max(30, sat * 0.85), 60),
             "500": self.value,  # Base color
-            "600": self._hsl_to_hex(h, min(100, s * 1.1), l * 0.85),
-            "700": self._hsl_to_hex(h, min(100, s * 1.15), l * 0.7),
-            "800": self._hsl_to_hex(h, min(100, s * 1.2), l * 0.55),
-            "900": self._hsl_to_hex(h, min(100, s * 1.25), l * 0.4),
-            "950": self._hsl_to_hex(h, min(100, s * 1.3), l * 0.25),
+            "600": self._hsl_to_hex(hue, min(100, sat * 1.1), lightness * 0.85),
+            "700": self._hsl_to_hex(hue, min(100, sat * 1.15), lightness * 0.7),
+            "800": self._hsl_to_hex(hue, min(100, sat * 1.2), lightness * 0.55),
+            "900": self._hsl_to_hex(hue, min(100, sat * 1.25), lightness * 0.4),
+            "950": self._hsl_to_hex(hue, min(100, sat * 1.3), lightness * 0.25),
         }
         return shades
 
-    def _hsl_to_hex(self, h: float, s: float, l: float) -> str:
+    def _hsl_to_hex(self, hue: float, sat: float, lightness: float) -> str:
         """Convert HSL to hex."""
-        r, g, b = colorsys.hls_to_rgb(h / 360, l / 100, s / 100)
+        r, g, b = colorsys.hls_to_rgb(hue / 360, lightness / 100, sat / 100)
         return f"#{int(r * 255):02x}{int(g * 255):02x}{int(b * 255):02x}"
 
 
@@ -510,12 +510,12 @@ module.exports = {config_json}
         # Check primary colors against white/black backgrounds
         for name, value in tokens.colors.items():
             color_token = ColorToken(name=name, value=value)
-            h, s, l = color_token.to_hsl()
+            _hue, _sat, lightness = color_token.to_hsl()
 
             # Simple contrast check based on lightness
-            if l > 50:
+            if lightness > 50:
                 # Light color - should contrast with white
-                if l > 85:
+                if lightness > 85:
                     issues.append(
                         {
                             "color": name,
@@ -526,7 +526,7 @@ module.exports = {config_json}
                     )
             else:
                 # Dark color - should contrast with black
-                if l < 15:
+                if lightness < 15:
                     issues.append(
                         {
                             "color": name,

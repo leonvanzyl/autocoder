@@ -22,9 +22,7 @@ Configuration:
 
 import json
 import logging
-import os
 import re
-import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path

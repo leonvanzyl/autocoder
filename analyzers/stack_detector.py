@@ -60,9 +60,9 @@ class StackDetector:
     def _load_analyzers(self) -> None:
         """Load all available analyzers."""
         # Import analyzers here to avoid circular imports
-        from .react_analyzer import ReactAnalyzer
         from .node_analyzer import NodeAnalyzer
         from .python_analyzer import PythonAnalyzer
+        from .react_analyzer import ReactAnalyzer
         from .vue_analyzer import VueAnalyzer
 
         # Order matters: more specific analyzers first (Next.js before React)

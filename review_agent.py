@@ -301,7 +301,7 @@ class ReviewAgent:
                         description=f"Import '{name}' may be unused in this file",
                         file_path=file_path,
                         line_number=lineno,
-                        suggestion=f"Remove unused import if not needed",
+                        suggestion="Remove unused import if not needed",
                     )
                 )
 
@@ -319,7 +319,7 @@ class ReviewAgent:
                             description=f"Class '{node.name}' should use PascalCase naming",
                             file_path=file_path,
                             line_number=node.lineno,
-                            suggestion=f"Rename to follow PascalCase convention",
+                            suggestion="Rename to follow PascalCase convention",
                         )
                     )
 
@@ -335,7 +335,7 @@ class ReviewAgent:
                                 description=f"Function '{node.name}' should use snake_case naming",
                                 file_path=file_path,
                                 line_number=node.lineno,
-                                suggestion=f"Rename to follow snake_case convention",
+                                suggestion="Rename to follow snake_case convention",
                             )
                         )
 
@@ -426,7 +426,7 @@ class ReviewAgent:
                             category=IssueCategory.SECURITY,
                             severity=IssueSeverity.WARNING,
                             title=title,
-                            description=f"Potential security issue detected",
+                            description="Potential security issue detected",
                             file_path=file_path,
                             line_number=i,
                             code_snippet=line.strip()[:80],

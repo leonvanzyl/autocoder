@@ -425,7 +425,6 @@ class GitWorkflow:
             return []
 
         result = self._run_git("branch", "--list", f"{self.branch_prefix}*", check=False)
-        current = self._get_current_branch()
 
         branches = []
         for line in result.stdout.strip().split("\n"):
