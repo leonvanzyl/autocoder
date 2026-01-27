@@ -64,6 +64,9 @@ FEATURE_MCP_TOOLS = [
     "mcp__features__feature_create",
     "mcp__features__feature_create_bulk",
     "mcp__features__feature_get_stats",
+    "mcp__features__feature_get_next",
+    "mcp__features__feature_add_dependency",
+    "mcp__features__feature_remove_dependency",
 ]
 
 
@@ -352,6 +355,9 @@ class ExpandChatSession:
         # Accumulate full response to detect feature blocks
         full_response = ""
 
+        # Track whether MCP tool succeeded (to skip XML parsing fallback)
+        mcp_tool_succeeded = False
+
         # Stream the response
         async for msg in self.client.receive_response():
             msg_type = type(msg).__name__
@@ -372,53 +378,89 @@ class ExpandChatSession:
                                 "timestamp": datetime.now().isoformat()
                             })
 
-        # Check for feature creation blocks in full response (handle multiple blocks)
-        features_matches = re.findall(
-            r'<features_to_create>\s*(\[[\s\S]*?\])\s*</features_to_create>',
-            full_response
-        )
+                    # Detect successful feature_create_bulk tool calls
+                    elif block_type == "ToolResult":
+                        tool_name = getattr(block, "tool_name", "")
+                        if "feature_create_bulk" in tool_name:
+                            mcp_tool_succeeded = True
+                            logger.info("Detected successful feature_create_bulk MCP tool call")
 
-        if features_matches:
-            # Collect all features from all blocks, deduplicating by name
-            all_features: list[dict] = []
-            seen_names: set[str] = set()
+                            # Extract created features from tool result
+                            tool_content = getattr(block, "content", [])
+                            if tool_content:
+                                for content_block in tool_content:
+                                    if hasattr(content_block, "text"):
+                                        try:
+                                            result_data = json.loads(content_block.text)
+                                            created_features = result_data.get("created_features", [])
 
-            for features_json in features_matches:
-                try:
-                    features_data = json.loads(features_json)
+                                            if created_features:
+                                                self.features_created += len(created_features)
+                                                self.created_feature_ids.extend([f["id"] for f in created_features])
 
-                    if features_data and isinstance(features_data, list):
-                        for feature in features_data:
-                            name = feature.get("name", "")
-                            if name and name not in seen_names:
-                                seen_names.add(name)
-                                all_features.append(feature)
-                except json.JSONDecodeError as e:
-                    logger.error(f"Failed to parse features JSON block: {e}")
-                    # Continue processing other blocks
+                                                yield {
+                                                    "type": "features_created",
+                                                    "count": len(created_features),
+                                                    "features": created_features,
+                                                    "source": "mcp"  # Tag source for debugging
+                                                }
 
-            if all_features:
-                try:
-                    # Create all deduplicated features
-                    created = await self._create_features_bulk(all_features)
+                                                logger.info(f"Created {len(created_features)} features for {self.project_name} (via MCP)")
+                                        except (json.JSONDecodeError, AttributeError) as e:
+                                            logger.warning(f"Failed to parse MCP tool result: {e}")
 
-                    if created:
-                        self.features_created += len(created)
-                        self.created_feature_ids.extend([f["id"] for f in created])
+        # Only parse XML if MCP tool wasn't used (fallback mechanism)
+        if not mcp_tool_succeeded:
+            # Check for feature creation blocks in full response (handle multiple blocks)
+            features_matches = re.findall(
+                r'<features_to_create>\s*(\[[\s\S]*?\])\s*</features_to_create>',
+                full_response
+            )
 
+            if features_matches:
+                # Collect all features from all blocks, deduplicating by name
+                all_features: list[dict] = []
+                seen_names: set[str] = set()
+
+                for features_json in features_matches:
+                    try:
+                        features_data = json.loads(features_json)
+
+                        if features_data and isinstance(features_data, list):
+                            for feature in features_data:
+                                name = feature.get("name", "")
+                                if name and name not in seen_names:
+                                    seen_names.add(name)
+                                    all_features.append(feature)
+                    except json.JSONDecodeError as e:
+                        logger.error(f"Failed to parse features JSON block: {e}")
+                        # Continue processing other blocks
+
+                if all_features:
+                    try:
+                        # Create all deduplicated features
+                        created = await self._create_features_bulk(all_features)
+
+                        if created:
+                            self.features_created += len(created)
+                            self.created_feature_ids.extend([f["id"] for f in created])
+
+                            yield {
+                                "type": "features_created",
+                                "count": len(created),
+                                "features": created,
+                                "source": "xml_parsing"  # Tag source for debugging
+                            }
+
+                            logger.info(f"Created {len(created)} features for {self.project_name} (via XML parsing)")
+                    except Exception:
+                        logger.exception("Failed to create features")
                         yield {
-                            "type": "features_created",
-                            "count": len(created),
-                            "features": created
+                            "type": "error",
+                            "content": "Failed to create features"
                         }
-
-                        logger.info(f"Created {len(created)} features for {self.project_name}")
-                except Exception:
-                    logger.exception("Failed to create features")
-                    yield {
-                        "type": "error",
-                        "content": "Failed to create features"
-                    }
+        else:
+            logger.info(f"Skipping XML parsing for {self.project_name} (MCP tool succeeded)")
 
     async def _create_features_bulk(self, features: list[dict]) -> list[dict]:
         """
