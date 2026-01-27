@@ -8,6 +8,11 @@ services:
       dockerfile: Dockerfile
     env_file:
       - .env
+    environment:
+      # Docker port-forwarded requests appear from the bridge gateway
+      # (e.g., 172.17.0.1), so strict localhost-only mode blocks them.
+      # Allow overriding via AUTOCODER_ALLOW_REMOTE=0/false in .env.
+      AUTOCODER_ALLOW_REMOTE: ${AUTOCODER_ALLOW_REMOTE:-1}
     ports:
       - "8888:8888"
     restart: unless-stopped
