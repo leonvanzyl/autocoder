@@ -5,13 +5,12 @@ Projects Router
 API endpoints for project management.
 Uses project registry for path lookups instead of fixed generations/ directory.
 """
-
 import re
 import shutil
 import subprocess
 import sys
-from urllib.parse import urlparse
 from pathlib import Path
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, HTTPException
 
