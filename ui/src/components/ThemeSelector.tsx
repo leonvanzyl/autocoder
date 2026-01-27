@@ -13,7 +13,7 @@ export function ThemeSelector({ themes, currentTheme, onThemeChange }: ThemeSele
   const [isOpen, setIsOpen] = useState(false)
   const [previewTheme, setPreviewTheme] = useState<ThemeId | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Close dropdown when clicking outside
   useEffect(() => {
