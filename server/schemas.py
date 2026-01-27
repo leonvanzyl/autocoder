@@ -122,11 +122,11 @@ class FeatureCreate(FeatureBase):
 
 
 class FeatureUpdate(BaseModel):
-    """Request schema for updating a feature (partial updates allowed)."""
-    category: str | None = None
-    name: str | None = None
-    description: str | None = None
-    steps: list[str] | None = None
+    """Request schema for updating a feature. All fields optional for partial updates."""
+    category: str | None = Field(None, min_length=1, max_length=100)
+    name: str | None = Field(None, min_length=1, max_length=255)
+    description: str | None = Field(None, min_length=1)
+    steps: list[str] | None = Field(None, min_length=1)
     priority: int | None = None
     dependencies: list[int] | None = None  # Optional - can update dependencies
 
