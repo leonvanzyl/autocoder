@@ -42,6 +42,41 @@ which is the single source of truth for what needs to be built.
 
 Use the feature_create_bulk tool to add all features at once. You can create features in batches if there are many (e.g., 50 at a time).
 
+```
+Use the feature_create_bulk tool with features=[
+  {
+    "category": "functional",
+    "name": "Brief feature name",
+    "description": "Brief description of the feature and what this test verifies",
+    "steps": [
+      "Step 1: Navigate to relevant page",
+      "Step 2: Perform action",
+      "Step 3: Verify expected result"
+    ]
+  },
+  {
+    "category": "style",
+    "name": "Brief feature name",
+    "description": "Brief description of UI/UX requirement",
+    "steps": [
+      "Step 1: Navigate to page",
+      "Step 2: Take screenshot",
+      "Step 3: Verify visual requirements"
+    ]
+  },
+  {
+    "category": "refactoring",
+    "name": "Brief refactoring task name",
+    "description": "Description of code improvement or restructuring needed",
+    "steps": [
+      "Step 1: Review existing code",
+      "Step 2: Implement refactoring changes",
+      "Step 3: Verify code compiles and tests pass"
+    ]
+  }
+]
+```
+
 **Notes:**
 - IDs and priorities are assigned automatically based on order
 - All features start with `passes: false` by default
@@ -53,7 +88,7 @@ Use the feature_create_bulk tool to add all features at once. You can create fea
   - **Simple apps**: ~150 tests
   - **Medium apps**: ~250 tests
   - **Complex apps**: ~400+ tests
-- Both "functional" and "style" categories
+- Categories: "functional", "style", and "refactoring"
 - Mix of narrow tests (2-5 steps) and comprehensive tests (10+ steps)
 - At least 25 tests MUST have 10+ steps each (more for complex apps)
 - Order features by priority: fundamental features first (the API assigns priority based on order)
