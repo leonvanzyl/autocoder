@@ -20,12 +20,12 @@ from typing import AsyncGenerator, Optional
 from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
 from dotenv import load_dotenv
 
+from ..gemini_client import is_gemini_configured, stream_chat
 from .assistant_database import (
     add_message,
     create_conversation,
     get_messages,
 )
-from ..gemini_client import is_gemini_configured, stream_chat
 
 # Load environment variables from .env file if present
 load_dotenv()
