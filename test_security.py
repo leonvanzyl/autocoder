@@ -453,6 +453,21 @@ commands:
             print("  FAIL: Non-allowed command 'rustc' should be blocked")
             failed += 1
 
+        # Test 4: Empty command name is rejected
+        config_path.write_text("""version: 1
+commands:
+  - name: ""
+    description: Empty name should be rejected
+""")
+        result = load_project_commands(project_dir)
+        if result is None:
+            print("  PASS: Empty command name rejected in project config")
+            passed += 1
+        else:
+            print("  FAIL: Empty command name should be rejected in project config")
+            print(f"         Got: {result}")
+            failed += 1
+
     return passed, failed
 
 
