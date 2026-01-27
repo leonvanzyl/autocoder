@@ -27,6 +27,7 @@ from ..services.terminal_manager import (
     rename_terminal,
     stop_terminal_session,
 )
+from ..utils.auth import reject_unauthenticated_websocket
 from ..utils.validation import is_valid_project_name
 
 # Add project root to path for registry import
@@ -234,6 +235,10 @@ async def terminal_websocket(websocket: WebSocket, project_name: str, terminal_i
     - {"type": "pong"} - Keep-alive response
     - {"type": "error", "message": "..."} - Error message
     """
+    # Check authentication if Basic Auth is enabled
+    if not await reject_unauthenticated_websocket(websocket):
+        return
+
     # Validate project name
     if not is_valid_project_name(project_name):
         await websocket.close(
