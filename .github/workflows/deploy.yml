@@ -22,6 +22,11 @@ jobs:
       DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH || '/opt/autocoder' }}
       TARGET_BRANCH: ${{ secrets.VPS_BRANCH || 'main' }}
       VPS_PORT: ${{ secrets.VPS_PORT || '22' }}
+      DOMAIN: ${{ secrets.VPS_DOMAIN }}
+      DUCKDNS_TOKEN: ${{ secrets.VPS_DUCKDNS_TOKEN }}
+      LETSENCRYPT_EMAIL: ${{ secrets.VPS_LETSENCRYPT_EMAIL }}
+      APP_PORT: ${{ secrets.VPS_APP_PORT || '8888' }}
+      REPO_URL: https://github.com/${{ github.repository }}.git
       IMAGE_LATEST: ghcr.io/${{ github.repository }}:latest
       IMAGE_SHA: ghcr.io/${{ github.repository }}:${{ github.event.workflow_run.head_sha }}
     steps:
@@ -32,12 +37,16 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ env.VPS_PORT }}
-          envs: DEPLOY_PATH,TARGET_BRANCH,IMAGE_LATEST,IMAGE_SHA
+          envs: DEPLOY_PATH,TARGET_BRANCH,VPS_PORT,DOMAIN,DUCKDNS_TOKEN,LETSENCRYPT_EMAIL,APP_PORT,REPO_URL,IMAGE_LATEST,IMAGE_SHA
           script: |
             set -euo pipefail
 
             if [ -z "${DEPLOY_PATH:-}" ]; then
               echo "VPS_DEPLOY_PATH secret is required"; exit 1;
+            fi
+
+            if [ -z "${DOMAIN:-}" ] || [ -z "${DUCKDNS_TOKEN:-}" ] || [ -z "${LETSENCRYPT_EMAIL:-}" ]; then
+              echo "VPS_DOMAIN, VPS_DUCKDNS_TOKEN, and VPS_LETSENCRYPT_EMAIL secrets are required."; exit 1;
             fi
 
             if [ ! -d "$DEPLOY_PATH/.git" ]; then
@@ -46,50 +55,41 @@ jobs:
 
             cd "$DEPLOY_PATH"
 
+            if [ ! -f ./deploy.sh ]; then
+              echo "ERROR: deploy.sh not found in $DEPLOY_PATH. Ensure the repo is up to date."; exit 1;
+            fi
+
+            chmod +x ./deploy.sh
+
             if [ ! -f .env ]; then
               echo "WARNING: .env not found in $DEPLOY_PATH. Deployment will continue without it.";
             fi
 
-            git fetch --all
-            if ! git show-ref --verify --quiet "refs/heads/$TARGET_BRANCH"; then
-              git fetch origin "$TARGET_BRANCH" || true
-            fi
-
-            if git show-ref --verify --quiet "refs/heads/$TARGET_BRANCH"; then
-              git checkout "$TARGET_BRANCH"
-              git pull --ff-only origin "$TARGET_BRANCH"
+            if [ "$(id -u)" -eq 0 ]; then
+              RUNNER=""
             else
-              echo "Branch $TARGET_BRANCH not found, trying main"
-              git checkout main
-              git pull --ff-only origin main
+              if ! command -v sudo >/dev/null 2>&1; then
+                echo "sudo is required to run deploy.sh as root."; exit 1;
+              fi
+              RUNNER="sudo"
             fi
 
-            if command -v docker &>/dev/null && docker compose version &>/dev/null; then
-              DOCKER_CMD="docker compose"
-            elif command -v docker-compose &>/dev/null; then
-              DOCKER_CMD="docker-compose"
-            else
-              echo "Docker Compose is not installed on the VPS."; exit 1;
-            fi
+            $RUNNER env \
+              AUTOCODER_AUTOMATED=1 \
+              AUTOCODER_ASSUME_YES=1 \
+              DOMAIN="${DOMAIN}" \
+              DUCKDNS_TOKEN="${DUCKDNS_TOKEN}" \
+              LETSENCRYPT_EMAIL="${LETSENCRYPT_EMAIL}" \
+              REPO_URL="${REPO_URL}" \
+              DEPLOY_BRANCH="${TARGET_BRANCH}" \
+              APP_DIR="${DEPLOY_PATH}" \
+              APP_PORT="${APP_PORT}" \
+              IMAGE="${IMAGE_SHA:-$IMAGE_LATEST}" \
+              ./deploy.sh
 
-            export IMAGE="${IMAGE_SHA:-$IMAGE_LATEST}"
-
-            $DOCKER_CMD down --remove-orphans || true
-            docker image prune -af || true
-            docker builder prune -af || true
-
-            echo "Pulling image ${IMAGE} ..."
-            if ! $DOCKER_CMD pull; then
-              echo "SHA tag pull failed, falling back to latest..."
-              export IMAGE="$IMAGE_LATEST"
-              $DOCKER_CMD pull || { echo "Image pull failed"; exit 1; }
-            fi
-
-            $DOCKER_CMD up -d --remove-orphans
-
-            echo "Running smoke test on http://127.0.0.1:8888/health and /readiness ..."
+            echo "Running smoke test on http://127.0.0.1:${APP_PORT}/health and /readiness ..."
             retries=12
-            until curl -fsS --max-time 5 http://127.0.0.1:8888/health >/dev/null; do
+            until curl -fsS --max-time 5 "http://127.0.0.1:${APP_PORT}/health" >/dev/null; do
               retries=$((retries - 1))
               if [ "$retries" -le 0 ]; then
                 echo "Health check failed after retries."
@@ -100,7 +100,7 @@ jobs:
             done
 
             retries=12
-            until curl -fsS --max-time 5 http://127.0.0.1:8888/readiness >/dev/null; do
+            until curl -fsS --max-time 5 "http://127.0.0.1:${APP_PORT}/readiness" >/dev/null; do
               retries=$((retries - 1))
               if [ "$retries" -le 0 ]; then
                 echo "Readiness check failed after retries."
