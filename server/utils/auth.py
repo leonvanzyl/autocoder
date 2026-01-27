@@ -20,6 +20,7 @@ For WebSocket connections:
 """
 
 import base64
+import binascii
 import os
 import secrets
 
@@ -87,7 +88,7 @@ def check_websocket_auth(websocket: WebSocket) -> bool:
             user, passwd = decoded.split(":", 1)
             if verify_basic_auth(user, passwd):
                 return True
-        except (ValueError, UnicodeDecodeError):
+        except (ValueError, UnicodeDecodeError, binascii.Error):
             pass
 
     # Try query parameter (for browser WebSockets)
@@ -99,7 +100,7 @@ def check_websocket_auth(websocket: WebSocket) -> bool:
             user, passwd = decoded.split(":", 1)
             if verify_basic_auth(user, passwd):
                 return True
-        except (ValueError, UnicodeDecodeError):
+        except (ValueError, UnicodeDecodeError, binascii.Error):
             pass
 
     return False

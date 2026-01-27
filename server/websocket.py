@@ -108,6 +108,7 @@ class AgentTracker:
         if line.startswith("Started coding agent for feature #"):
             try:
                 feature_id = int(re.search(r'#(\d+)', line).group(1))
+                self._schedule_cleanup()
                 return await self._handle_agent_start(feature_id, line, agent_type="coding")
             except (AttributeError, ValueError):
                 pass
@@ -116,6 +117,7 @@ class AgentTracker:
         testing_start_match = TESTING_AGENT_START_PATTERN.match(line)
         if testing_start_match:
             feature_id = int(testing_start_match.group(1))
+            self._schedule_cleanup()
             return await self._handle_agent_start(feature_id, line, agent_type="testing")
 
         # Testing agent complete: "Feature #X testing completed/failed"
@@ -123,6 +125,7 @@ class AgentTracker:
         if testing_complete_match:
             feature_id = int(testing_complete_match.group(1))
             is_success = testing_complete_match.group(2) == "completed"
+            self._schedule_cleanup()
             return await self._handle_agent_complete(feature_id, is_success, agent_type="testing")
 
         # Coding agent complete: "Feature #X completed/failed" (without "testing" keyword)
@@ -130,6 +133,7 @@ class AgentTracker:
             try:
                 feature_id = int(re.search(r'#(\d+)', line).group(1))
                 is_success = "completed" in line
+                self._schedule_cleanup()
                 return await self._handle_agent_complete(feature_id, is_success, agent_type="coding")
             except (AttributeError, ValueError):
                 pass
@@ -190,6 +194,7 @@ class AgentTracker:
                 if thought:
                     agent['last_thought'] = thought
 
+                self._schedule_cleanup()
                 return {
                     'type': 'agent_update',
                     'agentIndex': agent['agent_index'],
@@ -203,10 +208,7 @@ class AgentTracker:
                 }
 
         # Periodic cleanup of stale agents (every 5 minutes)
-        if self._should_cleanup():
-            # Schedule cleanup without blocking
-            asyncio.create_task(self.cleanup_stale_agents())
-
+        self._schedule_cleanup()
         return None
 
     async def get_agent_info(self, feature_id: int, agent_type: str = "coding") -> tuple[int | None, str | None]:
@@ -269,6 +271,11 @@ class AgentTracker:
         """Check if it's time for periodic cleanup."""
         # Cleanup every 5 minutes
         return (datetime.now() - self._last_cleanup).total_seconds() > 300
+
+    def _schedule_cleanup(self) -> None:
+        """Schedule cleanup if needed (non-blocking)."""
+        if self._should_cleanup():
+            asyncio.create_task(self.cleanup_stale_agents())
 
     async def _handle_agent_start(self, feature_id: int, line: str, agent_type: str = "coding") -> dict | None:
         """Handle agent start message from orchestrator."""
