@@ -604,15 +604,18 @@ def load_org_config() -> Optional[dict]:
         if "pkill_processes" in config:
             processes = config["pkill_processes"]
             if not isinstance(processes, list):
+                logger.warning(f"Org config at {config_path}: 'pkill_processes' must be a list")
                 return None
             # Normalize and validate each process name against safe pattern
             normalized = []
-            for proc in processes:
+            for i, proc in enumerate(processes):
                 if not isinstance(proc, str):
+                    logger.warning(f"Org config at {config_path}: pkill_processes[{i}] must be a string")
                     return None
                 proc = proc.strip()
                 # Block empty strings and regex metacharacters
                 if not proc or not VALID_PROCESS_NAME_PATTERN.fullmatch(proc):
+                    logger.warning(f"Org config at {config_path}: pkill_processes[{i}] has invalid value '{proc}'")
                     return None
                 normalized.append(proc)
             config["pkill_processes"] = normalized
@@ -686,15 +689,18 @@ def load_project_commands(project_dir: Path) -> Optional[dict]:
         if "pkill_processes" in config:
             processes = config["pkill_processes"]
             if not isinstance(processes, list):
+                logger.warning(f"Project config at {config_path}: 'pkill_processes' must be a list")
                 return None
             # Normalize and validate each process name against safe pattern
             normalized = []
-            for proc in processes:
+            for i, proc in enumerate(processes):
                 if not isinstance(proc, str):
+                    logger.warning(f"Project config at {config_path}: pkill_processes[{i}] must be a string")
                     return None
                 proc = proc.strip()
                 # Block empty strings and regex metacharacters
                 if not proc or not VALID_PROCESS_NAME_PATTERN.fullmatch(proc):
+                    logger.warning(f"Project config at {config_path}: pkill_processes[{i}] has invalid value '{proc}'")
                     return None
                 normalized.append(proc)
             config["pkill_processes"] = normalized
