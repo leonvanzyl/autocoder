@@ -360,18 +360,22 @@ class ExpandChatSession:
                                             created_features = result_data.get("created_features", [])
 
                                             if created_features:
-                                                self.features_created += len(created_features)
-                                                self.created_feature_ids.extend([f["id"] for f in created_features])
+                                                # Safely extract valid IDs (filter features that have an "id" key)
+                                                valid_ids = [f["id"] for f in created_features if "id" in f]
+
+                                                # Update counters based on features with valid IDs
+                                                self.features_created += len(valid_ids)
+                                                self.created_feature_ids.extend(valid_ids)
 
                                                 yield {
                                                     "type": "features_created",
-                                                    "count": len(created_features),
+                                                    "count": len(valid_ids),
                                                     "features": created_features,
                                                     "source": "mcp"  # Tag source for debugging
                                                 }
 
-                                                logger.info(f"Created {len(created_features)} features for {self.project_name} (via MCP)")
-                                        except (json.JSONDecodeError, AttributeError) as e:
+                                                logger.info(f"Created {len(valid_ids)} features for {self.project_name} (via MCP)")
+                                        except (json.JSONDecodeError, AttributeError, KeyError) as e:
                                             logger.warning(f"Failed to parse MCP tool result: {e}")
 
         # Only parse XML if MCP tool wasn't used (fallback mechanism)
