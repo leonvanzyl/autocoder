@@ -206,7 +206,7 @@ class ExpandChatSession:
 
         # Build environment overrides for API configuration
         sdk_env = {var: os.getenv(var) for var in API_ENV_VARS if os.getenv(var)}
-        
+
         # Set default max output tokens for GLM 4.7 compatibility if not already set
         if "CLAUDE_CODE_MAX_OUTPUT_TOKENS" not in sdk_env:
             sdk_env["CLAUDE_CODE_MAX_OUTPUT_TOKENS"] = DEFAULT_MAX_OUTPUT_TOKENS
@@ -216,7 +216,7 @@ class ExpandChatSession:
         model = os.getenv("ANTHROPIC_DEFAULT_OPUS_MODEL", "claude-opus-4-5-20251101")
 
         # Build MCP servers config for feature management
-        mcp_servers = {
+        {
             "features": {
                 "command": sys.executable,
                 "args": ["-m", "mcp_server.feature_mcp"],

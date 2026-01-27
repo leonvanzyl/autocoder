@@ -412,7 +412,7 @@ class AgentProcessManager:
             # Use project_dir as cwd so Claude SDK sandbox allows access to project files
             # IMPORTANT: Set PYTHONUNBUFFERED to ensure output isn't delayed
             # stdin=DEVNULL prevents blocking if Claude CLI or child process tries to read stdin
-            
+
             # On Windows, use CREATE_NEW_PROCESS_GROUP for better process tree management
             # This allows taskkill /T to reliably kill all child processes
             popen_kwargs = {

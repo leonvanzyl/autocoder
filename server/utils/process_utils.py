@@ -43,20 +43,20 @@ class KillResult:
 
 def _kill_windows_process_tree_taskkill(pid: int) -> bool:
     """Use Windows taskkill command to forcefully kill a process tree.
-    
+
     This is a fallback method that uses the Windows taskkill command with /T (tree)
-    and /F (force) flags, which is more reliable for killing nested cmd/bash/node 
+    and /F (force) flags, which is more reliable for killing nested cmd/bash/node
     process trees on Windows.
-    
+
     Args:
         pid: Process ID to kill along with its entire tree
-        
+
     Returns:
         True if taskkill succeeded, False otherwise
     """
     if not IS_WINDOWS:
         return False
-        
+
     try:
         # /T = kill child processes, /F = force kill
         result = subprocess.run(
@@ -183,29 +183,29 @@ def kill_process_tree(proc: subprocess.Popen, timeout: float = 5.0) -> KillResul
 
 def cleanup_orphaned_agent_processes() -> int:
     """Clean up orphaned agent processes from previous runs.
-    
+
     On Windows, agent subprocesses (bash, cmd, node, conhost) may remain orphaned
     if the server was killed abruptly. This function finds and terminates processes
     that look like orphaned autocoder agents based on command line patterns.
-    
+
     Returns:
         Number of processes terminated
     """
     if not IS_WINDOWS:
         return 0
-        
+
     terminated = 0
     agent_patterns = [
         "autonomous_agent_demo.py",
         "parallel_orchestrator.py",
     ]
-    
+
     try:
         for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
             try:
                 cmdline = proc.info.get('cmdline') or []
                 cmdline_str = ' '.join(cmdline)
-                
+
                 # Check if this looks like an autocoder agent process
                 for pattern in agent_patterns:
                     if pattern in cmdline_str:
@@ -220,8 +220,8 @@ def cleanup_orphaned_agent_processes() -> int:
                 continue
     except Exception as e:
         logger.warning("Error during orphan cleanup: %s", e)
-    
+
     if terminated > 0:
         logger.info("Cleaned up %d orphaned agent processes", terminated)
-    
+
     return terminated

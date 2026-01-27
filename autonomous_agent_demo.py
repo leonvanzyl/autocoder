@@ -57,7 +57,7 @@ from registry import DEFAULT_MODEL, get_project_path
 def safe_asyncio_run(coro):
     """
     Run an async coroutine with proper cleanup to avoid Windows subprocess errors.
-    
+
     On Windows, subprocess transports may raise 'Event loop is closed' errors
     during garbage collection if not properly cleaned up.
     """
@@ -71,16 +71,16 @@ def safe_asyncio_run(coro):
             pending = asyncio.all_tasks(loop)
             for task in pending:
                 task.cancel()
-            
+
             # Allow cancelled tasks to complete
             if pending:
                 loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
-            
+
             # Shutdown async generators and executors
             loop.run_until_complete(loop.shutdown_asyncgens())
             if hasattr(loop, 'shutdown_default_executor'):
                 loop.run_until_complete(loop.shutdown_default_executor())
-            
+
             loop.close()
     else:
         return asyncio.run(coro)

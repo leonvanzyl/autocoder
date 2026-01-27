@@ -6,6 +6,7 @@ API endpoints for project management.
 Uses project registry for path lookups instead of fixed generations/ directory.
 """
 
+import re
 import shutil
 import subprocess
 import sys
@@ -306,7 +307,7 @@ async def reset_project(name: str, full_reset: bool = False):
         raise HTTPException(status_code=404, detail=f"Project '{name}' not found")
 
     if not project_dir.exists():
-        raise HTTPException(status_code=404, detail=f"Project directory not found")
+        raise HTTPException(status_code=404, detail="Project directory not found")
 
     # Check if agent is running
     lock_file = project_dir / ".agent.lock"
@@ -364,7 +365,7 @@ async def reset_project(name: str, full_reset: bool = False):
 @router.post("/{name}/open-in-ide")
 async def open_project_in_ide(name: str, ide: str):
     """Open a project in the specified IDE.
-    
+
     Args:
         name: Project name
         ide: IDE to use ('vscode', 'cursor', or 'antigravity')
@@ -387,10 +388,10 @@ async def open_project_in_ide(name: str, ide: str):
         'cursor': 'cursor',
         'antigravity': 'antigravity',
     }
-    
+
     if ide not in ide_commands:
         raise HTTPException(
-            status_code=400, 
+            status_code=400,
             detail=f"Invalid IDE. Must be one of: {list(ide_commands.keys())}"
         )
 
