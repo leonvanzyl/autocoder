@@ -21,6 +21,7 @@ from ..services.spec_chat_session import (
     list_sessions,
     remove_session,
 )
+from ..utils.auth import reject_unauthenticated_websocket
 from ..utils.validation import is_valid_project_name
 
 logger = logging.getLogger(__name__)
@@ -179,6 +180,10 @@ async def spec_chat_websocket(websocket: WebSocket, project_name: str):
     - {"type": "error", "content": "..."} - Error message
     - {"type": "pong"} - Keep-alive pong
     """
+    # Check authentication if Basic Auth is enabled
+    if not await reject_unauthenticated_websocket(websocket):
+        return
+
     if not is_valid_project_name(project_name):
         await websocket.close(code=4000, reason="Invalid project name")
         return

@@ -7,6 +7,7 @@ Provides REST API, WebSocket, and static file serving.
 """
 
 import asyncio
+import base64
 import os
 import shutil
 import sys
@@ -24,7 +25,7 @@ load_dotenv()
 
 from fastapi import FastAPI, HTTPException, Request, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -134,6 +135,56 @@ else:
 # ============================================================================
 # Security Middleware
 # ============================================================================
+
+# Import auth utilities
+from .utils.auth import is_basic_auth_enabled, verify_basic_auth
+
+if is_basic_auth_enabled():
+    @app.middleware("http")
+    async def basic_auth_middleware(request: Request, call_next):
+        """
+        HTTP Basic Auth middleware.
+
+        Enabled when both BASIC_AUTH_USERNAME and BASIC_AUTH_PASSWORD
+        environment variables are set.
+
+        For WebSocket endpoints, auth is checked in the WebSocket handler.
+        """
+        # Skip auth for WebSocket upgrade requests (handled separately)
+        if request.headers.get("upgrade", "").lower() == "websocket":
+            return await call_next(request)
+
+        # Check Authorization header
+        auth_header = request.headers.get("Authorization")
+        if not auth_header or not auth_header.startswith("Basic "):
+            return Response(
+                status_code=401,
+                content="Authentication required",
+                headers={"WWW-Authenticate": 'Basic realm="Autocoder"'},
+            )
+
+        try:
+            # Decode credentials
+            encoded_credentials = auth_header[6:]  # Remove "Basic "
+            decoded = base64.b64decode(encoded_credentials).decode("utf-8")
+            username, password = decoded.split(":", 1)
+
+            # Verify using constant-time comparison
+            if not verify_basic_auth(username, password):
+                return Response(
+                    status_code=401,
+                    content="Invalid credentials",
+                    headers={"WWW-Authenticate": 'Basic realm="Autocoder"'},
+                )
+        except (ValueError, UnicodeDecodeError):
+            return Response(
+                status_code=401,
+                content="Invalid authorization header",
+                headers={"WWW-Authenticate": 'Basic realm="Autocoder"'},
+            )
+
+        return await call_next(request)
+
 
 if not ALLOW_REMOTE:
     @app.middleware("http")

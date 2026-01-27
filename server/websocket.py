@@ -18,6 +18,7 @@ from fastapi import WebSocket, WebSocketDisconnect
 from .schemas import AGENT_MASCOTS
 from .services.dev_server_manager import get_devserver_manager
 from .services.process_manager import get_manager
+from .utils.auth import reject_unauthenticated_websocket
 from .utils.validation import is_valid_project_name
 
 # Lazy imports
@@ -661,6 +662,10 @@ async def project_websocket(websocket: WebSocket, project_name: str):
     - Agent status changes
     - Agent stdout/stderr lines
     """
+    # Check authentication if Basic Auth is enabled
+    if not await reject_unauthenticated_websocket(websocket):
+        return
+
     if not is_valid_project_name(project_name):
         await websocket.close(code=4000, reason="Invalid project name")
         return
