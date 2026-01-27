@@ -27,20 +27,20 @@ from dotenv import load_dotenv
 # Load environment variables from .env file if present
 load_dotenv()
 
-from fastapi import FastAPI, HTTPException, Request, WebSocket, Response
+from fastapi import FastAPI, HTTPException, Request, Response, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from pythonjsonlogger import jsonlogger
-from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
-from sentry_sdk import init as sentry_init
-from sentry_sdk.integrations.fastapi import FastApiIntegration
 from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
+from pythonjsonlogger import jsonlogger
+from sentry_sdk import init as sentry_init
+from sentry_sdk.integrations.fastapi import FastApiIntegration
 
 from .routers import (
     agent_router,
