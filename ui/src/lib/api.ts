@@ -86,6 +86,17 @@ export async function deleteProject(name: string): Promise<void> {
   })
 }
 
+export async function resetProject(name: string, fullReset: boolean = false): Promise<{
+  success: boolean
+  message: string
+  deleted_files: string[]
+  full_reset: boolean
+}> {
+  return fetchJSON(`/projects/${encodeURIComponent(name)}/reset?full_reset=${fullReset}`, {
+    method: 'POST',
+  })
+}
+
 export async function openProjectInIDE(name: string, ide: string): Promise<{ status: string; message: string }> {
   return fetchJSON(`/projects/${encodeURIComponent(name)}/open-in-ide?ide=${encodeURIComponent(ide)}`, {
     method: 'POST',
