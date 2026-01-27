@@ -8,6 +8,7 @@ Uses project registry for path lookups instead of fixed generations/ directory.
 
 import re
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -274,6 +275,66 @@ async def delete_project(name: str, delete_files: bool = False):
         "success": True,
         "message": f"Project '{name}' deleted" + (" (files removed)" if delete_files else " (files preserved)")
     }
+
+
+@router.post("/{name}/open-in-ide")
+async def open_project_in_ide(name: str, ide: str):
+    """Open a project in the specified IDE.
+    
+    Args:
+        name: Project name
+        ide: IDE to use ('vscode', 'cursor', or 'antigravity')
+    """
+    _init_imports()
+    _, _, get_project_path, _, _ = _get_registry_functions()
+
+    name = validate_project_name(name)
+    project_dir = get_project_path(name)
+
+    if not project_dir:
+        raise HTTPException(status_code=404, detail=f"Project '{name}' not found")
+
+    if not project_dir.exists():
+        raise HTTPException(status_code=404, detail=f"Project directory not found: {project_dir}")
+
+    # Validate IDE parameter
+    ide_commands = {
+        'vscode': 'code',
+        'cursor': 'cursor',
+        'antigravity': 'antigravity',
+    }
+    
+    if ide not in ide_commands:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Invalid IDE. Must be one of: {list(ide_commands.keys())}"
+        )
+
+    cmd = ide_commands[ide]
+    project_path = str(project_dir)
+
+    try:
+        if sys.platform == "win32":
+            # Try to find the command in PATH first
+            cmd_path = shutil.which(cmd)
+            if cmd_path:
+                subprocess.Popen([cmd_path, project_path])
+            else:
+                # Fall back to cmd /c which uses shell PATH
+                subprocess.Popen(
+                    ["cmd", "/c", cmd, project_path],
+                    creationflags=subprocess.CREATE_NO_WINDOW,
+                )
+        else:
+            # Unix-like systems
+            subprocess.Popen([cmd, project_path], start_new_session=True)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to open IDE: {e}"
+        )
+
+    return {"status": "success", "message": f"Opening {project_path} in {ide}"}
 
 
 @router.get("/{name}/prompts", response_model=ProjectPrompts)

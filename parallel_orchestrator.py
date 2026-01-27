@@ -27,6 +27,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Literal
 
+# Windows-specific: Set ProactorEventLoop policy for subprocess support
+# This MUST be set before any other asyncio operations
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+
 from api.database import Feature, create_database
 from api.dependency_resolver import are_dependencies_satisfied, compute_scheduling_scores
 from progress import has_features
@@ -37,6 +42,38 @@ AUTOCODER_ROOT = Path(__file__).parent.resolve()
 
 # Debug log file path
 DEBUG_LOG_FILE = AUTOCODER_ROOT / "orchestrator_debug.log"
+
+
+def safe_asyncio_run(coro):
+    """
+    Run an async coroutine with proper cleanup to avoid Windows subprocess errors.
+    
+    On Windows, subprocess transports may raise 'Event loop is closed' errors
+    during garbage collection if not properly cleaned up.
+    """
+    if sys.platform == "win32":
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            return loop.run_until_complete(coro)
+        finally:
+            # Cancel all pending tasks
+            pending = asyncio.all_tasks(loop)
+            for task in pending:
+                task.cancel()
+            
+            # Allow cancelled tasks to complete
+            if pending:
+                loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+            
+            # Shutdown async generators and executors
+            loop.run_until_complete(loop.shutdown_asyncgens())
+            if hasattr(loop, 'shutdown_default_executor'):
+                loop.run_until_complete(loop.shutdown_default_executor())
+            
+            loop.close()
+    else:
+        return asyncio.run(coro)
 
 
 class DebugLogger:
@@ -1228,7 +1265,7 @@ def main():
             sys.exit(1)
 
     try:
-        asyncio.run(run_parallel_orchestrator(
+        safe_asyncio_run(run_parallel_orchestrator(
             project_dir=project_dir,
             max_concurrency=args.max_concurrency,
             model=args.model,

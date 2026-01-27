@@ -384,6 +384,7 @@ class SettingsResponse(BaseModel):
     glm_mode: bool = False  # True if GLM API is configured via .env
     ollama_mode: bool = False  # True if Ollama API is configured via .env
     testing_agent_ratio: int = 1  # Regression testing agents (0-3)
+    preferred_ide: str | None = None  # 'vscode', 'cursor', or 'antigravity'
 
 
 class ModelsResponse(BaseModel):
@@ -397,6 +398,7 @@ class SettingsUpdate(BaseModel):
     yolo_mode: bool | None = None
     model: str | None = None
     testing_agent_ratio: int | None = None  # 0-3
+    preferred_ide: str | None = None
 
     @field_validator('model')
     @classmethod
@@ -410,6 +412,14 @@ class SettingsUpdate(BaseModel):
     def validate_testing_ratio(cls, v: int | None) -> int | None:
         if v is not None and (v < 0 or v > 3):
             raise ValueError("testing_agent_ratio must be between 0 and 3")
+        return v
+
+    @field_validator('preferred_ide')
+    @classmethod
+    def validate_preferred_ide(cls, v: str | None) -> str | None:
+        valid_ides = ['vscode', 'cursor', 'antigravity']
+        if v is not None and v not in valid_ides:
+            raise ValueError(f"Invalid IDE. Must be one of: {valid_ides}")
         return v
 
 

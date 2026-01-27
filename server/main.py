@@ -50,6 +50,7 @@ from .services.expand_chat_session import cleanup_all_expand_sessions
 from .services.process_manager import cleanup_all_managers, cleanup_orphaned_locks
 from .services.scheduler_service import cleanup_scheduler, get_scheduler
 from .services.terminal_manager import cleanup_all_terminals
+from .utils.process_utils import cleanup_orphaned_agent_processes
 from .websocket import project_websocket
 
 # Paths
@@ -60,7 +61,10 @@ UI_DIST_DIR = ROOT_DIR / "ui" / "dist"
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager for startup and shutdown."""
-    # Startup - clean up orphaned lock files from previous runs
+    # Startup - clean up orphaned processes from previous runs (Windows)
+    cleanup_orphaned_agent_processes()
+    
+    # Clean up orphaned lock files from previous runs
     cleanup_orphaned_locks()
     cleanup_orphaned_devserver_locks()
 

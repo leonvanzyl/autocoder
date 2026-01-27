@@ -86,6 +86,12 @@ export async function deleteProject(name: string): Promise<void> {
   })
 }
 
+export async function openProjectInIDE(name: string, ide: string): Promise<{ status: string; message: string }> {
+  return fetchJSON(`/projects/${encodeURIComponent(name)}/open-in-ide?ide=${encodeURIComponent(ide)}`, {
+    method: 'POST',
+  })
+}
+
 export async function getProjectPrompts(name: string): Promise<ProjectPrompts> {
   return fetchJSON(`/projects/${encodeURIComponent(name)}/prompts`)
 }

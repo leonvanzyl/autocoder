@@ -109,6 +109,7 @@ async def list_schedules(project_name: str):
                     enabled=s.enabled,
                     yolo_mode=s.yolo_mode,
                     model=s.model,
+                    max_concurrency=s.max_concurrency,
                     crash_count=s.crash_count,
                     created_at=s.created_at,
                 )
@@ -196,6 +197,7 @@ async def create_schedule(project_name: str, data: ScheduleCreate):
             enabled=schedule.enabled,
             yolo_mode=schedule.yolo_mode,
             model=schedule.model,
+            max_concurrency=schedule.max_concurrency,
             crash_count=schedule.crash_count,
             created_at=schedule.created_at,
         )
@@ -286,6 +288,7 @@ async def get_schedule(project_name: str, schedule_id: int):
             enabled=schedule.enabled,
             yolo_mode=schedule.yolo_mode,
             model=schedule.model,
+            max_concurrency=schedule.max_concurrency,
             crash_count=schedule.crash_count,
             created_at=schedule.created_at,
         )
@@ -340,6 +343,7 @@ async def update_schedule(
             enabled=schedule.enabled,
             yolo_mode=schedule.yolo_mode,
             model=schedule.model,
+            max_concurrency=schedule.max_concurrency,
             crash_count=schedule.crash_count,
             created_at=schedule.created_at,
         )

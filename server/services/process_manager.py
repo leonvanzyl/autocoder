@@ -350,13 +350,19 @@ class AgentProcessManager:
             # Start subprocess with piped stdout/stderr
             # Use project_dir as cwd so Claude SDK sandbox allows access to project files
             # IMPORTANT: Set PYTHONUNBUFFERED to ensure output isn't delayed
-            self.process = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                cwd=str(self.project_dir),
-                env={**os.environ, "PYTHONUNBUFFERED": "1"},
-            )
+            
+            # On Windows, use CREATE_NEW_PROCESS_GROUP for better process tree management
+            # This allows taskkill /T to reliably kill all child processes
+            popen_kwargs = {
+                "stdout": subprocess.PIPE,
+                "stderr": subprocess.STDOUT,
+                "cwd": str(self.project_dir),
+                "env": {**os.environ, "PYTHONUNBUFFERED": "1"},
+            }
+            if sys.platform == "win32":
+                popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+            
+            self.process = subprocess.Popen(cmd, **popen_kwargs)
 
             # Atomic lock creation - if it fails, another process beat us
             if not self._create_lock():

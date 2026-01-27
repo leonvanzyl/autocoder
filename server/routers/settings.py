@@ -92,6 +92,7 @@ async def get_settings():
         glm_mode=_is_glm_mode(),
         ollama_mode=_is_ollama_mode(),
         testing_agent_ratio=_parse_int(all_settings.get("testing_agent_ratio"), 1),
+        preferred_ide=all_settings.get("preferred_ide"),
     )
 
 
@@ -107,6 +108,9 @@ async def update_settings(update: SettingsUpdate):
     if update.testing_agent_ratio is not None:
         set_setting("testing_agent_ratio", str(update.testing_agent_ratio))
 
+    if update.preferred_ide is not None:
+        set_setting("preferred_ide", update.preferred_ide)
+
     # Return updated settings
     all_settings = get_all_settings()
     return SettingsResponse(
@@ -115,4 +119,5 @@ async def update_settings(update: SettingsUpdate):
         glm_mode=_is_glm_mode(),
         ollama_mode=_is_ollama_mode(),
         testing_agent_ratio=_parse_int(all_settings.get("testing_agent_ratio"), 1),
+        preferred_ide=all_settings.get("preferred_ide"),
     )

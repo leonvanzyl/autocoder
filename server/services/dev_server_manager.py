@@ -319,6 +319,7 @@ class DevServerProcessManager:
             # Start subprocess with piped stdout/stderr
             # stdin=DEVNULL prevents interactive dev servers from blocking on stdin
             # On Windows, use CREATE_NO_WINDOW to prevent console window from flashing
+            # and CREATE_NEW_PROCESS_GROUP for better process tree management
             if sys.platform == "win32":
                 self.process = subprocess.Popen(
                     shell_cmd,
@@ -326,7 +327,7 @@ class DevServerProcessManager:
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
                     cwd=str(self.project_dir),
-                    creationflags=subprocess.CREATE_NO_WINDOW,
+                    creationflags=subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP,
                 )
             else:
                 self.process = subprocess.Popen(

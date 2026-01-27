@@ -1,6 +1,7 @@
 import { Loader2, AlertCircle, Check, Moon, Sun } from 'lucide-react'
 import { useSettings, useUpdateSettings, useAvailableModels } from '../hooks/useProjects'
 import { useTheme, THEMES } from '../hooks/useTheme'
+import { IDEType } from '../lib/types'
 import {
   Dialog,
   DialogContent,
@@ -11,6 +12,13 @@ import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+
+// IDE options for selection
+const IDE_OPTIONS: { id: IDEType; name: string }[] = [
+  { id: 'vscode', name: 'VS Code' },
+  { id: 'cursor', name: 'Cursor' },
+  { id: 'antigravity', name: 'Antigravity' },
+]
 
 interface SettingsModalProps {
   isOpen: boolean
@@ -38,6 +46,12 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const handleTestingRatioChange = (ratio: number) => {
     if (!updateSettings.isPending) {
       updateSettings.mutate({ testing_agent_ratio: ratio })
+    }
+  }
+
+  const handleIDEChange = (ide: IDEType) => {
+    if (!updateSettings.isPending) {
+      updateSettings.mutate({ preferred_ide: ide })
     }
   }
 
@@ -187,6 +201,30 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                     } ${isSaving ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
                     {model.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* IDE Selection */}
+            <div className="space-y-2">
+              <Label className="font-medium">Preferred IDE</Label>
+              <p className="text-sm text-muted-foreground">
+                Choose your IDE for opening projects
+              </p>
+              <div className="flex rounded-lg border overflow-hidden">
+                {IDE_OPTIONS.map((ide) => (
+                  <button
+                    key={ide.id}
+                    onClick={() => handleIDEChange(ide.id)}
+                    disabled={isSaving}
+                    className={`flex-1 py-2 px-3 text-sm font-medium transition-colors ${
+                      settings.preferred_ide === ide.id
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-background text-foreground hover:bg-muted'
+                    } ${isSaving ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  >
+                    {ide.name}
                   </button>
                 ))}
               </div>

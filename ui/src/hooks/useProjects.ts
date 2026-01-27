@@ -239,6 +239,7 @@ const DEFAULT_SETTINGS: Settings = {
   glm_mode: false,
   ollama_mode: false,
   testing_agent_ratio: 1,
+  preferred_ide: null,
 }
 
 export function useAvailableModels() {
