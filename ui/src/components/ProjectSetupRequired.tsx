@@ -37,7 +37,7 @@ export function ProjectSetupRequired({ projectName, onSetupComplete }: ProjectSe
     setYoloModeSelected(yoloMode)
     setInitializerStatus('starting')
     try {
-      await startAgent(projectName, yoloMode)
+      await startAgent(projectName, { yoloMode })
       onSetupComplete()
     } catch (err) {
       setInitializerStatus('error')
