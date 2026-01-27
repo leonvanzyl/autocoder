@@ -20,10 +20,10 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH || '/opt/autocoder' }}
-      TARGET_BRANCH: ${{ secrets.VPS_BRANCH || 'master' }}
+      TARGET_BRANCH: ${{ secrets.VPS_BRANCH || 'main' }}
       VPS_PORT: ${{ secrets.VPS_PORT || '22' }}
-      IMAGE_LATEST: ghcr.io/${{ toLower(github.repository) }}:latest
-      IMAGE_SHA: ghcr.io/${{ toLower(github.repository) }}:${{ github.event.workflow_run.head_sha }}
+      IMAGE_LATEST: ghcr.io/${{ github.repository }}:latest
+      IMAGE_SHA: ghcr.io/${{ github.repository }}:${{ github.event.workflow_run.head_sha }}
     steps:
       - name: Deploy over SSH with Docker Compose
         uses: appleboy/ssh-action@v1.2.4
