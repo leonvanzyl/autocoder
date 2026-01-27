@@ -486,13 +486,18 @@ class AssistantChatSession:
         Query Gemini and stream plain-text responses (no tool calls).
         """
         full_response = ""
-        async for text in stream_chat(
-            message,
-            system_prompt=self._system_prompt,
-            model=os.getenv("GEMINI_MODEL"),
-        ):
-            full_response += text
-            yield {"type": "text", "content": text}
+        try:
+            async for text in stream_chat(
+                message,
+                system_prompt=self._system_prompt,
+                model=os.getenv("GEMINI_MODEL"),
+            ):
+                full_response += text
+                yield {"type": "text", "content": text}
+        except Exception as e:
+            logger.exception("Gemini query failed")
+            yield {"type": "error", "content": f"Gemini error: {e}"}
+            return
 
         if full_response and self.conversation_id:
             add_message(self.project_dir, self.conversation_id, "assistant", full_response)
