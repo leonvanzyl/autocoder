@@ -3,7 +3,7 @@ Progress Tracking Utilities
 ===========================
 
 Functions for tracking and displaying progress of the autonomous coding agent.
-Uses direct SQLite access for database queries.
+Uses direct SQLite access for database queries with robust connection handling.
 """
 
 import json
@@ -13,8 +13,76 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
+# Import robust connection utilities
+from api.database import execute_with_retry, robust_db_connection
+
 WEBHOOK_URL = os.environ.get("PROGRESS_N8N_WEBHOOK_URL")
 PROGRESS_CACHE_FILE = ".progress_cache"
+
+
+def send_session_event(
+    event: str,
+    project_dir: Path,
+    *,
+    feature_id: int | None = None,
+    feature_name: str | None = None,
+    agent_type: str | None = None,
+    session_num: int | None = None,
+    error_message: str | None = None,
+    extra: dict | None = None
+) -> None:
+    """Send a session event to the webhook.
+
+    Events:
+    - session_started: Agent session began
+    - session_ended: Agent session completed
+    - feature_started: Feature was claimed for work
+    - feature_passed: Feature was marked as passing
+    - feature_failed: Feature was marked as failing
+
+    Args:
+        event: Event type name
+        project_dir: Project directory
+        feature_id: Optional feature ID for feature events
+        feature_name: Optional feature name for feature events
+        agent_type: Optional agent type (initializer, coding, testing)
+        session_num: Optional session number
+        error_message: Optional error message for failure events
+        extra: Optional additional payload data
+    """
+    if not WEBHOOK_URL:
+        return  # Webhook not configured
+
+    payload = {
+        "event": event,
+        "project": project_dir.name,
+        "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+    }
+
+    if feature_id is not None:
+        payload["feature_id"] = feature_id
+    if feature_name is not None:
+        payload["feature_name"] = feature_name
+    if agent_type is not None:
+        payload["agent_type"] = agent_type
+    if session_num is not None:
+        payload["session_num"] = session_num
+    if error_message is not None:
+        # Truncate long error messages for webhook
+        payload["error_message"] = error_message[:2048] if len(error_message) > 2048 else error_message
+    if extra:
+        payload.update(extra)
+
+    try:
+        req = urllib.request.Request(
+            WEBHOOK_URL,
+            data=json.dumps([payload]).encode("utf-8"),  # n8n expects array
+            headers={"Content-Type": "application/json"},
+        )
+        urllib.request.urlopen(req, timeout=5)
+    except Exception:
+        # Silently ignore webhook failures to not disrupt session
+        pass
 
 
 def has_features(project_dir: Path) -> bool:
@@ -31,8 +99,6 @@ def has_features(project_dir: Path) -> bool:
 
     Returns False if no features exist (initializer needs to run).
     """
-    import sqlite3
-
     # Check legacy JSON file first
     json_file = project_dir / "feature_list.json"
     if json_file.exists():
@@ -44,12 +110,12 @@ def has_features(project_dir: Path) -> bool:
         return False
 
     try:
-        conn = sqlite3.connect(db_file)
-        cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM features")
-        count = cursor.fetchone()[0]
-        conn.close()
-        return count > 0
+        result = execute_with_retry(
+            db_file,
+            "SELECT COUNT(*) FROM features",
+            fetch="one"
+        )
+        return result[0] > 0 if result else False
     except Exception:
         # Database exists but can't be read or has no features table
         return False
@@ -58,6 +124,8 @@ def has_features(project_dir: Path) -> bool:
 def count_passing_tests(project_dir: Path) -> tuple[int, int, int]:
     """
     Count passing, in_progress, and total tests via direct database access.
+
+    Uses robust connection with WAL mode and retry logic.
 
     Args:
         project_dir: Directory containing the project
@@ -70,36 +138,46 @@ def count_passing_tests(project_dir: Path) -> tuple[int, int, int]:
         return 0, 0, 0
 
     try:
-        conn = sqlite3.connect(db_file)
-        cursor = conn.cursor()
-        # Single aggregate query instead of 3 separate COUNT queries
-        # Handle case where in_progress column doesn't exist yet (legacy DBs)
-        try:
-            cursor.execute("""
-                SELECT
-                    COUNT(*) as total,
-                    SUM(CASE WHEN passes = 1 THEN 1 ELSE 0 END) as passing,
-                    SUM(CASE WHEN in_progress = 1 THEN 1 ELSE 0 END) as in_progress
-                FROM features
-            """)
-            row = cursor.fetchone()
-            total = row[0] or 0
-            passing = row[1] or 0
-            in_progress = row[2] or 0
-        except sqlite3.OperationalError:
-            # Fallback for databases without in_progress column
-            cursor.execute("""
-                SELECT
-                    COUNT(*) as total,
-                    SUM(CASE WHEN passes = 1 THEN 1 ELSE 0 END) as passing
-                FROM features
-            """)
-            row = cursor.fetchone()
-            total = row[0] or 0
-            passing = row[1] or 0
-            in_progress = 0
-        conn.close()
-        return passing, in_progress, total
+        # Use robust connection with WAL mode and proper timeout
+        with robust_db_connection(db_file) as conn:
+            cursor = conn.cursor()
+            # Single aggregate query instead of 3 separate COUNT queries
+            # Handle case where in_progress column doesn't exist yet (legacy DBs)
+            try:
+                cursor.execute("""
+                    SELECT
+                        COUNT(*) as total,
+                        SUM(CASE WHEN passes = 1 THEN 1 ELSE 0 END) as passing,
+                        SUM(CASE WHEN in_progress = 1 THEN 1 ELSE 0 END) as in_progress
+                    FROM features
+                """)
+                row = cursor.fetchone()
+                total = row[0] or 0
+                passing = row[1] or 0
+                in_progress = row[2] or 0
+            except sqlite3.OperationalError:
+                # Fallback for databases without in_progress column
+                cursor.execute("""
+                    SELECT
+                        COUNT(*) as total,
+                        SUM(CASE WHEN passes = 1 THEN 1 ELSE 0 END) as passing
+                    FROM features
+                """)
+                row = cursor.fetchone()
+                total = row[0] or 0
+                passing = row[1] or 0
+                in_progress = 0
+
+            return passing, in_progress, total
+
+    except sqlite3.DatabaseError as e:
+        error_msg = str(e).lower()
+        if "malformed" in error_msg or "corrupt" in error_msg:
+            print(f"[DATABASE CORRUPTION DETECTED in count_passing_tests: {e}]")
+            print(f"[Please run: sqlite3 {db_file} 'PRAGMA integrity_check;' to diagnose]")
+        else:
+            print(f"[Database error in count_passing_tests: {e}]")
+        return 0, 0, 0
     except Exception as e:
         print(f"[Database error in count_passing_tests: {e}]")
         return 0, 0, 0
@@ -108,6 +186,8 @@ def count_passing_tests(project_dir: Path) -> tuple[int, int, int]:
 def get_all_passing_features(project_dir: Path) -> list[dict]:
     """
     Get all passing features for webhook notifications.
+
+    Uses robust connection with WAL mode and retry logic.
 
     Args:
         project_dir: Directory containing the project
@@ -120,17 +200,16 @@ def get_all_passing_features(project_dir: Path) -> list[dict]:
         return []
 
     try:
-        conn = sqlite3.connect(db_file)
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT id, category, name FROM features WHERE passes = 1 ORDER BY priority ASC"
-        )
-        features = [
-            {"id": row[0], "category": row[1], "name": row[2]}
-            for row in cursor.fetchall()
-        ]
-        conn.close()
-        return features
+        with robust_db_connection(db_file) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT id, category, name FROM features WHERE passes = 1 ORDER BY priority ASC"
+            )
+            features = [
+                {"id": row[0], "category": row[1], "name": row[2]}
+                for row in cursor.fetchall()
+            ]
+            return features
     except Exception:
         return []
 

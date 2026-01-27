@@ -10,9 +10,25 @@ import logging
 import os
 import re
 import sys
+import unicodedata
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query
+
+
+def normalize_name(name: str) -> str:
+    """Normalize a filename/path component using NFKC normalization.
+
+    This prevents Unicode-based path traversal attacks where visually
+    similar characters could bypass security checks.
+
+    Args:
+        name: The filename or path component to normalize.
+
+    Returns:
+        NFKC-normalized string.
+    """
+    return unicodedata.normalize('NFKC', name)
 
 # Module logger
 logger = logging.getLogger(__name__)
@@ -148,7 +164,8 @@ def is_path_blocked(path: Path) -> bool:
 
 def is_hidden_file(path: Path) -> bool:
     """Check if a file/directory is hidden (cross-platform)."""
-    name = path.name
+    # Normalize name to prevent Unicode bypass attacks
+    name = normalize_name(path.name)
 
     # Unix-style: starts with dot
     if name.startswith('.'):
@@ -169,8 +186,10 @@ def is_hidden_file(path: Path) -> bool:
 
 def matches_blocked_pattern(name: str) -> bool:
     """Check if filename matches a blocked pattern."""
+    # Normalize name to prevent Unicode bypass attacks
+    normalized_name = normalize_name(name)
     for pattern in HIDDEN_PATTERNS:
-        if re.match(pattern, name, re.IGNORECASE):
+        if re.match(pattern, normalized_name, re.IGNORECASE):
             return True
     return False
 

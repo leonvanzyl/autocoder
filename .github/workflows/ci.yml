@@ -19,7 +19,7 @@ jobs:
       - name: Lint with ruff
         run: ruff check .
       - name: Run security tests
-        run: python test_security.py
+        run: python -m pytest tests/test_security.py tests/test_security_integration.py -v
 
   ui:
     runs-on: ubuntu-latest

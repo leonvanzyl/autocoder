@@ -7,6 +7,7 @@ Core agent interaction functions for running autonomous coding sessions.
 
 import asyncio
 import io
+import logging
 import re
 import sys
 from datetime import datetime, timedelta
@@ -16,6 +17,9 @@ from zoneinfo import ZoneInfo
 
 from claude_agent_sdk import ClaudeSDKClient
 
+# Module logger for error tracking (user-facing messages use print())
+logger = logging.getLogger(__name__)
+
 # Fix Windows console encoding for Unicode characters (emoji, etc.)
 # Without this, print() crashes when Claude outputs emoji like ✅
 if sys.platform == "win32":
@@ -23,7 +27,7 @@ if sys.platform == "win32":
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace", line_buffering=True)
 
 from client import create_client
-from progress import count_passing_tests, has_features, print_progress_summary, print_session_header
+from progress import count_passing_tests, has_features, print_progress_summary, print_session_header, send_session_event
 from prompts import (
     copy_spec_to_project,
     get_coding_prompt,
@@ -106,6 +110,7 @@ async def run_agent_session(
         return "continue", response_text
 
     except Exception as e:
+        logger.error(f"Agent session error: {e}", exc_info=True)
         print(f"Error during agent session: {e}")
         return "error", str(e)
 
@@ -162,6 +167,15 @@ async def run_autonomous_agent(
             agent_type = "coding"
 
     is_initializer = agent_type == "initializer"
+
+    # Send session started webhook
+    send_session_event(
+        "session_started",
+        project_dir,
+        agent_type=agent_type,
+        feature_id=feature_id,
+        feature_name=f"Feature #{feature_id}" if feature_id else None,
+    )
 
     if is_initializer:
         print("Running as INITIALIZER agent")
@@ -236,6 +250,7 @@ async def run_autonomous_agent(
             async with client:
                 status, response = await run_agent_session(client, prompt, project_dir)
         except Exception as e:
+            logger.error(f"Client/MCP server error: {e}", exc_info=True)
             print(f"Client/MCP server error: {e}")
             # Don't crash - return error status so the loop can retry
             status, response = "error", str(e)
@@ -291,6 +306,7 @@ async def run_autonomous_agent(
                         target_time_str = target.strftime("%B %d, %Y at %I:%M %p %Z")
 
                     except Exception as e:
+                        logger.warning(f"Error parsing reset time: {e}, using default delay")
                         print(f"Error parsing reset time: {e}, using default delay")
 
             if target_time_str:
@@ -327,6 +343,7 @@ async def run_autonomous_agent(
             await asyncio.sleep(delay_seconds)
 
         elif status == "error":
+            logger.warning("Session encountered an error, will retry")
             print("\nSession encountered an error")
             print("Will retry with a fresh session...")
             await asyncio.sleep(AUTO_CONTINUE_DELAY_SECONDS)
@@ -353,5 +370,19 @@ async def run_autonomous_agent(
     print("  npm install && npm run dev")
     print("\n  Then open http://localhost:3000 (or check init.sh for the URL)")
     print("-" * 70)
+
+    # Send session ended webhook
+    passing, in_progress, total = count_passing_tests(project_dir)
+    send_session_event(
+        "session_ended",
+        project_dir,
+        agent_type=agent_type,
+        feature_id=feature_id,
+        extra={
+            "passing": passing,
+            "total": total,
+            "percentage": round((passing / total) * 100, 1) if total > 0 else 0,
+        }
+    )
 
     print("\nDone!")
