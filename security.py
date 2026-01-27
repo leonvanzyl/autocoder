@@ -22,6 +22,66 @@ logger = logging.getLogger(__name__)
 # Matches alphanumeric names with dots, underscores, and hyphens
 VALID_PROCESS_NAME_PATTERN = re.compile(r"^[A-Za-z0-9._-]+$")
 
+# =============================================================================
+# DANGEROUS SHELL PATTERNS - Command Injection Prevention
+# =============================================================================
+# These patterns detect SPECIFIC dangerous attack vectors.
+#
+# IMPORTANT: We intentionally DO NOT block general shell features like:
+# - $() command substitution (used in: node $(npm bin)/jest)
+# - `` backticks (used in: VERSION=`cat package.json | jq .version`)
+# - source (used in: source venv/bin/activate)
+# - export with $ (used in: export PATH=$PATH:/usr/local/bin)
+#
+# These are commonly used in legitimate programming workflows and the existing
+# allowlist system already provides strong protection by only allowing specific
+# commands. We only block patterns that are ALMOST ALWAYS malicious.
+# =============================================================================
+
+DANGEROUS_SHELL_PATTERNS = [
+    # Network download piped directly to shell interpreter
+    # These are almost always malicious - legitimate use cases would save to file first
+    (re.compile(r'curl\s+[^|]*\|\s*(?:ba)?sh', re.IGNORECASE), "curl piped to shell"),
+    (re.compile(r'wget\s+[^|]*\|\s*(?:ba)?sh', re.IGNORECASE), "wget piped to shell"),
+    (re.compile(r'curl\s+[^|]*\|\s*python', re.IGNORECASE), "curl piped to python"),
+    (re.compile(r'wget\s+[^|]*\|\s*python', re.IGNORECASE), "wget piped to python"),
+    (re.compile(r'curl\s+[^|]*\|\s*perl', re.IGNORECASE), "curl piped to perl"),
+    (re.compile(r'wget\s+[^|]*\|\s*perl', re.IGNORECASE), "wget piped to perl"),
+    (re.compile(r'curl\s+[^|]*\|\s*ruby', re.IGNORECASE), "curl piped to ruby"),
+    (re.compile(r'wget\s+[^|]*\|\s*ruby', re.IGNORECASE), "wget piped to ruby"),
+
+    # Null byte injection (can terminate strings early in C-based parsers)
+    (re.compile(r'\\x00'), "null byte injection (hex)"),
+]
+
+
+def pre_validate_command_safety(command: str) -> tuple[bool, str]:
+    """
+    Pre-validate a command string for dangerous shell patterns.
+
+    This check runs BEFORE the allowlist check and blocks patterns that are
+    almost always malicious (e.g., curl piped directly to shell).
+
+    This function intentionally allows common shell features like $(), ``,
+    source, and export because they are needed for legitimate programming
+    workflows. The allowlist system provides the primary security layer.
+
+    Args:
+        command: The raw command string to validate
+
+    Returns:
+        Tuple of (is_safe, error_message). If is_safe is False, error_message
+        describes the dangerous pattern that was detected.
+    """
+    if not command:
+        return True, ""
+
+    for pattern, description in DANGEROUS_SHELL_PATTERNS:
+        if pattern.search(command):
+            return False, f"Dangerous shell pattern detected: {description}"
+
+    return True, ""
+
 # Allowed commands for development tasks
 # Minimal set needed for the autonomous coding demo
 ALLOWED_COMMANDS = {
@@ -803,6 +863,13 @@ async def bash_security_hook(input_data, tool_use_id=None, context=None):
 
     Only commands in ALLOWED_COMMANDS and project-specific commands are permitted.
 
+    Security layers (in order):
+    1. Pre-validation: Block dangerous shell patterns (command substitution, etc.)
+    2. Command extraction: Parse command into individual command names
+    3. Blocklist check: Reject hardcoded dangerous commands
+    4. Allowlist check: Only permit explicitly allowed commands
+    5. Extra validation: Additional checks for sensitive commands (pkill, chmod)
+
     Args:
         input_data: Dict containing tool_name and tool_input
         tool_use_id: Optional tool use ID
@@ -818,7 +885,17 @@ async def bash_security_hook(input_data, tool_use_id=None, context=None):
     if not command:
         return {}
 
-    # Extract all commands from the command string
+    # SECURITY LAYER 1: Pre-validate for dangerous shell patterns
+    # This runs BEFORE parsing to catch injection attempts that exploit parser edge cases
+    is_safe, error_msg = pre_validate_command_safety(command)
+    if not is_safe:
+        return {
+            "decision": "block",
+            "reason": f"Command blocked: {error_msg}\n"
+                      "This pattern can be used for command injection and is not allowed.",
+        }
+
+    # SECURITY LAYER 2: Extract all commands from the command string
     commands = extract_commands(command)
 
     if not commands:

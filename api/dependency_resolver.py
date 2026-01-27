@@ -146,7 +146,8 @@ def would_create_circular_dependency(
 ) -> bool:
     """Check if adding a dependency from target to source would create a cycle.
 
-    Uses DFS with visited set for efficient cycle detection.
+    Uses iterative DFS with explicit stack to prevent stack overflow on deep
+    dependency graphs.
 
     Args:
         features: List of all feature dicts
@@ -169,30 +170,34 @@ def would_create_circular_dependency(
     if not target:
         return False
 
-    # DFS from target to see if we can reach source
+    # Iterative DFS from target to see if we can reach source
     visited: set[int] = set()
+    stack: list[int] = [target_id]
 
-    def can_reach(current_id: int, depth: int = 0) -> bool:
-        # Security: Prevent stack overflow with depth limit
-        if depth > MAX_DEPENDENCY_DEPTH:
-            return True  # Assume cycle if too deep (fail-safe)
+    while stack:
+        # Security: Prevent infinite loops with visited set size limit
+        if len(visited) > MAX_DEPENDENCY_DEPTH * 10:
+            return True  # Assume cycle if graph is too large (fail-safe)
+
+        current_id = stack.pop()
+
         if current_id == source_id:
-            return True
+            return True  # Found a path from target to source
+
         if current_id in visited:
-            return False
+            continue
         visited.add(current_id)
 
         current = feature_map.get(current_id)
         if not current:
-            return False
+            continue
 
         deps = current.get("dependencies") or []
         for dep_id in deps:
-            if can_reach(dep_id, depth + 1):
-                return True
-        return False
+            if dep_id not in visited:
+                stack.append(dep_id)
 
-    return can_reach(target_id)
+    return False
 
 
 def validate_dependencies(
@@ -229,7 +234,10 @@ def validate_dependencies(
 
 
 def _detect_cycles(features: list[dict], feature_map: dict) -> list[list[int]]:
-    """Detect cycles using DFS with recursion tracking.
+    """Detect cycles using iterative DFS with explicit stack.
+
+    Converts the recursive DFS to iterative to prevent stack overflow
+    on deep dependency graphs.
 
     Args:
         features: List of features to check for cycles
@@ -240,32 +248,62 @@ def _detect_cycles(features: list[dict], feature_map: dict) -> list[list[int]]:
     """
     cycles: list[list[int]] = []
     visited: set[int] = set()
-    rec_stack: set[int] = set()
-    path: list[int] = []
-
-    def dfs(fid: int) -> bool:
-        visited.add(fid)
-        rec_stack.add(fid)
-        path.append(fid)
-
-        feature = feature_map.get(fid)
-        if feature:
-            for dep_id in feature.get("dependencies") or []:
-                if dep_id not in visited:
-                    if dfs(dep_id):
-                        return True
-                elif dep_id in rec_stack:
-                    cycle_start = path.index(dep_id)
-                    cycles.append(path[cycle_start:])
-                    return True
-
-        path.pop()
-        rec_stack.remove(fid)
-        return False
 
     for f in features:
-        if f["id"] not in visited:
-            dfs(f["id"])
+        start_id = f["id"]
+        if start_id in visited:
+            continue
+
+        # Iterative DFS using explicit stack
+        # Stack entries: (node_id, path_to_node, deps_iterator)
+        # We store the deps iterator to resume processing after exploring a child
+        stack: list[tuple[int, list[int], int]] = [(start_id, [], 0)]
+        rec_stack: set[int] = set()  # Nodes in current path
+        parent_map: dict[int, list[int]] = {}  # node -> path to reach it
+
+        while stack:
+            node_id, path, dep_index = stack.pop()
+
+            # First visit to this node in current exploration
+            if dep_index == 0:
+                if node_id in rec_stack:
+                    # Back edge found - cycle detected
+                    cycle_start = path.index(node_id) if node_id in path else len(path)
+                    if node_id in path:
+                        cycles.append(path[cycle_start:] + [node_id])
+                    continue
+
+                if node_id in visited:
+                    continue
+
+                visited.add(node_id)
+                rec_stack.add(node_id)
+                path = path + [node_id]
+                parent_map[node_id] = path
+
+            feature = feature_map.get(node_id)
+            deps = (feature.get("dependencies") or []) if feature else []
+
+            # Process dependencies starting from dep_index
+            if dep_index < len(deps):
+                dep_id = deps[dep_index]
+
+                # Push current node back with incremented index for later deps
+                stack.append((node_id, path[:-1] if path else [], dep_index + 1))
+
+                if dep_id in rec_stack:
+                    # Cycle found
+                    if node_id in parent_map:
+                        current_path = parent_map[node_id]
+                        if dep_id in current_path:
+                            cycle_start = current_path.index(dep_id)
+                            cycles.append(current_path[cycle_start:])
+                elif dep_id not in visited:
+                    # Explore child
+                    stack.append((dep_id, path, 0))
+            else:
+                # All deps processed, backtrack
+                rec_stack.discard(node_id)
 
     return cycles
 
