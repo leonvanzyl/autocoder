@@ -73,7 +73,7 @@ def migrate_add_testing_columns(engine) -> None:
     with engine.connect() as conn:
         # Check if testing_in_progress column exists with NOT NULL
         result = conn.execute(text("PRAGMA table_info(features)"))
-        columns = {row[1]: {"notnull": row[3], "dflt_value": row[4]} for row in result.fetchall()}
+        columns = {row[1]: {"notnull": row[3], "dflt_value": row[4], "type": row[2]} for row in result.fetchall()}
 
         if "testing_in_progress" in columns and columns["testing_in_progress"]["notnull"]:
             # SQLite doesn't support ALTER COLUMN, need to recreate table
@@ -81,8 +81,32 @@ def migrate_add_testing_columns(engine) -> None:
             logger.info("Migrating testing_in_progress column to nullable...")
 
             try:
+                # Define core columns that we know about
+                core_columns = {
+                    "id", "priority", "category", "name", "description", "steps",
+                    "passes", "in_progress", "dependencies", "testing_in_progress",
+                    "last_tested_at"
+                }
+                
+                # Detect any optional columns that may have been added by newer migrations
+                # (e.g., created_at, started_at, completed_at, last_failed_at, last_error, regression_count)
+                optional_columns = []
+                for col_name, col_info in columns.items():
+                    if col_name not in core_columns:
+                        # Preserve the column with its type
+                        col_type = col_info["type"]
+                        optional_columns.append((col_name, col_type))
+                
+                # Build dynamic column definitions for optional columns
+                optional_col_defs = ""
+                optional_col_names = ""
+                for col_name, col_type in optional_columns:
+                    optional_col_defs += f",\n                        {col_name} {col_type}"
+                    optional_col_names += f", {col_name}"
+
                 # Step 1: Create new table without NOT NULL on testing columns
-                conn.execute(text("""
+                # Include any optional columns that exist in the current schema
+                create_sql = f"""
                     CREATE TABLE IF NOT EXISTS features_new (
                         id INTEGER NOT NULL PRIMARY KEY,
                         priority INTEGER NOT NULL,
@@ -94,17 +118,19 @@ def migrate_add_testing_columns(engine) -> None:
                         in_progress BOOLEAN NOT NULL DEFAULT 0,
                         dependencies JSON,
                         testing_in_progress BOOLEAN DEFAULT 0,
-                        last_tested_at DATETIME
+                        last_tested_at DATETIME{optional_col_defs}
                     )
-                """))
+                """
+                conn.execute(text(create_sql))
 
-                # Step 2: Copy data
-                conn.execute(text("""
+                # Step 2: Copy data including optional columns
+                insert_sql = f"""
                     INSERT INTO features_new
                     SELECT id, priority, category, name, description, steps, passes, in_progress,
-                           dependencies, testing_in_progress, last_tested_at
+                           dependencies, testing_in_progress, last_tested_at{optional_col_names}
                     FROM features
-                """))
+                """
+                conn.execute(text(insert_sql))
 
                 # Step 3: Drop old table and rename
                 conn.execute(text("DROP TABLE features"))
@@ -214,6 +240,24 @@ def migrate_add_feature_errors_table(engine) -> None:
         logger.debug("Created feature_errors table")
 
 
+def migrate_add_regression_count_column(engine) -> None:
+    """Add regression_count column to existing databases that don't have it.
+
+    This column tracks how many times a feature has been regression tested,
+    enabling least-tested-first selection for regression testing.
+    """
+    with engine.connect() as conn:
+        # Check if column exists
+        result = conn.execute(text("PRAGMA table_info(features)"))
+        columns = [row[1] for row in result.fetchall()]
+
+        if "regression_count" not in columns:
+            # Add column with default 0 - existing features start with no regression tests
+            conn.execute(text("ALTER TABLE features ADD COLUMN regression_count INTEGER DEFAULT 0 NOT NULL"))
+            conn.commit()
+            logger.debug("Added regression_count column to features table")
+
+
 def run_all_migrations(engine) -> None:
     """Run all migrations in order."""
     migrate_add_in_progress_column(engine)
@@ -224,3 +268,4 @@ def run_all_migrations(engine) -> None:
     migrate_add_schedules_tables(engine)
     migrate_add_feature_attempts_table(engine)
     migrate_add_feature_errors_table(engine)
+    migrate_add_regression_count_column(engine)

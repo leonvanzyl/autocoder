@@ -53,7 +53,7 @@ def temp_db(tmp_path: Path) -> Generator[Path, None, None]:
 
     Yields the path to the temp project directory with an initialized database.
     """
-    from api.database import create_database
+    from api.database import create_database, invalidate_engine_cache
 
     project_dir = tmp_path / "test_db_project"
     project_dir.mkdir()
@@ -66,7 +66,8 @@ def temp_db(tmp_path: Path) -> Generator[Path, None, None]:
 
     yield project_dir
 
-    # Cleanup is automatic via tmp_path
+    # Dispose cached engine to prevent file locks on Windows
+    invalidate_engine_cache(project_dir)
 
 
 @pytest.fixture
@@ -98,7 +99,7 @@ async def async_temp_db(tmp_path: Path) -> AsyncGenerator[Path, None]:
 
     Creates a temporary database for async tests.
     """
-    from api.database import create_database
+    from api.database import create_database, invalidate_engine_cache
 
     project_dir = tmp_path / "async_test_project"
     project_dir.mkdir()
@@ -108,6 +109,9 @@ async def async_temp_db(tmp_path: Path) -> AsyncGenerator[Path, None]:
     create_database(project_dir)
 
     yield project_dir
+
+    # Dispose cached engine to prevent file locks on Windows
+    invalidate_engine_cache(project_dir)
 
 
 # =============================================================================
@@ -165,7 +169,7 @@ def mock_env(monkeypatch):
 
 
 @pytest.fixture
-def mock_project_dir(tmp_path: Path) -> Path:
+def mock_project_dir(tmp_path: Path) -> Generator[Path, None, None]:
     """Create a fully configured mock project directory.
 
     Includes:
@@ -173,7 +177,7 @@ def mock_project_dir(tmp_path: Path) -> Path:
     - .autocoder/ directory for config
     - features.db initialized
     """
-    from api.database import create_database
+    from api.database import create_database, invalidate_engine_cache
 
     project_dir = tmp_path / "mock_project"
     project_dir.mkdir()
@@ -193,7 +197,10 @@ def mock_project_dir(tmp_path: Path) -> Path:
     # Initialize database
     create_database(project_dir)
 
-    return project_dir
+    yield project_dir
+
+    # Dispose cached engine to prevent file locks on Windows
+    invalidate_engine_cache(project_dir)
 
 
 # =============================================================================
@@ -214,12 +221,12 @@ def sample_feature_data() -> dict:
 
 
 @pytest.fixture
-def populated_db(temp_db: Path, sample_feature_data: dict) -> Path:
+def populated_db(temp_db: Path, sample_feature_data: dict) -> Generator[Path, None, None]:
     """Create a database populated with sample features.
 
     Returns the project directory path.
     """
-    from api.database import Feature, create_database
+    from api.database import Feature, create_database, invalidate_engine_cache
 
     _, SessionLocal = create_database(temp_db)
     session = SessionLocal()
@@ -242,4 +249,7 @@ def populated_db(temp_db: Path, sample_feature_data: dict) -> Path:
     finally:
         session.close()
 
-    return temp_db
+    yield temp_db
+
+    # Dispose cached engine to prevent file locks on Windows
+    invalidate_engine_cache(temp_db)

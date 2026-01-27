@@ -338,16 +338,23 @@ export function useAssistantChat({
         } else if (wsRef.current?.readyState === WebSocket.CONNECTING) {
           retryCount++;
           if (retryCount >= maxRetries) {
-            // Connection timeout - clear ref and report error
+            // Connection timeout - close stuck socket so future retries can succeed
             connectTimeoutRef.current = null;
+            if (wsRef.current) {
+              wsRef.current.close();
+              wsRef.current = null;
+            }
             setIsLoading(false);
             onError?.("Connection timeout: WebSocket failed to open");
             return;
           }
           connectTimeoutRef.current = window.setTimeout(checkAndSend, 100);
         } else {
-          // WebSocket is closed or in an error state - clear ref
+          // WebSocket is closed or in an error state - clear ref so retries can succeed
           connectTimeoutRef.current = null;
+          if (wsRef.current) {
+            wsRef.current = null;
+          }
           setIsLoading(false);
           onError?.("Failed to establish WebSocket connection");
         }

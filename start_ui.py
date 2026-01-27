@@ -142,12 +142,21 @@ def install_npm_deps() -> bool:
     package_json = UI_DIR / "package.json"
     package_lock = UI_DIR / "package-lock.json"
 
+    # Fail fast if package.json is missing
+    if not package_json.exists():
+        print("  Error: package.json not found in ui/ directory")
+        return False
+
     # Check if npm install is needed
     needs_install = False
 
     if not node_modules.exists():
         needs_install = True
-    elif package_json.exists():
+    elif not any(node_modules.iterdir()):
+        # Treat empty node_modules as stale (failed/partial install)
+        needs_install = True
+        print("  Note: node_modules is empty, reinstalling...")
+    else:
         # If package.json or package-lock.json is newer than node_modules, reinstall
         node_modules_mtime = node_modules.stat().st_mtime
         if package_json.stat().st_mtime > node_modules_mtime:

@@ -128,8 +128,9 @@ async def test_bash_security_hook_with_project_dir(temp_project_dir: Path):
     autocoder_dir.mkdir(exist_ok=True)
 
     # Test with allowed command in project context
+    # Use consistent payload shape with tool_name and tool_input
     result = await bash_security_hook(
-        {"command": "npm install"},
+        {"tool_name": "Bash", "tool_input": {"command": "npm install"}},
         context={"project_dir": str(temp_project_dir)}
     )
     assert result is not None

@@ -199,7 +199,7 @@ class ExpandChatSession:
         }
         mcp_config_file = self.project_dir / f".claude_mcp_config.expand.{uuid.uuid4().hex}.json"
         self._mcp_config_file = mcp_config_file
-        with open(mcp_config_file, "w") as f:
+        with open(mcp_config_file, "w", encoding="utf-8") as f:
             json.dump(mcp_config, f, indent=2)
         logger.info(f"Wrote MCP config to {mcp_config_file}")
 
@@ -217,18 +217,6 @@ class ExpandChatSession:
         # Determine model from environment or use default
         # This allows using alternative APIs (e.g., GLM via z.ai) that may not support Claude model names
         model = os.getenv("ANTHROPIC_DEFAULT_OPUS_MODEL", "claude-opus-4-5-20251101")
-
-        # Build MCP servers config for feature management
-        {
-            "features": {
-                "command": sys.executable,
-                "args": ["-m", "mcp_server.feature_mcp"],
-                "env": {
-                    "PROJECT_DIR": str(self.project_dir.resolve()),
-                    "PYTHONPATH": str(ROOT_DIR.resolve()),
-                },
-            },
-        }
 
         # Create Claude SDK client
         try:
@@ -358,6 +346,9 @@ class ExpandChatSession:
         # Track whether MCP tool succeeded (to skip XML parsing fallback)
         mcp_tool_succeeded = False
 
+        # Track tool use blocks by ID for correlating with results
+        tool_use_map: dict[str, str] = {}  # tool_use_id -> tool_name
+
         # Stream the response
         async for msg in self.client.receive_response():
             msg_type = type(msg).__name__
@@ -378,9 +369,19 @@ class ExpandChatSession:
                                 "timestamp": datetime.now().isoformat()
                             })
 
+                    # Track tool use blocks to correlate with results
+                    elif block_type in ("ToolUseBlock", "ToolUse"):
+                        tool_use_id = getattr(block, "id", None)
+                        tool_name = getattr(block, "name", "")
+                        if tool_use_id and "feature_create_bulk" in tool_name:
+                            tool_use_map[tool_use_id] = tool_name
+
                     # Detect successful feature_create_bulk tool calls
-                    elif block_type == "ToolResult":
-                        tool_name = getattr(block, "tool_name", "")
+                    # Handle both ToolResult and ToolResultBlock naming conventions
+                    elif block_type in ("ToolResultBlock", "ToolResult"):
+                        # Try to get tool name from tool_use_id correlation or direct attribute
+                        tool_use_id = getattr(block, "tool_use_id", None)
+                        tool_name = tool_use_map.get(tool_use_id, "") or getattr(block, "tool_name", "")
                         if "feature_create_bulk" in tool_name:
                             mcp_tool_succeeded = True
                             logger.info("Detected successful feature_create_bulk MCP tool call")
@@ -396,7 +397,10 @@ class ExpandChatSession:
 
                                             if created_features:
                                                 self.features_created += len(created_features)
-                                                self.created_feature_ids.extend([f["id"] for f in created_features])
+                                                # Safely extract feature IDs, filtering out any without valid IDs
+                                                self.created_feature_ids.extend(
+                                                    [f.get("id") for f in created_features if f.get("id") is not None]
+                                                )
 
                                                 yield {
                                                     "type": "features_created",
@@ -443,7 +447,10 @@ class ExpandChatSession:
 
                         if created:
                             self.features_created += len(created)
-                            self.created_feature_ids.extend([f["id"] for f in created])
+                            # Safely extract feature IDs, filtering out any without valid IDs
+                            self.created_feature_ids.extend(
+                                [f.get("id") for f in created if f.get("id") is not None]
+                            )
 
                             yield {
                                 "type": "features_created",

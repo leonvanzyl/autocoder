@@ -189,14 +189,17 @@ async def run_autonomous_agent(
     #
     # Only clear if we're NOT in a parallel orchestrator context
     # (detected by checking if this agent is a subprocess spawned by orchestrator)
-    import psutil
     try:
+        import psutil
         parent_process = psutil.Process().parent()
         parent_name = parent_process.name() if parent_process else ""
 
         # Only clear if parent is NOT python (i.e., we're running manually, not from orchestrator)
         if "python" not in parent_name.lower():
             clear_stuck_features(project_dir)
+    except (ImportError, ModuleNotFoundError):
+        # psutil not available - assume single-agent mode and clear
+        clear_stuck_features(project_dir)
     except Exception:
         # If parent process check fails, err on the safe side and clear
         clear_stuck_features(project_dir)

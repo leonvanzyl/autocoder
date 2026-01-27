@@ -252,6 +252,8 @@ function App() {
     setIsOpeningIDE(true)
     try {
       await openProjectInIDE(selectedProject, ideToUse)
+    } catch (error) {
+      console.error('Failed to open project in IDE:', error)
     } finally {
       setIsOpeningIDE(false)
     }
@@ -259,12 +261,16 @@ function App() {
 
   // Handle IDE selection from modal
   const handleIDESelect = useCallback(async (ide: IDEType, remember: boolean) => {
-    setShowIDESelection(false)
-    
     if (remember) {
-      await updateSettings.mutateAsync({ preferred_ide: ide })
+      try {
+        await updateSettings.mutateAsync({ preferred_ide: ide })
+      } catch (error) {
+        console.error('Failed to save IDE preference:', error)
+        // Continue with opening IDE even if save failed
+      }
     }
     
+    setShowIDESelection(false)
     handleOpenInIDE(ide)
   }, [handleOpenInIDE, updateSettings])
 

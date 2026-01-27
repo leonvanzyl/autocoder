@@ -172,14 +172,15 @@ def would_create_circular_dependency(
 
     # Iterative DFS from target to see if we can reach source
     visited: set[int] = set()
-    stack: list[int] = [target_id]
+    # Stack entries: (node_id, depth)
+    stack: list[tuple[int, int]] = [(target_id, 0)]
 
     while stack:
-        # Security: Prevent infinite loops with visited set size limit
-        if len(visited) > MAX_DEPENDENCY_DEPTH * 10:
-            return True  # Assume cycle if graph is too large (fail-safe)
+        current_id, depth = stack.pop()
 
-        current_id = stack.pop()
+        # Security: Prevent infinite loops with depth limit
+        if depth > MAX_DEPENDENCY_DEPTH:
+            return True  # Assume cycle if too deep (fail-safe)
 
         if current_id == source_id:
             return True  # Found a path from target to source
@@ -195,7 +196,7 @@ def would_create_circular_dependency(
         deps = current.get("dependencies") or []
         for dep_id in deps:
             if dep_id not in visited:
-                stack.append(dep_id)
+                stack.append((dep_id, depth + 1))
 
     return False
 
@@ -289,7 +290,8 @@ def _detect_cycles(features: list[dict], feature_map: dict) -> list[list[int]]:
                 dep_id = deps[dep_index]
 
                 # Push current node back with incremented index for later deps
-                stack.append((node_id, path[:-1] if path else [], dep_index + 1))
+                # Keep the full path (not path[:-1]) to properly detect cycles through later edges
+                stack.append((node_id, path, dep_index + 1))
 
                 if dep_id in rec_stack:
                     # Cycle found
