@@ -308,7 +308,28 @@ When enabled:
 - WebSocket connections support auth via header or `?token=base64(user:pass)` query parameter
 - The browser will prompt for username/password automatically
 
-**Note:** Basic Auth is only enforced when both username and password are set. For local-only development, you don't need to configure this.
+> ⚠️ **CRITICAL SECURITY WARNINGS**
+>
+> **HTTPS Required:** `BASIC_AUTH_USERNAME` and `BASIC_AUTH_PASSWORD` must **only** be used over HTTPS connections. Basic Authentication transmits credentials as base64-encoded text (not encrypted), making them trivially readable by anyone intercepting plain HTTP traffic. **Never use Basic Auth over unencrypted HTTP.**
+>
+> **WebSocket Query Parameter is Insecure:** The `?token=base64(user:pass)` query parameter method for WebSocket authentication should be **avoided or disabled** whenever possible. Risks include:
+> - **Browser history exposure** – URLs with tokens are saved in browsing history
+> - **Server log leakage** – Query strings are often logged by web servers, proxies, and CDNs
+> - **Referer header leakage** – The token may be sent to third-party sites via the Referer header
+> - **Shoulder surfing** – Credentials visible in the address bar can be observed by others
+>
+> Prefer using the `Authorization` header for WebSocket connections when your client supports it.
+
+#### Securing Your `.env` File
+
+- **Restrict filesystem permissions** – Ensure only the application user can read the `.env` file (e.g., `chmod 600 .env` on Unix systems)
+- **Never commit credentials to version control** – Add `.env` to your `.gitignore` and never commit `BASIC_AUTH_USERNAME` or `BASIC_AUTH_PASSWORD` values
+- **Use a secrets manager for production** – For production deployments, prefer environment variables injected via a secrets manager (e.g., HashiCorp Vault, AWS Secrets Manager, Docker secrets) rather than a plaintext `.env` file
+
+#### Configuration Notes
+
+- `AUTOCODER_ALLOW_REMOTE=1` explicitly enables remote access (binding to `0.0.0.0` instead of `127.0.0.1`). Without this, the server only accepts local connections.
+- **For localhost development, authentication is not required.** Basic Auth is only enforced when both username and password are set, so local development workflows remain frictionless.
 
 ### N8N Webhook Integration
 
