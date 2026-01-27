@@ -87,7 +87,7 @@ jobs:
 
             $DOCKER_CMD up -d --remove-orphans
 
-            echo "Running smoke test on http://127.0.0.1:8888/health ..."
+            echo "Running smoke test on http://127.0.0.1:8888/health and /readiness ..."
             retries=12
             until curl -fsS --max-time 5 http://127.0.0.1:8888/health >/dev/null; do
               retries=$((retries - 1))
@@ -95,7 +95,19 @@ jobs:
                 echo "Health check failed after retries."
                 exit 1
               fi
-              echo "Waiting for service... ($retries retries left)"
+              echo "Waiting for health... ($retries retries left)"
               sleep 5
             done
-            echo "Service responded successfully."
+
+            retries=12
+            until curl -fsS --max-time 5 http://127.0.0.1:8888/readiness >/dev/null; do
+              retries=$((retries - 1))
+              if [ "$retries" -le 0 ]; then
+                echo "Readiness check failed after retries."
+                exit 1
+              fi
+              echo "Waiting for readiness... ($retries retries left)"
+              sleep 5
+            done
+
+            echo "Service responded successfully to health and readiness."

@@ -144,6 +144,16 @@ async def health():
     return {"status": "ok"}
 
 
+@app.get("/readiness")
+async def readiness():
+    """
+    Readiness probe placeholder.
+
+    Add dependency checks (DB, external APIs, queues) here when introduced.
+    """
+    return {"status": "ready"}
+
+
 # ============================================================================
 # Security Middleware
 # ============================================================================
