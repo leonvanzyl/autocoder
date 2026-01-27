@@ -3,6 +3,11 @@ version: "3.9"
 services:
   traefik:
     image: traefik:v3.1
+    environment:
+      # Force a modern Docker API version. Some VPS environments set
+      # DOCKER_API_VERSION=1.24 globally, which breaks Traefik's Docker provider
+      # when the daemon requires >= 1.44.
+      - DOCKER_API_VERSION=1.44
     command:
       - --providers.docker=true
       - --providers.docker.exposedbydefault=false
