@@ -58,6 +58,16 @@ class Feature(Base):
     # NULL/empty = no dependencies (backwards compatible)
     dependencies = Column(JSON, nullable=True, default=None)
 
+    # DEPRECATED: Kept for backward compatibility with existing databases.
+    # These columns are no longer used but prevent NOT NULL violations on insert.
+    # Removed in commit 486979c but old databases still have them.
+    testing_in_progress = Column(Boolean, nullable=False, default=False)
+    last_tested_at = Column(DateTime, nullable=True, default=None)
+
+    # Track how many times this feature has been regression tested.
+    # Used for least-tested-first selection to ensure even test distribution.
+    regression_count = Column(Integer, nullable=False, default=0, index=True)
+
     def to_dict(self) -> dict:
         """Convert feature to dictionary for JSON serialization."""
         return {
@@ -72,6 +82,8 @@ class Feature(Base):
             "in_progress": self.in_progress if self.in_progress is not None else False,
             # Dependencies: NULL/empty treated as empty list for backwards compat
             "dependencies": self.dependencies if self.dependencies else [],
+            # Regression test tracking
+            "regression_count": self.regression_count or 0,
         }
 
     def get_dependencies_safe(self) -> list[int]:
@@ -247,6 +259,22 @@ def _migrate_add_testing_columns(engine) -> None:
     pass
 
 
+def _migrate_add_regression_count_column(engine) -> None:
+    """Add regression_count column to existing databases that don't have it.
+
+    This column tracks how many times each feature has been regression tested,
+    enabling least-tested-first selection for even test distribution.
+    """
+    with engine.connect() as conn:
+        # Check if column exists
+        result = conn.execute(text("PRAGMA table_info(features)"))
+        columns = [row[1] for row in result.fetchall()]
+
+        if "regression_count" not in columns:
+            conn.execute(text("ALTER TABLE features ADD COLUMN regression_count INTEGER DEFAULT 0"))
+            conn.commit()
+
+
 def _is_network_path(path: Path) -> bool:
     """Detect if path is on a network filesystem.
 
@@ -364,6 +392,7 @@ def create_database(project_dir: Path) -> tuple:
     _migrate_fix_null_boolean_fields(engine)
     _migrate_add_dependencies_column(engine)
     _migrate_add_testing_columns(engine)
+    _migrate_add_regression_count_column(engine)
 
     # Migrate to add schedules tables
     _migrate_add_schedules_tables(engine)

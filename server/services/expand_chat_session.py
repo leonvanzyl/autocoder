@@ -12,6 +12,7 @@ import logging
 import os
 import re
 import shutil
+import sys
 import threading
 import uuid
 from datetime import datetime
@@ -36,6 +37,13 @@ API_ENV_VARS = [
     "ANTHROPIC_DEFAULT_SONNET_MODEL",
     "ANTHROPIC_DEFAULT_OPUS_MODEL",
     "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+]
+
+# Feature creation tools for expand session
+EXPAND_FEATURE_TOOLS = [
+    "mcp__features__feature_create",
+    "mcp__features__feature_create_bulk",
+    "mcp__features__feature_get_stats",
 ]
 
 
@@ -152,6 +160,7 @@ class ExpandChatSession:
                 "allow": [
                     "Read(./**)",
                     "Glob(./**)",
+                    *EXPAND_FEATURE_TOOLS,
                 ],
             },
         }
@@ -171,6 +180,18 @@ class ExpandChatSession:
         # This allows using alternative APIs (e.g., GLM via z.ai) that may not support Claude model names
         model = os.getenv("ANTHROPIC_DEFAULT_OPUS_MODEL", "claude-opus-4-5-20251101")
 
+        # Build MCP servers config for feature management
+        mcp_servers = {
+            "features": {
+                "command": sys.executable,
+                "args": ["-m", "mcp_server.feature_mcp"],
+                "env": {
+                    "PROJECT_DIR": str(self.project_dir.resolve()),
+                    "PYTHONPATH": str(ROOT_DIR.resolve()),
+                },
+            },
+        }
+
         # Create Claude SDK client
         try:
             self.client = ClaudeSDKClient(
@@ -181,7 +202,9 @@ class ExpandChatSession:
                     allowed_tools=[
                         "Read",
                         "Glob",
+                        *EXPAND_FEATURE_TOOLS,
                     ],
+                    mcp_servers=mcp_servers,
                     permission_mode="acceptEdits",
                     max_turns=100,
                     cwd=str(self.project_dir.resolve()),
