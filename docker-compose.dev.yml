@@ -1,0 +1,30 @@
+version: "3.9"
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: uvicorn server.main:app --host 0.0.0.0 --port 8888 --reload
+    env_file:
+      - .env
+    volumes:
+      - .:/app
+    ports:
+      - "8888:8888"
+    depends_on:
+      - ui
+
+  ui:
+    working_dir: /app/ui
+    build:
+      context: ./ui
+      dockerfile: Dockerfile.dev
+    command: npm run dev -- --host --port 5173
+    volumes:
+      - ./ui:/app/ui
+      - /app/ui/node_modules
+    env_file:
+      - .env
+    ports:
+      - "5173:5173"

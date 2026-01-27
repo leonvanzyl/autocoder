@@ -15,13 +15,13 @@ Guidelines
 
 ## Phase 1 — Reliability & Observability
 - [x] JSON/structured logging with request IDs (FastAPI + uvicorn)
-- [ ] Error reporting (Sentry/OTEL) backend & frontend
-- [ ] `/metrics` Prometheus endpoint
-- [ ] OTEL tracing middleware + propagation
+- [x] Error reporting (Sentry/OTEL) backend (env-gated)
+- [x] `/metrics` Prometheus endpoint
+- [x] OTEL tracing middleware + propagation (env-gated)
 
 ## Phase 2 — Platform & DevX
-- [ ] `docker-compose.dev.yml` with hot reload (API + UI)
-- [ ] Makefile/taskfile for common commands
+- [x] `docker-compose.dev.yml` with hot reload (API + UI)
+- [x] Makefile/taskfile for common commands
 - [ ] Pre-commit hooks: ruff/mypy, eslint/prettier
 - [ ] mypy strict on `server/`
 

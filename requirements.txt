@@ -17,3 +17,11 @@ ruff>=0.8.0
 mypy>=1.13.0
 pytest>=8.0.0
 python-json-logger>=2.0.7
+python-json-logger>=2.0.7
+prometheus-client>=0.21.1
+sentry-sdk[fastapi]>=2.18.0
+opentelemetry-sdk>=1.27.0
+opentelemetry-exporter-otlp>=1.27.0
+opentelemetry-instrumentation-fastapi>=0.48b0
+opentelemetry-instrumentation-asgi>=0.48b0
+

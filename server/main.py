@@ -26,11 +26,20 @@ from dotenv import load_dotenv
 # Load environment variables from .env file if present
 load_dotenv()
 
-from fastapi import FastAPI, HTTPException, Request, WebSocket
+from fastapi import FastAPI, HTTPException, Request, WebSocket, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pythonjsonlogger import jsonlogger
+from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
+from sentry_sdk import init as sentry_init
+from sentry_sdk.integrations.fastapi import FastApiIntegration
+from opentelemetry import trace
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
 from .routers import (
     agent_router,
@@ -97,6 +106,50 @@ def configure_logging():
 
 configure_logging()
 
+def configure_sentry():
+    dsn = os.getenv("SENTRY_DSN")
+    if not dsn:
+        return
+    sentry_init(
+        dsn=dsn,
+        integrations=[FastApiIntegration()],
+        traces_sample_rate=float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.2")),
+        environment=os.getenv("SENTRY_ENV", "production"),
+    )
+
+
+def configure_tracing(app: FastAPI):
+    endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+    if not endpoint:
+        return
+    resource = Resource.create(
+        {
+            "service.name": os.getenv("OTEL_SERVICE_NAME", "autocoder-server"),
+            "deployment.environment": os.getenv("OTEL_ENVIRONMENT", "production"),
+        }
+    )
+    provider = TracerProvider(resource=resource)
+    processor = BatchSpanProcessor(OTLPSpanExporter(endpoint=endpoint))
+    provider.add_span_processor(processor)
+    trace.set_tracer_provider(provider)
+    FastAPIInstrumentor.instrument_app(app, tracer_provider=provider)
+
+# -----------------------------------------------------------------------------
+# Metrics
+# -----------------------------------------------------------------------------
+
+REQUEST_COUNTER = Counter(
+    "http_requests_total",
+    "Total HTTP requests",
+    ["method", "path", "status"],
+)
+REQUEST_LATENCY = Histogram(
+    "http_request_duration_seconds",
+    "HTTP request latency",
+    ["method", "path"],
+    buckets=(0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10),
+)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -128,6 +181,10 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+# Observability (optional, controlled by env vars)
+configure_sentry()
+configure_tracing(app)
 
 # Check if remote access is enabled via environment variable
 # Set by start_ui.py when --host is not 127.0.0.1
@@ -177,6 +234,12 @@ async def readiness():
     return {"status": "ready"}
 
 
+@app.get("/metrics")
+async def metrics():
+    """Prometheus metrics endpoint."""
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+
 # ============================================================================
 # Security Middleware
 # ============================================================================
@@ -204,6 +267,18 @@ async def request_id_middleware(request: Request, call_next):
     finally:
         request_id_ctx.reset(token)
     response.headers["X-Request-ID"] = req_id
+    return response
+
+
+@app.middleware("http")
+async def metrics_middleware(request: Request, call_next):
+    """Capture basic Prometheus metrics."""
+    path = request.url.path
+    method = request.method
+    with REQUEST_LATENCY.labels(method=method, path=path).time():
+        response: Response = await call_next(request)
+    status = response.status_code
+    REQUEST_COUNTER.labels(method=method, path=path, status=status).inc()
     return response
 
 
