@@ -144,6 +144,7 @@ export interface SetupStatus {
   credentials: boolean
   node: boolean
   npm: boolean
+  gemini: boolean
 }
 
 // Dev Server types
