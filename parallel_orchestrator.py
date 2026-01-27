@@ -28,7 +28,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Literal
 
-
 # Essential environment variables to pass to subprocesses
 # This prevents Windows "command line too long" errors by not passing the entire environment
 ESSENTIAL_ENV_VARS = [

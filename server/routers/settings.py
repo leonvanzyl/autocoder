@@ -14,8 +14,8 @@ from pathlib import Path
 from fastapi import APIRouter
 
 from ..schemas import (
-    DeniedCommandsResponse,
     DeniedCommandItem,
+    DeniedCommandsResponse,
     ModelInfo,
     ModelsResponse,
     SettingsResponse,

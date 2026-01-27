@@ -267,7 +267,7 @@ async def import_project(project: ProjectCreate):
     if not autocoder_dir.exists():
         raise HTTPException(
             status_code=400,
-            detail=f"Path does not appear to be an autocoder project (missing .autocoder folder). Use 'Create Project' instead."
+            detail="Path does not appear to be an autocoder project (missing .autocoder folder). Use 'Create Project' instead."
         )
 
     # Security check

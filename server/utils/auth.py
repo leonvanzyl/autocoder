@@ -22,7 +22,6 @@ For WebSocket connections:
 import base64
 import os
 import secrets
-from typing import Optional
 
 from fastapi import WebSocket
 

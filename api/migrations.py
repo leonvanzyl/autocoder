@@ -87,7 +87,7 @@ def migrate_add_testing_columns(engine) -> None:
                     "passes", "in_progress", "dependencies", "testing_in_progress",
                     "last_tested_at"
                 }
-                
+
                 # Detect any optional columns that may have been added by newer migrations
                 # (e.g., created_at, started_at, completed_at, last_failed_at, last_error, regression_count)
                 optional_columns = []
@@ -96,7 +96,7 @@ def migrate_add_testing_columns(engine) -> None:
                         # Preserve the column with its type
                         col_type = col_info["type"]
                         optional_columns.append((col_name, col_type))
-                
+
                 # Build dynamic column definitions for optional columns
                 optional_col_defs = ""
                 optional_col_names = ""
