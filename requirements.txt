@@ -16,3 +16,4 @@ openai>=1.52.0
 ruff>=0.8.0
 mypy>=1.13.0
 pytest>=8.0.0
+python-json-logger>=2.0.7

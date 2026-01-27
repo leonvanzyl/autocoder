@@ -14,7 +14,7 @@ Guidelines
 - [x] UI smoke test in CI (landing page)
 
 ## Phase 1 — Reliability & Observability
-- [ ] JSON/structured logging with request IDs (FastAPI + uvicorn)
+- [x] JSON/structured logging with request IDs (FastAPI + uvicorn)
 - [ ] Error reporting (Sentry/OTEL) backend & frontend
 - [ ] `/metrics` Prometheus endpoint
 - [ ] OTEL tracing middleware + propagation

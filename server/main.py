@@ -7,11 +7,15 @@ Provides REST API, WebSocket, and static file serving.
 """
 
 import asyncio
+import logging
 import os
 import shutil
 import sys
+import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Optional
+from contextvars import ContextVar
 
 # Fix for Windows subprocess support in asyncio
 if sys.platform == "win32":
@@ -26,6 +30,7 @@ from fastapi import FastAPI, HTTPException, Request, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from pythonjsonlogger import jsonlogger
 
 from .routers import (
     agent_router,
@@ -55,6 +60,42 @@ from .websocket import project_websocket
 # Paths
 ROOT_DIR = Path(__file__).parent.parent
 UI_DIST_DIR = ROOT_DIR / "ui" / "dist"
+
+# -----------------------------------------------------------------------------
+# Logging
+# -----------------------------------------------------------------------------
+
+# contextvar for request ID
+request_id_ctx: ContextVar[Optional[str]] = ContextVar("request_id", default=None)
+
+
+class RequestIdFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.request_id = request_id_ctx.get()
+        return True
+
+
+def configure_logging():
+    """Configure JSON logging with request_id."""
+    handler = logging.StreamHandler()
+    formatter = jsonlogger.JsonFormatter(
+        "%(asctime)s %(levelname)s %(name)s %(message)s %(request_id)s"
+    )
+    handler.setFormatter(formatter)
+    handler.addFilter(RequestIdFilter())
+
+    root = logging.getLogger()
+    root.handlers = [handler]
+    root.setLevel(logging.INFO)
+
+    # Uvicorn loggers
+    for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
+        logger = logging.getLogger(name)
+        logger.handlers = [handler]
+        logger.setLevel(logging.INFO)
+
+
+configure_logging()
 
 
 @asynccontextmanager
@@ -151,6 +192,19 @@ if not ALLOW_REMOTE:
             raise HTTPException(status_code=403, detail="Localhost access only")
 
         return await call_next(request)
+
+@app.middleware("http")
+async def request_id_middleware(request: Request, call_next):
+    """Attach a request_id to context and response headers for traceability."""
+    incoming = request.headers.get("X-Request-ID")
+    req_id = incoming or uuid.uuid4().hex
+    token = request_id_ctx.set(req_id)
+    try:
+        response = await call_next(request)
+    finally:
+        request_id_ctx.reset(token)
+    response.headers["X-Request-ID"] = req_id
+    return response
 
 
 # ============================================================================
