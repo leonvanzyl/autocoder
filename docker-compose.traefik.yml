@@ -1,0 +1,40 @@
+version: "3.9"
+
+services:
+  traefik:
+    image: traefik:v3.1
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      - --certificatesresolvers.le.acme.httpchallenge=true
+      - --certificatesresolvers.le.acme.httpchallenge.entrypoint=web
+      - --certificatesresolvers.le.acme.email=${LETSENCRYPT_EMAIL}
+      - --certificatesresolvers.le.acme.storage=/letsencrypt/acme.json
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./letsencrypt:/letsencrypt
+    networks:
+      - traefik-proxy
+
+  autocoder:
+    networks:
+      - traefik-proxy
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.autocoder.rule=Host(`${DOMAIN}`)
+      - traefik.http.routers.autocoder.entrypoints=websecure
+      - traefik.http.routers.autocoder.tls.certresolver=le
+      - traefik.http.services.autocoder.loadbalancer.server.port=${APP_PORT:-8888}
+      - traefik.http.routers.autocoder-web.rule=Host(`${DOMAIN}`)
+      - traefik.http.routers.autocoder-web.entrypoints=web
+      - traefik.http.routers.autocoder-web.middlewares=redirect-to-https
+      - traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https
+
+networks:
+  traefik-proxy:
+    external: true
