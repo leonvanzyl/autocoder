@@ -168,7 +168,7 @@ export function ConversationHistory({
                     <Button
                       variant="ghost"
                       size="icon"
-                      onClick={(e) => handleDeleteClick(e, conversation)}
+                      onClick={(e: React.MouseEvent) => handleDeleteClick(e, conversation)}
                       className={`h-8 w-8 mr-2 ${
                         isCurrent
                           ? 'opacity-60 hover:opacity-100'

@@ -137,10 +137,25 @@ def check_node() -> bool:
 
 
 def install_npm_deps() -> bool:
-    """Install npm dependencies if node_modules doesn't exist."""
+    """Install npm dependencies if node_modules doesn't exist or is stale."""
     node_modules = UI_DIR / "node_modules"
+    package_json = UI_DIR / "package.json"
+    package_lock = UI_DIR / "package-lock.json"
 
-    if node_modules.exists():
+    # Check if npm install is needed
+    needs_install = False
+
+    if not node_modules.exists():
+        needs_install = True
+    elif package_json.exists():
+        # If package.json or package-lock.json is newer than node_modules, reinstall
+        node_modules_mtime = node_modules.stat().st_mtime
+        if package_json.stat().st_mtime > node_modules_mtime:
+            needs_install = True
+        elif package_lock.exists() and package_lock.stat().st_mtime > node_modules_mtime:
+            needs_install = True
+
+    if not needs_install:
         print("  npm dependencies already installed")
         return True
 
