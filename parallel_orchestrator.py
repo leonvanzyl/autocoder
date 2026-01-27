@@ -669,14 +669,19 @@ class ParallelOrchestrator:
             cmd.extend(["--model", self.model])
 
         try:
-            proc = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                cwd=str(AUTOCODER_ROOT),
-                env=_get_minimal_env() if sys.platform == "win32" else {**os.environ, "PYTHONUNBUFFERED": "1"},
-            )
+            # Use same platform-safe approach as coding agent spawner
+            popen_kwargs = {
+                "stdin": subprocess.DEVNULL,
+                "stdout": subprocess.PIPE,
+                "stderr": subprocess.STDOUT,
+                "text": True,
+                "cwd": str(AUTOCODER_ROOT),
+                "env": _get_minimal_env() if sys.platform == "win32" else {**os.environ, "PYTHONUNBUFFERED": "1"},
+            }
+            if sys.platform == "win32":
+                popen_kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+
+            proc = subprocess.Popen(cmd, **popen_kwargs)
         except Exception as e:
             logger.error(f"[TESTING] FAILED to spawn testing agent: {e}")
             return False, f"Failed to start testing agent: {e}"

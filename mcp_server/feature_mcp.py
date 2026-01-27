@@ -321,6 +321,9 @@ def feature_mark_failing(
         if error_message:
             # Truncate to 10KB to prevent storing huge stack traces
             feature.last_error = error_message[:10240] if len(error_message) > 10240 else error_message
+        else:
+            # Clear stale error message when no new error is provided
+            feature.last_error = None
         session.commit()
         session.refresh(feature)
 
@@ -992,17 +995,42 @@ def feature_delete(
         if feature is None:
             return json.dumps({"error": f"Feature with ID {feature_id} not found"})
 
+        # Check for dependent features that reference this feature
+        # Query all features and filter those that have this feature_id in their dependencies
+        all_features = session.query(Feature).all()
+        dependent_features = [
+            f for f in all_features 
+            if f.dependencies and feature_id in f.dependencies
+        ]
+
+        # Cascade-update dependent features to remove this feature_id from their dependencies
+        if dependent_features:
+            for dependent in dependent_features:
+                deps = dependent.dependencies.copy()
+                deps.remove(feature_id)
+                dependent.dependencies = deps if deps else None
+            session.flush()  # Flush updates before deletion
+
         # Store details before deletion for confirmation message
         feature_data = feature.to_dict()
 
         session.delete(feature)
         session.commit()
 
-        return json.dumps({
+        result = {
             "success": True,
             "message": f"Deleted feature: {feature_data['name']}",
             "deleted_feature": feature_data
-        }, indent=2)
+        }
+        
+        # Include info about updated dependencies if any
+        if dependent_features:
+            result["updated_dependents"] = [
+                {"id": f.id, "name": f.name} for f in dependent_features
+            ]
+            result["message"] += f" (removed dependency reference from {len(dependent_features)} dependent feature(s))"
+
+        return json.dumps(result, indent=2)
     except Exception as e:
         session.rollback()
         return json.dumps({"error": str(e)})
