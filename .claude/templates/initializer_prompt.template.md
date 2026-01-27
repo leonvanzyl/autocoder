@@ -9,6 +9,20 @@ Start by reading `app_spec.txt` in your working directory. This file contains
 the complete specification for what you need to build. Read it carefully
 before proceeding.
 
+### SECOND: Check for Knowledge Files
+
+Check if a `knowledge/` directory exists. If it does, read all `.md` files inside.
+These contain additional project context, requirements documents, research notes,
+or reference materials that provide important context for the project.
+
+```bash
+# Check for knowledge files
+ls -la knowledge/ 2>/dev/null || echo "No knowledge directory"
+
+# Read all knowledge files if they exist
+for f in knowledge/*.md; do [ -f "$f" ] && echo "=== $f ===" && cat "$f"; done 2>/dev/null
+```
+
 ---
 
 ## REQUIRED FEATURE COUNT

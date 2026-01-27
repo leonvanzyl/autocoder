@@ -16,12 +16,24 @@ tail -100 claude-progress.txt
 
 # 3. Check recent git history
 git log --oneline -10
+
+# 4. Check for knowledge files (additional project context/requirements)
+ls -la knowledge/ 2>/dev/null || echo "No knowledge directory"
+```
+
+**IMPORTANT:** If a `knowledge/` directory exists, read all `.md` files in it.
+These contain additional project context, requirements documents, research notes,
+or reference materials that will help you understand the project better.
+
+```bash
+# Read all knowledge files if the directory exists
+for f in knowledge/*.md; do [ -f "$f" ] && echo "=== $f ===" && cat "$f"; done 2>/dev/null
 ```
 
 Then use MCP tools:
 
 ```
-# 4. Get progress statistics
+# 5. Get progress statistics
 Use the feature_get_stats tool
 ```
 

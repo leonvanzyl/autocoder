@@ -47,6 +47,31 @@ class DatabaseHealth(BaseModel):
     error: str | None = None
 
 
+class KnowledgeFile(BaseModel):
+    """Information about a knowledge file."""
+    name: str
+    size: int  # Bytes
+    modified: datetime
+
+
+class KnowledgeFileList(BaseModel):
+    """Response containing list of knowledge files."""
+    files: list[KnowledgeFile]
+    count: int
+
+
+class KnowledgeFileContent(BaseModel):
+    """Response containing knowledge file content."""
+    name: str
+    content: str
+
+
+class KnowledgeFileUpload(BaseModel):
+    """Request schema for uploading a knowledge file."""
+    filename: str = Field(..., min_length=1, max_length=255, pattern=r'^[a-zA-Z0-9_\-\.]+\.md$')
+    content: str = Field(..., min_length=1)
+
+
 class ProjectSummary(BaseModel):
     """Summary of a project for list view."""
     name: str
