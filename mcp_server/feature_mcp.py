@@ -108,6 +108,9 @@ _engine = None
 # Lock for priority assignment to prevent race conditions
 _priority_lock = threading.Lock()
 
+# Lock for atomic claim operations to prevent multi-agent race conditions
+_claim_lock = threading.Lock()
+
 
 @asynccontextmanager
 async def server_lifespan(server: FastMCP):
@@ -453,36 +456,41 @@ def feature_mark_in_progress(
     This prevents other agent sessions from working on the same feature.
     Call this after getting your assigned feature details with feature_get_by_id.
 
+    Uses atomic locking to prevent race conditions when multiple agents
+    try to claim the same feature simultaneously.
+
     Args:
         feature_id: The ID of the feature to mark as in-progress
 
     Returns:
         JSON with the updated feature details, or error if not found or already in-progress.
     """
-    session = get_session()
-    try:
-        feature = session.query(Feature).filter(Feature.id == feature_id).first()
+    # Use lock to prevent race condition when multiple agents try to claim simultaneously
+    with _claim_lock:
+        session = get_session()
+        try:
+            feature = session.query(Feature).filter(Feature.id == feature_id).first()
 
-        if feature is None:
-            return json.dumps({"error": f"Feature with ID {feature_id} not found"})
+            if feature is None:
+                return json.dumps({"error": f"Feature with ID {feature_id} not found"})
 
-        if feature.passes:
-            return json.dumps({"error": f"Feature with ID {feature_id} is already passing"})
+            if feature.passes:
+                return json.dumps({"error": f"Feature with ID {feature_id} is already passing"})
 
-        if feature.in_progress:
-            return json.dumps({"error": f"Feature with ID {feature_id} is already in-progress"})
+            if feature.in_progress:
+                return json.dumps({"error": f"Feature with ID {feature_id} is already in-progress"})
 
-        feature.in_progress = True
-        feature.started_at = _utc_now()
-        session.commit()
-        session.refresh(feature)
+            feature.in_progress = True
+            feature.started_at = _utc_now()
+            session.commit()
+            session.refresh(feature)
 
-        return json.dumps(feature.to_dict())
-    except Exception as e:
-        session.rollback()
-        return json.dumps({"error": f"Failed to mark feature in-progress: {str(e)}"})
-    finally:
-        session.close()
+            return json.dumps(feature.to_dict())
+        except Exception as e:
+            session.rollback()
+            return json.dumps({"error": f"Failed to mark feature in-progress: {str(e)}"})
+        finally:
+            session.close()
 
 
 @mcp.tool()
@@ -494,38 +502,43 @@ def feature_claim_and_get(
     Combines feature_mark_in_progress + feature_get_by_id into a single operation.
     If already in-progress, still returns the feature details (idempotent).
 
+    Uses atomic locking to prevent race conditions when multiple agents
+    try to claim the same feature simultaneously.
+
     Args:
         feature_id: The ID of the feature to claim and retrieve
 
     Returns:
         JSON with feature details including claimed status, or error if not found.
     """
-    session = get_session()
-    try:
-        feature = session.query(Feature).filter(Feature.id == feature_id).first()
+    # Use lock to ensure atomic claim operation across multiple processes
+    with _claim_lock:
+        session = get_session()
+        try:
+            feature = session.query(Feature).filter(Feature.id == feature_id).first()
 
-        if feature is None:
-            return json.dumps({"error": f"Feature with ID {feature_id} not found"})
+            if feature is None:
+                return json.dumps({"error": f"Feature with ID {feature_id} not found"})
 
-        if feature.passes:
-            return json.dumps({"error": f"Feature with ID {feature_id} is already passing"})
+            if feature.passes:
+                return json.dumps({"error": f"Feature with ID {feature_id} is already passing"})
 
-        # Idempotent: if already in-progress, just return details
-        already_claimed = feature.in_progress
-        if not already_claimed:
-            feature.in_progress = True
-            feature.started_at = _utc_now()
-            session.commit()
-            session.refresh(feature)
+            # Idempotent: if already in-progress, just return details
+            already_claimed = feature.in_progress
+            if not already_claimed:
+                feature.in_progress = True
+                feature.started_at = _utc_now()
+                session.commit()
+                session.refresh(feature)
 
-        result = feature.to_dict()
-        result["already_claimed"] = already_claimed
-        return json.dumps(result)
-    except Exception as e:
-        session.rollback()
-        return json.dumps({"error": f"Failed to claim feature: {str(e)}"})
-    finally:
-        session.close()
+            result = feature.to_dict()
+            result["already_claimed"] = already_claimed
+            return json.dumps(result)
+        except Exception as e:
+            session.rollback()
+            return json.dumps({"error": f"Failed to claim feature: {str(e)}"})
+        finally:
+            session.close()
 
 
 @mcp.tool()

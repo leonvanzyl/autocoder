@@ -426,6 +426,20 @@ class ModelsResponse(BaseModel):
     default: str
 
 
+class DeniedCommandItem(BaseModel):
+    """Schema for a single denied command entry."""
+    command: str
+    reason: str
+    timestamp: datetime
+    project_dir: str | None = None
+
+
+class DeniedCommandsResponse(BaseModel):
+    """Response schema for denied commands list."""
+    commands: list[DeniedCommandItem]
+    count: int
+
+
 class SettingsUpdate(BaseModel):
     """Request schema for updating global settings."""
     yolo_mode: bool | None = None

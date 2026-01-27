@@ -10,12 +10,100 @@ import logging
 import os
 import re
 import shlex
+import threading
+from collections import deque
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
 import yaml
 
 logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# DENIED COMMANDS TRACKING
+# =============================================================================
+# Track denied commands for visibility and debugging.
+# Uses a thread-safe deque with a max size to prevent memory leaks.
+# =============================================================================
+
+MAX_DENIED_COMMANDS = 100  # Keep last 100 denied commands
+
+
+@dataclass
+class DeniedCommand:
+    """Record of a denied command."""
+    timestamp: str
+    command: str
+    reason: str
+    project_dir: Optional[str] = None
+
+
+# Thread-safe storage for denied commands
+_denied_commands: deque[DeniedCommand] = deque(maxlen=MAX_DENIED_COMMANDS)
+_denied_commands_lock = threading.Lock()
+
+
+def record_denied_command(command: str, reason: str, project_dir: Optional[Path] = None) -> None:
+    """
+    Record a denied command for later review.
+
+    Args:
+        command: The command that was denied
+        reason: The reason it was denied
+        project_dir: Optional project directory context
+    """
+    denied = DeniedCommand(
+        timestamp=datetime.now(timezone.utc).isoformat(),
+        command=command,
+        reason=reason,
+        project_dir=str(project_dir) if project_dir else None,
+    )
+    with _denied_commands_lock:
+        _denied_commands.append(denied)
+    logger.info(f"[SECURITY] Command denied: {command[:100]}... Reason: {reason[:100]}")
+
+
+def get_denied_commands(limit: int = 50) -> list[dict]:
+    """
+    Get the most recent denied commands.
+
+    Args:
+        limit: Maximum number of commands to return (default 50)
+
+    Returns:
+        List of denied command records (most recent first)
+    """
+    with _denied_commands_lock:
+        # Convert to list and reverse for most-recent-first
+        commands = list(_denied_commands)[-limit:]
+        commands.reverse()
+        return [
+            {
+                "timestamp": cmd.timestamp,
+                "command": cmd.command,
+                "reason": cmd.reason,
+                "project_dir": cmd.project_dir,
+            }
+            for cmd in commands
+        ]
+
+
+def clear_denied_commands() -> int:
+    """
+    Clear all recorded denied commands.
+
+    Returns:
+        Number of commands that were cleared
+    """
+    with _denied_commands_lock:
+        count = len(_denied_commands)
+        _denied_commands.clear()
+    logger.info(f"[SECURITY] Cleared {count} denied command records")
+    return count
+
 
 # Regex pattern for valid pkill process names (no regex metacharacters allowed)
 # Matches alphanumeric names with dots, underscores, and hyphens
@@ -864,14 +952,22 @@ async def bash_security_hook(input_data, tool_use_id=None, context=None):
     if not command:
         return {}
 
+    # Get project directory from context early (needed for denied command recording)
+    project_dir = None
+    if context and isinstance(context, dict):
+        project_dir_str = context.get("project_dir")
+        if project_dir_str:
+            project_dir = Path(project_dir_str)
+
     # SECURITY LAYER 1: Pre-validate for dangerous shell patterns
     # This runs BEFORE parsing to catch injection attempts that exploit parser edge cases
     is_safe, error_msg = pre_validate_command_safety(command)
     if not is_safe:
+        reason = f"Command blocked: {error_msg}\nThis pattern can be used for command injection and is not allowed."
+        record_denied_command(command, reason, project_dir)
         return {
             "decision": "block",
-            "reason": f"Command blocked: {error_msg}\n"
-                      "This pattern can be used for command injection and is not allowed.",
+            "reason": reason,
         }
 
     # SECURITY LAYER 2: Extract all commands from the command string
@@ -879,17 +975,12 @@ async def bash_security_hook(input_data, tool_use_id=None, context=None):
 
     if not commands:
         # Could not parse - fail safe by blocking
+        reason = f"Could not parse command for security validation: {command}"
+        record_denied_command(command, reason, project_dir)
         return {
             "decision": "block",
-            "reason": f"Could not parse command for security validation: {command}",
+            "reason": reason,
         }
-
-    # Get project directory from context
-    project_dir = None
-    if context and isinstance(context, dict):
-        project_dir_str = context.get("project_dir")
-        if project_dir_str:
-            project_dir = Path(project_dir_str)
 
     # Get effective commands using hierarchy resolution
     allowed_commands, blocked_commands = get_effective_commands(project_dir)
@@ -904,22 +995,25 @@ async def bash_security_hook(input_data, tool_use_id=None, context=None):
     for cmd in commands:
         # Check blocklist first (highest priority)
         if cmd in blocked_commands:
+            reason = f"Command '{cmd}' is blocked at organization level and cannot be approved."
+            record_denied_command(command, reason, project_dir)
             return {
                 "decision": "block",
-                "reason": f"Command '{cmd}' is blocked at organization level and cannot be approved.",
+                "reason": reason,
             }
 
         # Check allowlist (with pattern matching)
         if not is_command_allowed(cmd, allowed_commands):
             # Provide helpful error message with config hint
-            error_msg = f"Command '{cmd}' is not allowed.\n"
-            error_msg += "To allow this command:\n"
-            error_msg += "  1. Add to .autocoder/allowed_commands.yaml for this project, OR\n"
-            error_msg += "  2. Request mid-session approval (the agent can ask)\n"
-            error_msg += "Note: Some commands are blocked at org-level and cannot be overridden."
+            reason = f"Command '{cmd}' is not allowed.\n"
+            reason += "To allow this command:\n"
+            reason += "  1. Add to .autocoder/allowed_commands.yaml for this project, OR\n"
+            reason += "  2. Request mid-session approval (the agent can ask)\n"
+            reason += "Note: Some commands are blocked at org-level and cannot be overridden."
+            record_denied_command(command, reason, project_dir)
             return {
                 "decision": "block",
-                "reason": error_msg,
+                "reason": reason,
             }
 
         # Additional validation for sensitive commands
@@ -934,14 +1028,17 @@ async def bash_security_hook(input_data, tool_use_id=None, context=None):
                 extra_procs = pkill_processes - DEFAULT_PKILL_PROCESSES
                 allowed, reason = validate_pkill_command(cmd_segment, extra_procs if extra_procs else None)
                 if not allowed:
+                    record_denied_command(command, reason, project_dir)
                     return {"decision": "block", "reason": reason}
             elif cmd == "chmod":
                 allowed, reason = validate_chmod_command(cmd_segment)
                 if not allowed:
+                    record_denied_command(command, reason, project_dir)
                     return {"decision": "block", "reason": reason}
             elif cmd == "init.sh":
                 allowed, reason = validate_init_script(cmd_segment)
                 if not allowed:
+                    record_denied_command(command, reason, project_dir)
                     return {"decision": "block", "reason": reason}
 
     return {}

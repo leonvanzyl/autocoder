@@ -340,6 +340,50 @@ def create_database(project_dir: Path) -> tuple:
         return engine, SessionLocal
 
 
+def checkpoint_wal(project_dir: Path) -> bool:
+    """
+    Checkpoint the WAL file to ensure all changes are written to the main database.
+
+    This should be called before exiting the orchestrator to ensure data durability
+    and prevent database corruption when multiple agents are running.
+
+    WAL checkpoint modes:
+    - PASSIVE (0): Checkpoint as much as possible without blocking
+    - FULL (1): Checkpoint everything, block writers if necessary
+    - RESTART (2): Like FULL but also truncate WAL
+    - TRUNCATE (3): Like RESTART but ensure WAL is zero bytes
+
+    Args:
+        project_dir: Directory containing the project database
+
+    Returns:
+        True if checkpoint succeeded, False otherwise
+    """
+    db_path = get_database_path(project_dir)
+    if not db_path.exists():
+        return True  # No database to checkpoint
+
+    try:
+        with robust_db_connection(db_path) as conn:
+            cursor = conn.cursor()
+            # Use TRUNCATE mode for cleanest state on exit
+            cursor.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            result = cursor.fetchone()
+            # Result: (busy, log_pages, checkpointed_pages)
+            if result and result[0] == 0:  # Not busy
+                logger.debug(
+                    f"WAL checkpoint successful for {db_path}: "
+                    f"log_pages={result[1]}, checkpointed={result[2]}"
+                )
+                return True
+            else:
+                logger.warning(f"WAL checkpoint partial for {db_path}: {result}")
+                return True  # Partial checkpoint is still okay
+    except Exception as e:
+        logger.error(f"WAL checkpoint failed for {db_path}: {e}")
+        return False
+
+
 def invalidate_engine_cache(project_dir: Path) -> None:
     """
     Invalidate the engine cache for a specific project.

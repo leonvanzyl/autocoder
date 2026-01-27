@@ -203,6 +203,102 @@ async def create_project(project: ProjectCreate):
     )
 
 
+@router.post("/import", response_model=ProjectSummary)
+async def import_project(project: ProjectCreate):
+    """
+    Import/reconnect to an existing project after reinstallation.
+
+    This endpoint allows reconnecting to a project that exists on disk
+    but is not registered in the current autocoder installation's registry.
+
+    The project path must:
+    - Exist as a directory
+    - Contain a .autocoder folder (indicating it was previously an autocoder project)
+
+    This is useful when:
+    - Reinstalling autocoder
+    - Moving to a new machine
+    - Recovering from registry corruption
+    """
+    _init_imports()
+    register_project, _, get_project_path, list_registered_projects, _ = _get_registry_functions()
+
+    name = validate_project_name(project.name)
+    project_path = Path(project.path).resolve()
+
+    # Check if project name already registered
+    existing = get_project_path(name)
+    if existing:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Project '{name}' already exists at {existing}. Use a different name or delete the existing project first."
+        )
+
+    # Check if path already registered under a different name
+    all_projects = list_registered_projects()
+    for existing_name, info in all_projects.items():
+        existing_path = Path(info["path"]).resolve()
+        if sys.platform == "win32":
+            paths_match = str(existing_path).lower() == str(project_path).lower()
+        else:
+            paths_match = existing_path == project_path
+
+        if paths_match:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Path '{project_path}' is already registered as project '{existing_name}'"
+            )
+
+    # Validate the path exists and is a directory
+    if not project_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail=f"Project path does not exist: {project_path}"
+        )
+
+    if not project_path.is_dir():
+        raise HTTPException(
+            status_code=400,
+            detail="Path exists but is not a directory"
+        )
+
+    # Check for .autocoder folder to confirm it's a valid autocoder project
+    autocoder_dir = project_path / ".autocoder"
+    if not autocoder_dir.exists():
+        raise HTTPException(
+            status_code=400,
+            detail=f"Path does not appear to be an autocoder project (missing .autocoder folder). Use 'Create Project' instead."
+        )
+
+    # Security check
+    from .filesystem import is_path_blocked
+    if is_path_blocked(project_path):
+        raise HTTPException(
+            status_code=403,
+            detail="Cannot import project from system or sensitive directory"
+        )
+
+    # Register in registry
+    try:
+        register_project(name, project_path)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to register project: {e}"
+        )
+
+    # Get project stats
+    has_spec = _check_spec_exists(project_path)
+    stats = get_project_stats(project_path)
+
+    return ProjectSummary(
+        name=name,
+        path=project_path.as_posix(),
+        has_spec=has_spec,
+        stats=stats,
+    )
+
+
 @router.get("/{name}", response_model=ProjectDetail)
 async def get_project(name: str):
     """Get detailed information about a project."""
