@@ -240,15 +240,20 @@ def feature_get_summary(
 
 @mcp.tool()
 def feature_mark_passing(
-    feature_id: Annotated[int, Field(description="The ID of the feature to mark as passing", ge=1)]
+    feature_id: Annotated[int, Field(description="The ID of the feature to mark as passing", ge=1)],
+    quality_result: Annotated[dict | None, Field(description="Optional quality gate results to store as test evidence", default=None)] = None
 ) -> str:
     """Mark a feature as passing after successful implementation.
 
     Updates the feature's passes field to true and clears the in_progress flag.
     Use this after you have implemented the feature and verified it works correctly.
 
+    Optionally stores quality gate results (lint, type-check, test outputs) as
+    test evidence for compliance and debugging purposes.
+
     Args:
         feature_id: The ID of the feature to mark as passing
+        quality_result: Optional dict with quality gate results (lint, type-check, etc.)
 
     Returns:
         JSON with success confirmation: {success, feature_id, name}
@@ -264,6 +269,11 @@ def feature_mark_passing(
         feature.in_progress = False
         feature.completed_at = _utc_now()
         feature.last_error = None  # Clear any previous error
+
+        # Store quality gate results as test evidence
+        if quality_result:
+            feature.quality_result = quality_result
+
         session.commit()
 
         return json.dumps({"success": True, "feature_id": feature_id, "name": feature.name})

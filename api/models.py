@@ -65,6 +65,10 @@ class Feature(Base):
     # Error tracking
     last_error = Column(Text, nullable=True)  # Last error message when feature failed
 
+    # Quality gate results - stores test evidence (lint, type-check, custom script results)
+    # Format: JSON with {passed, timestamp, checks: {name: {passed, output, duration_ms}}, summary}
+    quality_result = Column(JSON, nullable=True)  # Last quality gate result when marked passing
+
     def to_dict(self) -> dict:
         """Convert feature to dictionary for JSON serialization."""
         return {
@@ -86,6 +90,8 @@ class Feature(Base):
             "last_failed_at": self.last_failed_at.isoformat() if self.last_failed_at else None,
             # Error tracking
             "last_error": self.last_error,
+            # Quality gate results (test evidence)
+            "quality_result": self.quality_result,
         }
 
     def get_dependencies_safe(self) -> list[int]:
