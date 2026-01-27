@@ -6,6 +6,9 @@ temp/
 nul
 issues/
 
+# Repository-specific
+.code/
+
 # Browser profiles for parallel agent execution
 .browser-profiles/
 
