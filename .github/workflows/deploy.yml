@@ -3,7 +3,7 @@ name: Deploy to VPS
 on:
   workflow_run:
     workflows: ["Push CI"]
-    branches: [main, master]
+    branches: [main]
     types:
       - completed
 
@@ -59,9 +59,9 @@ jobs:
               git checkout "$TARGET_BRANCH"
               git pull --ff-only origin "$TARGET_BRANCH"
             else
-              echo "Branch $TARGET_BRANCH not found, trying main or master"
-              git checkout main 2>/dev/null || git checkout master
-              git pull --ff-only origin main 2>/dev/null || git pull --ff-only origin master
+              echo "Branch $TARGET_BRANCH not found, trying main"
+              git checkout main
+              git pull --ff-only origin main
             fi
 
             if command -v docker &>/dev/null && docker compose version &>/dev/null; then
