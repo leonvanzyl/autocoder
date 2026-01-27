@@ -258,6 +258,24 @@ def migrate_add_regression_count_column(engine) -> None:
             logger.debug("Added regression_count column to features table")
 
 
+def migrate_add_quality_result_column(engine) -> None:
+    """Add quality_result column to existing databases that don't have it.
+
+    This column stores quality gate results (test evidence) when a feature
+    is marked as passing. Format: JSON with {passed, timestamp, checks: {...}, summary}
+    """
+    with engine.connect() as conn:
+        # Check if column exists
+        result = conn.execute(text("PRAGMA table_info(features)"))
+        columns = [row[1] for row in result.fetchall()]
+
+        if "quality_result" not in columns:
+            # Add column with NULL default - existing features have no quality results
+            conn.execute(text("ALTER TABLE features ADD COLUMN quality_result JSON DEFAULT NULL"))
+            conn.commit()
+            logger.debug("Added quality_result column to features table")
+
+
 def run_all_migrations(engine) -> None:
     """Run all migrations in order."""
     migrate_add_in_progress_column(engine)
@@ -269,3 +287,4 @@ def run_all_migrations(engine) -> None:
     migrate_add_feature_attempts_table(engine)
     migrate_add_feature_errors_table(engine)
     migrate_add_regression_count_column(engine)
+    migrate_add_quality_result_column(engine)
