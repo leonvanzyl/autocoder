@@ -27,13 +27,25 @@ if sys.platform == "win32":
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace", line_buffering=True)
 
 from client import create_client
-from progress import count_passing_tests, has_features, print_progress_summary, print_session_header, send_session_event
+from progress import (
+    clear_stuck_features,
+    count_passing_tests,
+    has_features,
+    print_progress_summary,
+    print_session_header,
+    send_session_event,
+)
 from prompts import (
     copy_spec_to_project,
     get_coding_prompt,
     get_initializer_prompt,
     get_single_feature_prompt,
     get_testing_prompt,
+)
+from rate_limit_utils import (
+    RATE_LIMIT_PATTERNS,
+    is_rate_limit_error,
+    parse_retry_after,
 )
 
 # Configuration
@@ -110,9 +122,20 @@ async def run_agent_session(
         return "continue", response_text
 
     except Exception as e:
+        error_str = str(e)
         logger.error(f"Agent session error: {e}", exc_info=True)
-        print(f"Error during agent session: {e}")
-        return "error", str(e)
+        print(f"Error during agent session: {error_str}")
+
+        # Detect rate limit errors from exception message
+        if is_rate_limit_error(error_str):
+            # Try to extract retry-after time from error
+            retry_seconds = parse_retry_after(error_str)
+            if retry_seconds is not None:
+                return "rate_limit", str(retry_seconds)
+            else:
+                return "rate_limit", "unknown"
+
+        return "error", error_str
 
 
 async def run_autonomous_agent(
@@ -156,6 +179,28 @@ async def run_autonomous_agent(
     # Create project directory
     project_dir.mkdir(parents=True, exist_ok=True)
 
+    # IMPORTANT: Do NOT clear stuck features in parallel mode!
+    # The orchestrator manages feature claiming atomically.
+    # Clearing here causes race conditions where features are marked in_progress
+    # by the orchestrator but immediately cleared by the agent subprocess on startup.
+    #
+    # For single-agent mode or manual runs, clearing is still safe because
+    # there's only one agent at a time and it happens before claiming any features.
+    #
+    # Only clear if we're NOT in a parallel orchestrator context
+    # (detected by checking if this agent is a subprocess spawned by orchestrator)
+    import psutil
+    try:
+        parent_process = psutil.Process().parent()
+        parent_name = parent_process.name() if parent_process else ""
+
+        # Only clear if parent is NOT python (i.e., we're running manually, not from orchestrator)
+        if "python" not in parent_name.lower():
+            clear_stuck_features(project_dir)
+    except Exception:
+        # If parent process check fails, err on the safe side and clear
+        clear_stuck_features(project_dir)
+
     # Determine agent type if not explicitly set
     if agent_type is None:
         # Auto-detect based on whether we have features
@@ -197,6 +242,8 @@ async def run_autonomous_agent(
 
     # Main loop
     iteration = 0
+    rate_limit_retries = 0  # Track consecutive rate limit errors for exponential backoff
+    error_retries = 0  # Track consecutive non-rate-limit errors
 
     while True:
         iteration += 1
@@ -265,13 +312,29 @@ async def run_autonomous_agent(
 
         # Handle status
         if status == "continue":
+            # Reset error retries on success; rate-limit retries reset only if no signal
+            error_retries = 0
+            reset_rate_limit_retries = True
+
             delay_seconds = AUTO_CONTINUE_DELAY_SECONDS
             target_time_str = None
 
-            if "limit reached" in response.lower():
-                print("Claude Agent SDK indicated limit reached.")
+            # Check for rate limit indicators in response text
+            response_lower = response.lower()
+            if any(pattern in response_lower for pattern in RATE_LIMIT_PATTERNS):
+                print("Claude Agent SDK indicated rate limit reached.")
+                reset_rate_limit_retries = False
 
-                # Try to parse reset time from response
+                # Try to extract retry-after from response text first
+                retry_seconds = parse_retry_after(response)
+                if retry_seconds is not None:
+                    delay_seconds = retry_seconds
+                else:
+                    # Use exponential backoff when retry-after unknown
+                    delay_seconds = min(60 * (2 ** rate_limit_retries), 3600)
+                    rate_limit_retries += 1
+
+                # Try to parse reset time from response (more specific format)
                 match = re.search(
                     r"(?i)\bresets(?:\s+at)?\s+(\d+)(?::(\d+))?\s*(am|pm)\s*\(([^)]+)\)",
                     response,
@@ -340,13 +403,33 @@ async def run_autonomous_agent(
                     print(f"\nSingle-feature mode: Feature #{feature_id} session complete.")
                 break
 
+            # Reset rate limit retries only if no rate limit signal was detected
+            if reset_rate_limit_retries:
+                rate_limit_retries = 0
+
+            await asyncio.sleep(delay_seconds)
+
+        elif status == "rate_limit":
+            # Smart rate limit handling with exponential backoff
+            if response != "unknown":
+                delay_seconds = int(response)
+                print(f"\nRate limit hit. Waiting {delay_seconds} seconds before retry...")
+            else:
+                # Use exponential backoff when retry-after unknown
+                delay_seconds = min(60 * (2 ** rate_limit_retries), 3600)  # Max 1 hour
+                rate_limit_retries += 1
+                print(f"\nRate limit hit. Backoff wait: {delay_seconds} seconds (attempt #{rate_limit_retries})...")
+
             await asyncio.sleep(delay_seconds)
 
         elif status == "error":
+            # Non-rate-limit errors: linear backoff capped at 5 minutes
+            error_retries += 1
+            delay_seconds = min(30 * error_retries, 300)  # Max 5 minutes
             logger.warning("Session encountered an error, will retry")
             print("\nSession encountered an error")
-            print("Will retry with a fresh session...")
-            await asyncio.sleep(AUTO_CONTINUE_DELAY_SECONDS)
+            print(f"Will retry in {delay_seconds}s (attempt #{error_retries})...")
+            await asyncio.sleep(delay_seconds)
 
         # Small delay between sessions
         if max_iterations is None or iteration < max_iterations:
