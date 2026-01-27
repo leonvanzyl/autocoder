@@ -70,7 +70,7 @@ async def lifespan(app: FastAPI):
     """Lifespan context manager for startup and shutdown."""
     # Startup - clean up orphaned processes from previous runs (Windows)
     cleanup_orphaned_agent_processes()
-    
+
     # Clean up orphaned lock files from previous runs
     cleanup_orphaned_locks()
     cleanup_orphaned_devserver_locks()

@@ -49,7 +49,7 @@ DEBUG_LOG_FILE = AUTOCODER_ROOT / "logs" / "orchestrator.log"
 def safe_asyncio_run(coro):
     """
     Run an async coroutine with proper cleanup to avoid Windows subprocess errors.
-    
+
     On Windows, subprocess transports may raise 'Event loop is closed' errors
     during garbage collection if not properly cleaned up.
     """
@@ -63,16 +63,16 @@ def safe_asyncio_run(coro):
             pending = asyncio.all_tasks(loop)
             for task in pending:
                 task.cancel()
-            
+
             # Allow cancelled tasks to complete
             if pending:
                 loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
-            
+
             # Shutdown async generators and executors
             loop.run_until_complete(loop.shutdown_asyncgens())
             if hasattr(loop, 'shutdown_default_executor'):
                 loop.run_until_complete(loop.shutdown_default_executor())
-            
+
             loop.close()
     else:
         return asyncio.run(coro)
@@ -775,9 +775,9 @@ class ParallelOrchestrator:
             # CRITICAL: Kill the process tree to clean up any child processes (e.g., Claude CLI)
             # This prevents zombie processes from accumulating
             try:
-                _kill_process_tree(proc, timeout=2.0)
+                kill_process_tree(proc, timeout=2.0)
             except Exception as e:
-                debug_log.log("CLEANUP", f"Error killing process tree for {agent_type} agent", error=str(e))
+                logger.warning(f"Error killing process tree for {agent_type} agent: {e}")
             self._on_agent_complete(feature_id, proc.returncode, agent_type, proc)
 
     def _signal_agent_completed(self):

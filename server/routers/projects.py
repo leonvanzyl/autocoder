@@ -6,6 +6,7 @@ API endpoints for project management.
 Uses project registry for path lookups instead of fixed generations/ directory.
 """
 
+import re
 import shutil
 import subprocess
 import sys
@@ -291,7 +292,7 @@ async def delete_project(name: str, delete_files: bool = False):
 @router.post("/{name}/open-in-ide")
 async def open_project_in_ide(name: str, ide: str):
     """Open a project in the specified IDE.
-    
+
     Args:
         name: Project name
         ide: IDE to use ('vscode', 'cursor', or 'antigravity')
@@ -314,10 +315,10 @@ async def open_project_in_ide(name: str, ide: str):
         'cursor': 'cursor',
         'antigravity': 'antigravity',
     }
-    
+
     if ide not in ide_commands:
         raise HTTPException(
-            status_code=400, 
+            status_code=400,
             detail=f"Invalid IDE. Must be one of: {list(ide_commands.keys())}"
         )
 

@@ -219,7 +219,7 @@ class ExpandChatSession:
 
         # Build environment overrides for API configuration
         sdk_env = {var: os.getenv(var) for var in API_ENV_VARS if os.getenv(var)}
-        
+
         # Set default max output tokens for GLM 4.7 compatibility if not already set
         if "CLAUDE_CODE_MAX_OUTPUT_TOKENS" not in sdk_env:
             sdk_env["CLAUDE_CODE_MAX_OUTPUT_TOKENS"] = DEFAULT_MAX_OUTPUT_TOKENS
