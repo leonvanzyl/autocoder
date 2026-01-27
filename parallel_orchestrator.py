@@ -401,8 +401,14 @@ class ParallelOrchestrator:
                 logger.debug(f"[TESTING] Reserved slot for testing agent ({spawn_index}/{desired}) | passing_count={passing_count}")
 
             # Spawn outside lock (I/O bound operation)
+            # Wrapped in try/except to ensure placeholder cleanup on unexpected errors
             print(f"[DEBUG] Spawning testing agent ({spawn_index}/{desired})", flush=True)
-            success, _ = self._spawn_testing_agent(placeholder_key=placeholder_key)
+            try:
+                success, _ = self._spawn_testing_agent(placeholder_key=placeholder_key)
+            except Exception as e:
+                # Ensure placeholder is removed on any exception
+                logger.error(f"[TESTING] Exception during spawn: {e}")
+                success = False
 
             # If spawn failed, remove the placeholder
             if not success:

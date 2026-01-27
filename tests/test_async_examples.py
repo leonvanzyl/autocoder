@@ -129,10 +129,13 @@ async def test_bash_security_hook_with_project_dir(temp_project_dir: Path):
 
     # Test with allowed command in project context
     result = await bash_security_hook(
-        {"command": "npm install"},
+        {"tool_name": "Bash", "tool_input": {"command": "npm install"}},
         context={"project_dir": str(temp_project_dir)}
     )
+    # Should return empty dict (allowed) - no "decision": "block"
     assert result is not None
+    assert isinstance(result, dict)
+    assert result.get("decision") != "block"
 
 
 # =============================================================================
