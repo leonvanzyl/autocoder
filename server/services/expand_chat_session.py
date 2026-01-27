@@ -215,6 +215,18 @@ class ExpandChatSession:
         # This allows using alternative APIs (e.g., GLM via z.ai) that may not support Claude model names
         model = os.getenv("ANTHROPIC_DEFAULT_OPUS_MODEL", "claude-opus-4-5-20251101")
 
+        # Build MCP servers config for feature management
+        mcp_servers = {
+            "features": {
+                "command": sys.executable,
+                "args": ["-m", "mcp_server.feature_mcp"],
+                "env": {
+                    "PROJECT_DIR": str(self.project_dir.resolve()),
+                    "PYTHONPATH": str(ROOT_DIR.resolve()),
+                },
+            },
+        }
+
         # Create Claude SDK client
         try:
             self.client = ClaudeSDKClient(
