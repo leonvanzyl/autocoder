@@ -411,18 +411,22 @@ class AgentProcessManager:
             # Start subprocess with piped stdout/stderr
             # Use project_dir as cwd so Claude SDK sandbox allows access to project files
             # IMPORTANT: Set PYTHONUNBUFFERED to ensure output isn't delayed
+            # stdin=DEVNULL prevents blocking if Claude CLI or child process tries to read stdin
             
             # On Windows, use CREATE_NEW_PROCESS_GROUP for better process tree management
             # This allows taskkill /T to reliably kill all child processes
             popen_kwargs = {
+                "stdin": subprocess.DEVNULL,
                 "stdout": subprocess.PIPE,
                 "stderr": subprocess.STDOUT,
                 "cwd": str(self.project_dir),
                 "env": {**os.environ, "PYTHONUNBUFFERED": "1"},
             }
             if sys.platform == "win32":
+                # CREATE_NEW_PROCESS_GROUP enables reliable process tree termination
+                # CREATE_NO_WINDOW could be added but conflicts with process group
                 popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
-            
+
             self.process = subprocess.Popen(cmd, **popen_kwargs)
 
             # Atomic lock creation - if it fails, another process beat us
