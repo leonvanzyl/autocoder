@@ -8,31 +8,24 @@ This is a FRESH context window - you have no memory of previous sessions.
 Start by orienting yourself:
 
 ```bash
-# 1. See your working directory
-pwd
+# 1. See your working directory and project structure
+pwd && ls -la
 
-# 2. List files to understand project structure
-ls -la
+# 2. Read recent progress notes (last 100 lines)
+tail -100 claude-progress.txt
 
-# 3. Read the project specification to understand what you're building
-cat app_spec.txt
-
-# 4. Read progress notes from previous sessions (last 500 lines to avoid context overflow)
-tail -500 claude-progress.txt
-
-# 5. Check recent git history
-git log --oneline -20
+# 3. Check recent git history
+git log --oneline -10
 ```
 
-Then use MCP tools to check feature status:
+Then use MCP tools:
 
 ```
-# 6. Get progress statistics (passing/total counts)
+# 4. Get progress statistics
 Use the feature_get_stats tool
 ```
 
-Understanding the `app_spec.txt` is critical - it contains the full requirements
-for the application you're building.
+**NOTE:** Do NOT read `app_spec.txt` - you'll get all needed details from your assigned feature.
 
 ### STEP 2: START SERVERS (IF NOT RUNNING)
 
@@ -302,6 +295,17 @@ When building applications that require email functionality (password resets, em
 3. Use that link directly to verify the functionality works
 
 This allows you to fully test email-dependent flows without needing external email services.
+
+---
+
+## TOKEN EFFICIENCY
+
+To maximize context window usage:
+
+- **Don't read files unnecessarily** - Feature details from `feature_get_by_id` contain everything you need
+- **Be concise** - Short, focused responses save tokens for actual work
+- **Use `feature_get_summary`** for status checks (lighter than `feature_get_by_id`)
+- **Avoid re-reading large files** - Read once, remember the content
 
 ---
 

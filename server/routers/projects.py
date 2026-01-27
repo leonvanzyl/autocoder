@@ -6,7 +6,6 @@ API endpoints for project management.
 Uses project registry for path lookups instead of fixed generations/ directory.
 """
 
-import re
 import shutil
 import sys
 from pathlib import Path
@@ -14,6 +13,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 
 from ..schemas import (
+    DatabaseHealth,
     ProjectCreate,
     ProjectDetail,
     ProjectPrompts,
@@ -21,6 +21,7 @@ from ..schemas import (
     ProjectStats,
     ProjectSummary,
 )
+from ..utils.validation import validate_project_name
 
 # Lazy imports to avoid circular dependencies
 _imports_initialized = False
@@ -73,16 +74,6 @@ def _get_registry_functions():
 
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
-
-
-def validate_project_name(name: str) -> str:
-    """Validate and sanitize project name to prevent path traversal."""
-    if not re.match(r'^[a-zA-Z0-9_-]{1,50}$', name):
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid project name. Use only letters, numbers, hyphens, and underscores (1-50 chars)."
-        )
-    return name
 
 
 def get_project_stats(project_dir: Path) -> ProjectStats:
@@ -355,3 +346,34 @@ async def get_project_stats_endpoint(name: str):
         raise HTTPException(status_code=404, detail="Project directory not found")
 
     return get_project_stats(project_dir)
+
+
+@router.get("/{name}/db-health", response_model=DatabaseHealth)
+async def get_database_health(name: str):
+    """Check database health for a project.
+
+    Returns integrity status, journal mode, and any errors.
+    Use this to diagnose database corruption issues.
+    """
+    _, _, get_project_path, _, _ = _get_registry_functions()
+
+    name = validate_project_name(name)
+    project_dir = get_project_path(name)
+
+    if not project_dir:
+        raise HTTPException(status_code=404, detail=f"Project '{name}' not found")
+
+    if not project_dir.exists():
+        raise HTTPException(status_code=404, detail="Project directory not found")
+
+    # Import health check function
+    root = Path(__file__).parent.parent.parent
+    if str(root) not in sys.path:
+        sys.path.insert(0, str(root))
+
+    from api.database import check_database_health, get_database_path
+
+    db_path = get_database_path(project_dir)
+    result = check_database_health(db_path)
+
+    return DatabaseHealth(**result)

@@ -26,6 +26,9 @@ from fastapi import FastAPI, HTTPException, Request, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
 from .routers import (
     agent_router,
@@ -55,6 +58,10 @@ from .websocket import project_websocket
 # Paths
 ROOT_DIR = Path(__file__).parent.parent
 UI_DIST_DIR = ROOT_DIR / "ui" / "dist"
+
+# Rate limiting configuration
+# Using in-memory storage (appropriate for single-instance development server)
+limiter = Limiter(key_func=get_remote_address, default_limits=["200/minute"])
 
 
 @asynccontextmanager
@@ -87,6 +94,10 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+# Add rate limiter state and exception handler
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Check if remote access is enabled via environment variable
 # Set by start_ui.py when --host is not 127.0.0.1

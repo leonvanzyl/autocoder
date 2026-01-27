@@ -349,7 +349,7 @@ export function DebugLogViewer({
               <Button
                 variant={activeTab === 'agent' ? 'secondary' : 'ghost'}
                 size="sm"
-                onClick={(e) => {
+                onClick={(e: React.MouseEvent) => {
                   e.stopPropagation()
                   setActiveTab('agent')
                 }}
@@ -366,7 +366,7 @@ export function DebugLogViewer({
               <Button
                 variant={activeTab === 'devserver' ? 'secondary' : 'ghost'}
                 size="sm"
-                onClick={(e) => {
+                onClick={(e: React.MouseEvent) => {
                   e.stopPropagation()
                   setActiveTab('devserver')
                 }}
@@ -383,7 +383,7 @@ export function DebugLogViewer({
               <Button
                 variant={activeTab === 'terminal' ? 'secondary' : 'ghost'}
                 size="sm"
-                onClick={(e) => {
+                onClick={(e: React.MouseEvent) => {
                   e.stopPropagation()
                   setActiveTab('terminal')
                 }}
@@ -421,7 +421,7 @@ export function DebugLogViewer({
             <Button
               variant="ghost"
               size="icon"
-              onClick={(e) => {
+              onClick={(e: React.MouseEvent) => {
                 e.stopPropagation()
                 handleClear()
               }}

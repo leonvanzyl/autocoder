@@ -15,3 +15,14 @@ python_version = "3.11"
 ignore_missing_imports = true
 warn_return_any = true
 warn_unused_ignores = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::pytest.PytestReturnNotNoneWarning",
+]
