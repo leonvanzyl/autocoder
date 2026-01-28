@@ -212,6 +212,22 @@ class ReactAnalyzer(BaseAnalyzer):
                 "file": str(page_file.relative_to(self.project_dir)),
             })
 
+        # Also check .js files
+        for page_file in app_dir.rglob("page.js"):
+            rel_path = page_file.relative_to(app_dir)
+            route_path = "/" + "/".join(rel_path.parent.parts)
+            route_path = re.sub(r"\[([^\]]+)\]", r":\1", route_path)
+            if route_path == "/.":
+                route_path = "/"
+            route_path = route_path.replace("//", "/")
+
+            routes.append({
+                "path": route_path,
+                "method": "GET",
+                "handler": "Page",
+                "file": str(page_file.relative_to(self.project_dir)),
+            })
+
         return routes
 
     def _extract_pages_router_routes(self, pages_dir: Path) -> list[RouteInfo]:
@@ -244,6 +260,27 @@ class ReactAnalyzer(BaseAnalyzer):
 
         # Also check .jsx files
         for page_file in pages_dir.rglob("*.jsx"):
+            if page_file.name.startswith("_"):
+                continue
+            if "api" in page_file.parts:
+                continue
+
+            rel_path = page_file.relative_to(pages_dir)
+            route_path = "/" + rel_path.with_suffix("").as_posix()
+            route_path = route_path.replace("/index", "")
+            if not route_path:
+                route_path = "/"
+            route_path = re.sub(r"\[([^\]]+)\]", r":\1", route_path)
+
+            routes.append({
+                "path": route_path,
+                "method": "GET",
+                "handler": page_file.stem,
+                "file": str(page_file.relative_to(self.project_dir)),
+            })
+
+        # Also check .js files
+        for page_file in pages_dir.rglob("*.js"):
             if page_file.name.startswith("_"):
                 continue
             if "api" in page_file.parts:
@@ -348,7 +385,11 @@ class ReactAnalyzer(BaseAnalyzer):
         routes: list[RouteInfo] = []
 
         # Look for route definitions in common files
-        route_files = self._find_files("**/*.tsx") + self._find_files("**/*.jsx")
+        route_files = (
+            self._find_files("**/*.tsx") +
+            self._find_files("**/*.jsx") +
+            self._find_files("**/*.js")
+        )
 
         # Pattern for React Router <Route> elements
         route_pattern = re.compile(
@@ -396,8 +437,11 @@ class ReactAnalyzer(BaseAnalyzer):
         components: list[ComponentInfo] = []
 
         # Find component files
-        component_files = self._find_files("**/components/**/*.tsx") + \
-                         self._find_files("**/components/**/*.jsx")
+        component_files = (
+            self._find_files("**/components/**/*.tsx") +
+            self._find_files("**/components/**/*.jsx") +
+            self._find_files("**/components/**/*.js")
+        )
 
         for file in component_files:
             components.append({
@@ -407,8 +451,11 @@ class ReactAnalyzer(BaseAnalyzer):
             })
 
         # Find page files
-        page_files = self._find_files("**/pages/**/*.tsx") + \
-                    self._find_files("**/pages/**/*.jsx")
+        page_files = (
+            self._find_files("**/pages/**/*.tsx") +
+            self._find_files("**/pages/**/*.jsx") +
+            self._find_files("**/pages/**/*.js")
+        )
 
         for file in page_files:
             if not file.name.startswith("_"):
