@@ -297,6 +297,12 @@ grep -r "new Map\(\)\|new Set\(\)" --include="*.ts" --include="*.tsx" --include=
    # Unix/macOS:
    lsof -ti :${PORT:-3000} | xargs kill -TERM 2>/dev/null || true
    sleep 3
+   # Poll for process termination with timeout before kill -9
+   timeout=10
+   while [ $timeout -gt 0 ] && lsof -ti :${PORT:-3000} > /dev/null 2>&1; do
+     sleep 1
+     timeout=$((timeout - 1))
+   done
    lsof -ti :${PORT:-3000} | xargs kill -9 2>/dev/null || true
    sleep 2
 
@@ -315,8 +321,8 @@ grep -r "new Map\(\)\|new Set\(\)" --include="*.ts" --include="*.tsx" --include=
    ```bash
    ./init.sh &
    sleep 15  # Allow server to fully start
-   # Verify server is responding
-   if ! curl -f http://localhost:${PORT:-3000}/api/health && ! curl -f http://localhost:${PORT:-3000}; then
+   # Verify server is responding (using && for fallback - error only if BOTH endpoints fail)
+   if ! curl -s -f http://localhost:${PORT:-3000}/api/health && ! curl -s -f http://localhost:${PORT:-3000}/; then
      echo "ERROR: Server failed to start after restart"
      exit 1
    fi

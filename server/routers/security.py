@@ -6,8 +6,8 @@ REST API endpoints for security scanning.
 
 Endpoints:
 - POST /api/security/scan - Run security scan on a project
-- GET /api/security/reports - List scan reports
-- GET /api/security/reports/{filename} - Get a specific report
+- GET /api/security/reports/{project_name} - List scan reports for a project
+- GET /api/security/reports/{project_name}/{filename} - Get a specific report
 """
 
 import json

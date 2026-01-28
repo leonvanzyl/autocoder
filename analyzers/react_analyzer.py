@@ -222,7 +222,7 @@ class ReactAnalyzer(BaseAnalyzer):
                 continue
 
             rel_path = page_file.relative_to(pages_dir)
-            route_path = "/" + str(rel_path.with_suffix(""))
+            route_path = "/" + rel_path.with_suffix("").as_posix()
 
             # Handle index files
             route_path = route_path.replace("/index", "")
@@ -247,7 +247,7 @@ class ReactAnalyzer(BaseAnalyzer):
                 continue
 
             rel_path = page_file.relative_to(pages_dir)
-            route_path = "/" + str(rel_path.with_suffix(""))
+            route_path = "/" + rel_path.with_suffix("").as_posix()
             route_path = route_path.replace("/index", "")
             if not route_path:
                 route_path = "/"

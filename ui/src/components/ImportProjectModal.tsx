@@ -30,7 +30,7 @@ import {
   ChevronRight,
 } from 'lucide-react'
 import { useImportProject } from '../hooks/useImportProject'
-import { useCreateProject } from '../hooks/useProjects'
+import { useCreateProject, useDeleteProject } from '../hooks/useProjects'
 import { FolderBrowser } from './FolderBrowser'
 
 type Step = 'folder' | 'analyzing' | 'detected' | 'features' | 'register' | 'complete'
@@ -63,6 +63,7 @@ export function ImportProjectModal({
   } = useImportProject()
 
   const createProject = useCreateProject()
+  const deleteProject = useDeleteProject()
 
   if (!isOpen) return null
 
@@ -75,12 +76,12 @@ export function ImportProjectModal({
   }
 
   const handleExtractFeatures = async () => {
-    await extractFeatures()
-    if (state.step !== 'error') {
+    const result = await extractFeatures()
+    if (result) {
       setStep('features')
-      // Expand all categories by default
-      if (state.featuresResult) {
-        setExpandedCategories(new Set(Object.keys(state.featuresResult.by_category)))
+      // Expand all categories by default using the returned result
+      if (result && result.by_category) {
+        setExpandedCategories(new Set(Object.keys(result.by_category)))
       }
     }
   }
@@ -97,27 +98,46 @@ export function ImportProjectModal({
     if (!projectName.trim() || !state.projectPath) return
 
     setRegisterError(null)
+    const trimmedName = projectName.trim()
+    let projectCreated = false
 
     try {
       // First register the project
       await createProject.mutateAsync({
-        name: projectName.trim(),
+        name: trimmedName,
         path: state.projectPath,
         specMethod: 'manual',
       })
+      projectCreated = true
 
       // Then create features
-      await createFeatures(projectName.trim())
+      await createFeatures(trimmedName)
 
       if (state.step !== 'error') {
         setStep('complete')
         setTimeout(() => {
-          onProjectImported(projectName.trim())
+          onProjectImported(trimmedName)
           handleClose()
         }, 1500)
       }
     } catch (err) {
-      setRegisterError(err instanceof Error ? err.message : 'Failed to register project')
+      const errorMessage = err instanceof Error ? err.message : 'Failed to register project'
+
+      if (projectCreated) {
+        // Project was created but features failed to import
+        setRegisterError(`Project created but feature import failed: ${errorMessage}`)
+        setStep('error')
+        // Optionally attempt cleanup - uncomment to enable automatic deletion
+        // try {
+        //   await deleteProject.mutateAsync(trimmedName)
+        // } catch (deleteErr) {
+        //   console.error('Failed to cleanup project after feature import error:', deleteErr)
+        // }
+      } else {
+        // Project creation itself failed
+        setRegisterError(errorMessage)
+        setStep('error')
+      }
     }
   }
 

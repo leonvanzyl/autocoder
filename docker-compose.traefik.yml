@@ -4,11 +4,10 @@ services:
   traefik:
     image: ${TRAEFIK_IMAGE:-traefik:v3.6}
     environment:
-      # Force a modern Docker API version. Some VPS environments set
-      # DOCKER_API_VERSION=1.24 globally, which breaks Traefik's Docker provider
-      # when the daemon requires >= 1.44.
-      # Use the server's current API version to avoid a too-old client default.
-      - DOCKER_API_VERSION=1.53
+      # Remove DOCKER_API_VERSION to let Docker client negotiate API version at runtime.
+      # Some VPS environments set DOCKER_API_VERSION globally, which can break newer
+      # Docker Engine versions. Leaving unset allows automatic version detection.
+      # - DOCKER_API_VERSION=1.53
     command:
       - --providers.docker=true
       - --providers.docker.exposedbydefault=false

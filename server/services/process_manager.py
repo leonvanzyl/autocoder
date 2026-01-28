@@ -288,9 +288,12 @@ class AgentProcessManager:
                             # Process exists but it's not our agent
                             self.lock_file.unlink(missing_ok=True)
                             logger.debug(f"Removed stale lock file (PID {lock_pid} is not an agent)")
-                    except (psutil.NoSuchProcess, psutil.AccessDenied):
-                        # Process gone or inaccessible - safe to remove
+                    except psutil.NoSuchProcess:
+                        # Process gone - safe to remove lock
                         self.lock_file.unlink(missing_ok=True)
+                    except psutil.AccessDenied:
+                        # Process exists but we can't check it - don't remove lock
+                        logger.warning(f"Cannot access process PID {lock_pid} (AccessDenied), keeping lock file")
 
         except (ValueError, OSError) as e:
             # Invalid lock file - remove it

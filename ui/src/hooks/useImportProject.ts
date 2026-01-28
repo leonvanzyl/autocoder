@@ -65,8 +65,8 @@ interface ImportState {
 
 export interface UseImportProjectReturn {
   state: ImportState
-  analyze: (path: string) => Promise<void>
-  extractFeatures: () => Promise<void>
+  analyze: (path: string) => Promise<AnalyzeResponse | null>
+  extractFeatures: () => Promise<ExtractFeaturesResponse | null>
   createFeatures: (projectName: string) => Promise<void>
   toggleFeature: (feature: DetectedFeature) => void
   selectAllFeatures: () => void
@@ -98,8 +98,20 @@ export function useImportProject(): UseImportProjectReturn {
       })
 
       if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.detail || 'Failed to analyze project')
+        let errorMessage = 'Failed to analyze project'
+        try {
+          const text = await response.text()
+          try {
+            const error = JSON.parse(text)
+            errorMessage = error.detail || errorMessage
+          } catch {
+            // JSON parsing failed, use raw text
+            errorMessage = `${errorMessage}: ${response.status} ${text}`
+          }
+        } catch {
+          errorMessage = `${errorMessage}: ${response.status}`
+        }
+        throw new Error(errorMessage)
       }
 
       const result: AnalyzeResponse = await response.json()
@@ -108,17 +120,19 @@ export function useImportProject(): UseImportProjectReturn {
         step: 'detected',
         analyzeResult: result,
       }))
+      return result
     } catch (err) {
       setState(prev => ({
         ...prev,
         step: 'error',
         error: err instanceof Error ? err.message : 'Analysis failed',
       }))
+      return null
     }
   }, [])
 
   const extractFeatures = useCallback(async () => {
-    if (!state.projectPath) return
+    if (!state.projectPath) return null
 
     setState(prev => ({ ...prev, step: 'extracting', error: null }))
 
@@ -141,12 +155,14 @@ export function useImportProject(): UseImportProjectReturn {
         featuresResult: result,
         selectedFeatures: result.features, // Select all by default
       }))
+      return result
     } catch (err) {
       setState(prev => ({
         ...prev,
         step: 'error',
         error: err instanceof Error ? err.message : 'Feature extraction failed',
       }))
+      return null
     }
   }, [state.projectPath])
 

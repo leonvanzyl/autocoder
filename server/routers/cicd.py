@@ -149,7 +149,7 @@ async def generate_workflows(request: GenerateRequest):
 
     except Exception as e:
         logger.exception(f"Error generating workflows: {e}")
-        raise HTTPException(status_code=500, detail=f"Generation failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Generation failed")
 
 
 @router.post("/preview", response_model=PreviewResponse)
@@ -186,7 +186,7 @@ async def preview_workflow(request: PreviewRequest):
 
     except Exception as e:
         logger.exception(f"Error previewing workflow: {e}")
-        raise HTTPException(status_code=500, detail=f"Preview failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Preview failed")
 
 
 @router.get("/workflows/{project_name}", response_model=WorkflowListResponse)

@@ -176,7 +176,7 @@ async def query_logs(
 
     except Exception as e:
         logger.exception(f"Error querying logs: {e}")
-        raise HTTPException(status_code=500, detail=f"Query failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error while querying logs")
 
 
 @router.get("/{project_name}/timeline", response_model=TimelineResponse)
@@ -209,7 +209,7 @@ async def get_timeline(
 
     except Exception as e:
         logger.exception(f"Error getting timeline: {e}")
-        raise HTTPException(status_code=500, detail=f"Timeline query failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error while fetching timeline")
 
 
 @router.get("/{project_name}/stats", response_model=StatsResponse)
@@ -245,7 +245,7 @@ async def get_stats(
 
     except Exception as e:
         logger.exception(f"Error getting stats: {e}")
-        raise HTTPException(status_code=500, detail=f"Stats query failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Stats query failed")
 
 
 @router.post("/export", response_model=ExportResponse)
@@ -295,7 +295,7 @@ async def export_logs(request: ExportRequest):
 
     except Exception as e:
         logger.exception(f"Error exporting logs: {e}")
-        raise HTTPException(status_code=500, detail=f"Export failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Export failed")
 
 
 @router.get("/{project_name}/download/{filename}")

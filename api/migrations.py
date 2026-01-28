@@ -132,19 +132,22 @@ def migrate_add_testing_columns(engine) -> None:
                 """
                 conn.execute(text(insert_sql))
 
-                # Step 3: Atomic table swap - rename old, rename new, drop old
-                conn.execute(text("ALTER TABLE features RENAME TO features_old"))
-                conn.execute(text("ALTER TABLE features_new RENAME TO features"))
-                conn.execute(text("DROP TABLE features_old"))
+                # Step 3: Atomic table swap - wrap in transaction
+                # The transaction provides the necessary atomicity
+                with conn.begin():
+                    # Atomic table swap - rename old, rename new, drop old
+                    conn.execute(text("ALTER TABLE features RENAME TO features_old"))
+                    conn.execute(text("ALTER TABLE features_new RENAME TO features"))
+                    conn.execute(text("DROP TABLE features_old"))
 
                 # Step 4: Recreate indexes
-                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_features_id ON features (id)"))
-                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_features_priority ON features (priority)"))
-                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_features_passes ON features (passes)"))
-                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_features_in_progress ON features (in_progress)"))
-                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_feature_status ON features (passes, in_progress)"))
+                with conn.begin():
+                    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_features_id ON features (id)"))
+                    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_features_priority ON features (priority)"))
+                    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_features_passes ON features (passes)"))
+                    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_features_in_progress ON features (in_progress)"))
+                    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_feature_status ON features (passes, in_progress)"))
 
-                conn.commit()
                 logger.info("Successfully migrated testing columns to nullable")
             except Exception as e:
                 logger.error(f"Failed to migrate testing columns: {e}")

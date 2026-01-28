@@ -226,7 +226,7 @@ def populated_db(temp_db: Path, sample_feature_data: dict) -> Generator[Path, No
 
     Returns the project directory path.
     """
-    from api.database import Feature, create_database, invalidate_engine_cache
+    from api.database import Feature, create_database
 
     _, SessionLocal = create_database(temp_db)
     session = SessionLocal()
@@ -251,5 +251,4 @@ def populated_db(temp_db: Path, sample_feature_data: dict) -> Generator[Path, No
 
     yield temp_db
 
-    # Dispose cached engine to prevent file locks on Windows
-    invalidate_engine_cache(temp_db)
+    # Note: temp_db fixture already handles engine cache disposal on teardown

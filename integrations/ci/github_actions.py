@@ -395,9 +395,9 @@ def generate_security_workflow(project_dir: Path) -> GitHubWorkflow:
             "name": "Initialize CodeQL",
             "uses": "github/codeql-action/init@v3",
             "with": {
-                "languages": list(
+                "languages": ",".join(
                     filter(None, [
-                        "javascript" if stack["has_node"] else None,
+                        "javascript-typescript" if stack["has_node"] else None,
                         "python" if stack["has_python"] else None,
                     ])
                 ),
@@ -480,6 +480,15 @@ def generate_deploy_workflow(project_dir: Path) -> GitHubWorkflow:
             {
                 "name": "Build package",
                 "run": "pip install build && python -m build",
+            },
+            {
+                "name": "Upload build artifacts",
+                "uses": "actions/upload-artifact@v4",
+                "with": {
+                    "name": "build",
+                    "path": "dist/",
+                    "retention-days": 7,
+                },
             },
         ])
 

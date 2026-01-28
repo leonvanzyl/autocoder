@@ -255,7 +255,7 @@ async def apply_template(request: ApplyRequest):
 
         # Validate project_dir to prevent path traversal and absolute paths
         raw_path = request.project_dir
-        if ".." in raw_path:
+        if ".." in Path(raw_path).parts:
             raise HTTPException(status_code=400, detail="Invalid project directory: path traversal not allowed")
 
         # Reject absolute paths - require relative paths or user must provide full validated path

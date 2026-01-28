@@ -7,9 +7,9 @@ uvicorn[standard]~=0.32
 websockets~=13.0
 python-multipart>=0.0.17,<0.1.0
 psutil~=6.0
-aiofiles~=24.0
+aiofiles~=24.1
 apscheduler>=3.10.0,<4.0.0
-pywinpty~=2.0; sys_platform == "win32"
+pywinpty~=2.1; sys_platform == "win32"
 pyyaml~=6.0
 slowapi>=0.1.9,<0.2.0
 pydantic-settings~=2.0

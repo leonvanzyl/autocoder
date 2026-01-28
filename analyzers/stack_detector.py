@@ -68,7 +68,7 @@ class StackDetector:
         from .react_analyzer import ReactAnalyzer
         from .vue_analyzer import VueAnalyzer
 
-        # Order matters: more specific analyzers first (Next.js before React)
+        # Order matters: frontend framework analyzers first, then backend analyzers
         self._analyzers = [
             ReactAnalyzer(self.project_dir),
             VueAnalyzer(self.project_dir),
@@ -101,11 +101,12 @@ class StackDetector:
 
                     # Determine category
                     stack_name = analyzer.stack_name.lower()
-                    if stack_name in ("react", "nextjs", "vue", "nuxt", "angular"):
+                    # Use prefix matching to handle variants like vue-vite, vue-cli
+                    if any(stack_name.startswith(prefix) for prefix in ("react", "next", "vue", "nuxt", "angular")):
                         category = "frontend"
-                    elif stack_name in ("express", "fastapi", "django", "flask", "nestjs"):
+                    elif any(stack_name.startswith(prefix) for prefix in ("express", "fastapi", "django", "flask", "nest")):
                         category = "backend"
-                    elif stack_name in ("postgres", "mysql", "mongodb", "sqlite"):
+                    elif any(stack_name.startswith(prefix) for prefix in ("postgres", "mysql", "mongo", "sqlite")):
                         category = "database"
                     else:
                         category = "other"

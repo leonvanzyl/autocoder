@@ -155,6 +155,9 @@ class NodeAnalyzer(BaseAnalyzer):
         # Extract middleware/components
         components = self._extract_components()
 
+        # Routes is the same as endpoints for Node.js analyzers
+        routes = endpoints
+
         return {
             "stack_name": self._detected_stack,
             "confidence": 0.85,

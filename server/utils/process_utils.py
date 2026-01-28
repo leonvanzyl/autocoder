@@ -217,8 +217,14 @@ def cleanup_orphaned_agent_processes() -> int:
                             "Terminating orphaned agent process: PID %d (%s)",
                             proc.pid, pattern
                         )
-                        _kill_windows_process_tree_taskkill(proc.pid)
-                        terminated += 1
+                        try:
+                            _kill_windows_process_tree_taskkill(proc.pid)
+                            terminated += 1
+                        except Exception as e:
+                            logger.error(
+                                "Failed to terminate agent process PID %d: %s",
+                                proc.pid, e
+                            )
                         break
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 continue

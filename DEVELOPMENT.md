@@ -21,7 +21,7 @@ This roadmap breaks work into clear phases so you can pick the next most valuabl
 
 ## Phase 3 — Product & Agent Quality
 - **Model selection UI:** Let users choose assistant provider (Claude/Gemini) in settings; display active provider badge in chat.
-- **Tooling guardrails:** For Gemini (chat-only), show “no tools” notice in UI and fallback logic to Claude when tools needed.
+- **Tooling guardrails:** Gemini supports function calling and managed tools (custom & automatic function calling, parallel/compositional calls, built-in tools like Search/Maps/Code Execution) with modes AUTO, ANY, NONE, VALIDATED. UI should reflect full Gemini capabilities rather than treating as chat-only.
 - **Conversation persistence:** Add pagination/search over assistant history; export conversation to file.
 - **Feature board:** Surface feature stats/graph from MCP in the UI (read-only dashboard).
 

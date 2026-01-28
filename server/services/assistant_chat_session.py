@@ -236,7 +236,7 @@ class AssistantChatSession:
         For resumed conversations, skips the greeting since history is loaded from DB.
 
         Args:
-            skip_greeting: If True, skip sending the greeting even for new conversations.
+            skip_greeting: If True, skip sending the greeting (for resuming conversations)
 
         Yields message chunks as they stream in.
         """
