@@ -152,7 +152,7 @@ class StructuredLogHandler(logging.Handler):
                 level = "error"
             elif level not in ("debug", "info", "warn", "error"):
                 level = "error"  # Fallback for any unexpected level
-            
+
             entry = StructuredLogEntry(
                 timestamp=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
                 level=level,

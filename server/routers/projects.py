@@ -6,13 +6,12 @@ API endpoints for project management.
 Uses project registry for path lookups instead of fixed generations/ directory.
 """
 
+import os
 import re
 import shutil
 import subprocess
 import sys
-from datetime import datetime
 from pathlib import Path
-import os
 
 from fastapi import APIRouter, HTTPException
 
@@ -730,7 +729,7 @@ async def upload_knowledge_file(name: str, file: KnowledgeFileUpload):
     # Defense-in-depth: Ensure filename contains no path separators
     if not re.match(r'^[a-zA-Z0-9_\-\.]+\.md$', file.filename):
         raise HTTPException(status_code=400, detail="Invalid filename")
-    
+
     # Additional validation: Ensure no directory traversal via os.path.basename
     safe_filename = os.path.basename(file.filename)
     if safe_filename != file.filename or '/' in file.filename or '\\' in file.filename:
@@ -761,7 +760,7 @@ async def delete_knowledge_file(name: str, filename: str):
     # Defense-in-depth: Ensure filename contains no path separators
     if not re.match(r'^[a-zA-Z0-9_\-\.]+\.md$', filename):
         raise HTTPException(status_code=400, detail="Invalid filename")
-    
+
     # Additional validation: Ensure no directory traversal
     safe_filename = os.path.basename(filename)
     if safe_filename != filename or '/' in filename or '\\' in filename:
@@ -775,13 +774,6 @@ async def delete_knowledge_file(name: str, filename: str):
 
     try:
         filepath.unlink()
-        return {"success": True, "message": f"Deleted '{safe_
-
-    if not filepath.exists():
-        raise HTTPException(status_code=404, detail=f"Knowledge file '{filename}' not found")
-
-    try:
-        filepath.unlink()
-        return {"success": True, "message": f"Deleted '{filename}'"}
+        return {"success": True, "message": f"Deleted '{safe_filename}'"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to delete file: {e}")

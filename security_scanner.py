@@ -474,7 +474,7 @@ class SecurityScanner:
             # Determine which file to audit
             req_file = self.project_dir / "requirements.txt"
             pyproject_file = self.project_dir / "pyproject.toml"
-            
+
             if req_file.exists():
                 audit_args = ["pip-audit", "--format", "json", "-r", "requirements.txt"]
             elif pyproject_file.exists():
