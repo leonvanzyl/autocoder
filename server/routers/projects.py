@@ -12,6 +12,7 @@ import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
+import os
 
 from fastapi import APIRouter, HTTPException
 
@@ -725,17 +726,24 @@ async def upload_knowledge_file(name: str, file: KnowledgeFileUpload):
         raise HTTPException(status_code=404, detail="Project directory not found")
 
     # Validate filename (prevent path traversal)
+    # CVE-2026-24486: python-multipart >=0.0.22 strips directory components from filenames
+    # Defense-in-depth: Ensure filename contains no path separators
     if not re.match(r'^[a-zA-Z0-9_\-\.]+\.md$', file.filename):
         raise HTTPException(status_code=400, detail="Invalid filename")
+    
+    # Additional validation: Ensure no directory traversal via os.path.basename
+    safe_filename = os.path.basename(file.filename)
+    if safe_filename != file.filename or '/' in file.filename or '\\' in file.filename:
+        raise HTTPException(status_code=400, detail="Filename must not contain path separators")
 
     knowledge_dir = get_knowledge_dir(project_dir)
     knowledge_dir.mkdir(parents=True, exist_ok=True)
 
-    filepath = knowledge_dir / file.filename
+    filepath = knowledge_dir / safe_filename
 
     try:
         filepath.write_text(file.content, encoding="utf-8")
-        return KnowledgeFileContent(name=file.filename, content=file.content)
+        return KnowledgeFileContent(name=safe_filename, content=file.content)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to write file: {e}")
 
@@ -749,18 +757,25 @@ async def delete_knowledge_file(name: str, filename: str):
     name = validate_project_name(name)
     project_dir = get_project_path(name)
 
-    if not project_dir:
-        raise HTTPException(status_code=404, detail=f"Project '{name}' not found")
-
-    if not project_dir.exists():
-        raise HTTPException(status_code=404, detail="Project directory not found")
-
-    # Validate filename (prevent path traversal)
+    # CVE-2026-24486: python-multipart >=0.0.22 strips directory components from filenames
+    # Defense-in-depth: Ensure filename contains no path separators
     if not re.match(r'^[a-zA-Z0-9_\-\.]+\.md$', filename):
         raise HTTPException(status_code=400, detail="Invalid filename")
+    
+    # Additional validation: Ensure no directory traversal
+    safe_filename = os.path.basename(filename)
+    if safe_filename != filename or '/' in filename or '\\' in filename:
+        raise HTTPException(status_code=400, detail="Filename must not contain path separators")
 
     knowledge_dir = get_knowledge_dir(project_dir)
-    filepath = knowledge_dir / filename
+    filepath = knowledge_dir / safe_filename
+
+    if not filepath.exists():
+        raise HTTPException(status_code=404, detail=f"Knowledge file '{safe_filename}' not found")
+
+    try:
+        filepath.unlink()
+        return {"success": True, "message": f"Deleted '{safe_
 
     if not filepath.exists():
         raise HTTPException(status_code=404, detail=f"Knowledge file '{filename}' not found")

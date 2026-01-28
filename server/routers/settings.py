@@ -156,7 +156,7 @@ async def get_denied_commands_list():
     Returns the last 100 commands that were blocked by the security system.
     Useful for debugging and understanding what commands agents tried to run.
     """
-    denied = get_denied_commands()
+    denied = get_denied_commands(limit=100)
     return DeniedCommandsResponse(
         commands=[
             DeniedCommandItem(

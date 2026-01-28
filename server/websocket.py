@@ -731,6 +731,17 @@ async def project_websocket(websocket: WebSocket, project_name: str):
             orch_update = await orchestrator_tracker.process_line(line)
             if orch_update:
                 await websocket.send_json(orch_update)
+
+            # Emit feature_update when we detect a feature has been marked as passing
+            # Pattern: "Feature #X completed" indicates a successful feature completion
+            if feature_id is not None and "completed" in line.lower() and "testing" not in line.lower():
+                # Check if this is a coding agent completion (feature marked as passing)
+                if line.startswith("Feature #") and "failed" not in line.lower():
+                    await websocket.send_json({
+                        "type": "feature_update",
+                        "feature_id": feature_id,
+                        "passes": True,
+                    })
         except WebSocketDisconnect:
             # Client disconnected - this is expected and should be handled silently
             pass

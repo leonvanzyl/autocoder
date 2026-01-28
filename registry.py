@@ -49,7 +49,8 @@ OLLAMA_MODELS = [
 AVAILABLE_MODELS = CLAUDE_MODELS
 
 # List of valid model IDs (derived from AVAILABLE_MODELS)
-VALID_MODELS = [m["id"] for m in CLAUDE_MODELS]
+# Include both Claude and Ollama models for validation
+VALID_MODELS = [m["id"] for m in CLAUDE_MODELS + OLLAMA_MODELS]
 
 # Default model and settings
 DEFAULT_MODEL = "claude-opus-4-5-20251101"

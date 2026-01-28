@@ -679,14 +679,19 @@ class ParallelOrchestrator:
 
         print("Running initializer agent...", flush=True)
 
-        proc = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            cwd=str(AUTOCODER_ROOT),
-            env={**os.environ, "PYTHONUNBUFFERED": "1"},
-        )
+        # Add stdin and Windows flags to prevent blocking/popups
+        popen_kwargs = {
+            "stdout": subprocess.PIPE,
+            "stderr": subprocess.STDOUT,
+            "stdin": subprocess.DEVNULL,
+            "text": True,
+            "cwd": str(AUTOCODER_ROOT),
+            "env": {**os.environ, "PYTHONUNBUFFERED": "1"},
+        }
+        if sys.platform == "win32":
+            popen_kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+
+        proc = subprocess.Popen(cmd, **popen_kwargs)
 
         debug_log.log("INIT", "Initializer subprocess started", pid=proc.pid)
 

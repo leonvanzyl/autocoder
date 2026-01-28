@@ -16,7 +16,7 @@ from collections import deque
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional, cast
 
 import yaml
 
@@ -85,7 +85,7 @@ def record_denied_command(command: str, reason: str, project_dir: Optional[Path]
     )
 
 
-def get_denied_commands(limit: int = 50) -> list[dict]:
+def get_denied_commands(limit: int = 50) -> list[dict[str, Any]]:
     """
     Get the most recent denied commands.
 
@@ -299,7 +299,7 @@ def split_command_segments(command_string: str) -> list[str]:
     segments = re.split(r"\s*(?:&&|\|\|)\s*", command_string)
 
     # Further split on semicolons
-    result = []
+    result: list[str] = []
     for segment in segments:
         sub_segments = re.split(r'(?<!["\'])\s*;\s*(?!["\'])', segment)
         for sub in sub_segments:
@@ -362,7 +362,7 @@ def extract_commands(command_string: str) -> list[str]:
     Returns:
         List of command names found in the string
     """
-    commands = []
+    commands: list[str] = []
 
     # shlex doesn't treat ; as a separator, so we need to pre-process
     # (re is already imported at module level)
@@ -382,7 +382,7 @@ def extract_commands(command_string: str) -> list[str]:
             # Malformed command (unclosed quotes, etc.)
             # Security: Only use fallback if segment contains no chaining operators
             # This prevents allowlist bypass via malformed commands hiding chained operators
-            if re.search(r'\s*(\|\||&&|\||&)\s*', segment):
+            if re.search(r'\|\||&&|\||&', segment):
                 # Segment has operators but shlex failed - refuse to parse for safety
                 continue
             
@@ -483,7 +483,7 @@ def validate_pkill_command(
         return False, "Empty pkill command"
 
     # Separate flags from arguments
-    args = []
+    args: list[str] = []
     for token in tokens[1:]:
         if not token.startswith("-"):
             args.append(token)
@@ -493,14 +493,14 @@ def validate_pkill_command(
 
     # Validate every non-flag argument (pkill accepts multiple patterns on BSD)
     # This defensively ensures no disallowed process can be targeted
-    targets = []
+    targets: list[str] = []
     for arg in args:
         # For -f flag (full command line match), take the first word as process name
         # e.g., "pkill -f 'node server.js'" -> target is "node server.js", process is "node"
-        t = arg.split()[0] if " " in arg else arg
+        t: str = arg.split()[0] if " " in arg else arg
         targets.append(t)
 
-    disallowed = [t for t in targets if t not in allowed_process_names]
+    disallowed: list[str] = [t for t in targets if t not in allowed_process_names]
     if not disallowed:
         return True, ""
     return False, f"pkill only allowed for processes: {sorted(allowed_process_names)}"
@@ -524,7 +524,7 @@ def validate_chmod_command(command_string: str) -> tuple[bool, str]:
     # Look for the mode argument
     # Valid modes: +x, u+x, a+x, etc. (anything ending with +x for execute permission)
     mode = None
-    files = []
+    files: list[str] = []
 
     for token in tokens[1:]:
         if token.startswith("-"):
@@ -645,7 +645,7 @@ def get_org_config_path() -> Path:
     return Path.home() / ".autocoder" / "config.yaml"
 
 
-def load_org_config() -> Optional[dict]:
+def load_org_config() -> Optional[dict[str, Any]]:
     """
     Load organization-level config from ~/.autocoder/config.yaml.
 
@@ -676,10 +676,11 @@ def load_org_config() -> Optional[dict]:
 
         # Validate allowed_commands if present
         if "allowed_commands" in config:
-            allowed = config["allowed_commands"]
-            if not isinstance(allowed, list):
+            allowed_raw = cast(Any, config["allowed_commands"])
+            if not isinstance(allowed_raw, list):
                 logger.warning(f"Org config at {config_path}: 'allowed_commands' must be a list")
                 return None
+            allowed = cast(list[dict[str, Any]], allowed_raw)
             for i, cmd in enumerate(allowed):
                 if not isinstance(cmd, dict):
                     logger.warning(f"Org config at {config_path}: allowed_commands[{i}] must be a dict")
@@ -694,10 +695,11 @@ def load_org_config() -> Optional[dict]:
 
         # Validate blocked_commands if present
         if "blocked_commands" in config:
-            blocked = config["blocked_commands"]
-            if not isinstance(blocked, list):
+            blocked_raw = cast(Any, config["blocked_commands"])
+            if not isinstance(blocked_raw, list):
                 logger.warning(f"Org config at {config_path}: 'blocked_commands' must be a list")
                 return None
+            blocked = cast(list[str], blocked_raw)
             for i, cmd in enumerate(blocked):
                 if not isinstance(cmd, str):
                     logger.warning(f"Org config at {config_path}: blocked_commands[{i}] must be a string")
@@ -705,12 +707,13 @@ def load_org_config() -> Optional[dict]:
 
         # Validate pkill_processes if present
         if "pkill_processes" in config:
-            processes = config["pkill_processes"]
-            if not isinstance(processes, list):
+            processes_raw = cast(Any, config["pkill_processes"])
+            if not isinstance(processes_raw, list):
                 logger.warning(f"Org config at {config_path}: 'pkill_processes' must be a list")
                 return None
+            processes = cast(list[Any], processes_raw)
             # Normalize and validate each process name against safe pattern
-            normalized = []
+            normalized: list[str] = []
             for i, proc in enumerate(processes):
                 if not isinstance(proc, str):
                     logger.warning(f"Org config at {config_path}: pkill_processes[{i}] must be a string")
@@ -723,7 +726,7 @@ def load_org_config() -> Optional[dict]:
                 normalized.append(proc)
             config["pkill_processes"] = normalized
 
-        return config
+        return cast(dict[str, Any], config)
 
     except yaml.YAMLError as e:
         logger.warning(f"Failed to parse org config at {config_path}: {e}")
@@ -733,7 +736,7 @@ def load_org_config() -> Optional[dict]:
         return None
 
 
-def load_project_commands(project_dir: Path) -> Optional[dict]:
+def load_project_commands(project_dir: Path) -> Optional[dict[str, Any]]:
     """
     Load allowed commands from project-specific YAML config.
 
@@ -765,10 +768,11 @@ def load_project_commands(project_dir: Path) -> Optional[dict]:
             logger.warning(f"Project config at {config_path} missing required 'version' field")
             return None
 
-        commands = config.get("commands", [])
-        if not isinstance(commands, list):
+        commands_raw = cast(Any, config["commands"] if "commands" in config else [])
+        if not isinstance(commands_raw, list):
             logger.warning(f"Project config at {config_path}: 'commands' must be a list")
             return None
+        commands = cast(list[dict[str, Any]], commands_raw)
 
         # Enforce 100 command limit
         if len(commands) > 100:
@@ -790,12 +794,13 @@ def load_project_commands(project_dir: Path) -> Optional[dict]:
 
         # Validate pkill_processes if present
         if "pkill_processes" in config:
-            processes = config["pkill_processes"]
-            if not isinstance(processes, list):
+            processes_raw = cast(Any, config["pkill_processes"])
+            if not isinstance(processes_raw, list):
                 logger.warning(f"Project config at {config_path}: 'pkill_processes' must be a list")
                 return None
+            processes = cast(list[Any], processes_raw)
             # Normalize and validate each process name against safe pattern
-            normalized = []
+            normalized: list[str] = []
             for i, proc in enumerate(processes):
                 if not isinstance(proc, str):
                     logger.warning(f"Project config at {config_path}: pkill_processes[{i}] must be a string")
@@ -808,7 +813,7 @@ def load_project_commands(project_dir: Path) -> Optional[dict]:
                 normalized.append(proc)
             config["pkill_processes"] = normalized
 
-        return config
+        return cast(dict[str, Any], config)
 
     except yaml.YAMLError as e:
         logger.warning(f"Failed to parse project config at {config_path}: {e}")
@@ -818,7 +823,7 @@ def load_project_commands(project_dir: Path) -> Optional[dict]:
         return None
 
 
-def validate_project_command(cmd_config: dict) -> tuple[bool, str]:
+def validate_project_command(cmd_config: dict[str, Any]) -> tuple[bool, str]:
     """
     Validate a single command entry from project config.
 
@@ -828,7 +833,7 @@ def validate_project_command(cmd_config: dict) -> tuple[bool, str]:
     Returns:
         Tuple of (is_valid, error_message)
     """
-    if not isinstance(cmd_config, dict):
+    if not isinstance(cmd_config, dict):  # type: ignore[misc]
         return False, "Command must be a dict"
 
     if "name" not in cmd_config:
@@ -855,9 +860,10 @@ def validate_project_command(cmd_config: dict) -> tuple[bool, str]:
 
     # Args validation (Phase 1 - just check structure)
     if "args" in cmd_config:
-        args = cmd_config["args"]
-        if not isinstance(args, list):
+        args_raw = cmd_config["args"]
+        if not isinstance(args_raw, list):
             return False, "Args must be a list"
+        args = cast(list[str], args_raw)
         for arg in args:
             if not isinstance(arg, str):
                 return False, "Each arg must be a string"
@@ -892,13 +898,13 @@ def get_effective_commands(project_dir: Optional[Path]) -> tuple[set[str], set[s
     org_config = load_org_config()
     if org_config:
         # Add org-level blocked commands (cannot be overridden)
-        org_blocked = org_config.get("blocked_commands", [])
+        org_blocked: Any = org_config.get("blocked_commands", [])
         blocked |= set(org_blocked)
 
         # Add org-level allowed commands
         for cmd_config in org_config.get("allowed_commands", []):
             if isinstance(cmd_config, dict) and "name" in cmd_config:
-                allowed.add(cmd_config["name"])
+                allowed.add(cast(str, cmd_config["name"]))
 
     # Load project config and apply
     if project_dir:
@@ -908,7 +914,10 @@ def get_effective_commands(project_dir: Optional[Path]) -> tuple[set[str], set[s
             for cmd_config in project_config.get("commands", []):
                 valid, error = validate_project_command(cmd_config)
                 if valid:
-                    allowed.add(cmd_config["name"])
+                    allowed.add(cast(str, cmd_config["name"]))
+                else:
+                    # Log validation error for debugging
+                    logger.debug(f"Project command validation failed: {error}")
 
     # Remove blocked commands from allowed (blocklist takes precedence)
     allowed -= blocked
@@ -928,7 +937,8 @@ def get_project_allowed_commands(project_dir: Optional[Path]) -> set[str]:
     Returns:
         Set of allowed command names (including patterns)
     """
-    allowed, blocked = get_effective_commands(project_dir)
+    allowed, _blocked = get_effective_commands(project_dir)
+    # _blocked is used in get_effective_commands for precedence logic
     return allowed
 
 
@@ -953,16 +963,18 @@ def get_effective_pkill_processes(project_dir: Optional[Path]) -> set[str]:
     # Add org-level pkill_processes
     org_config = load_org_config()
     if org_config:
-        org_processes = org_config.get("pkill_processes", [])
-        if isinstance(org_processes, list):
+        org_processes_raw = org_config.get("pkill_processes", [])
+        if isinstance(org_processes_raw, list):
+            org_processes = cast(list[Any], org_processes_raw)
             processes |= {p for p in org_processes if isinstance(p, str) and p.strip()}
 
     # Add project-level pkill_processes
     if project_dir:
         project_config = load_project_commands(project_dir)
         if project_config:
-            proj_processes = project_config.get("pkill_processes", [])
-            if isinstance(proj_processes, list):
+            proj_processes_raw = project_config.get("pkill_processes", [])
+            if isinstance(proj_processes_raw, list):
+                proj_processes = cast(list[Any], proj_processes_raw)
                 processes |= {p for p in proj_processes if isinstance(p, str) and p.strip()}
 
     return processes
@@ -991,7 +1003,11 @@ def is_command_allowed(command: str, allowed_commands: set[str]) -> bool:
     return False
 
 
-async def bash_security_hook(input_data, tool_use_id=None, context=None):
+async def bash_security_hook(
+    input_data: dict[str, Any],
+    tool_use_id: Optional[str] = None,
+    context: Optional[dict[str, Any]] = None
+) -> dict[str, Any]:
     """
     Pre-tool-use hook that validates bash commands using an allowlist.
 
@@ -1015,15 +1031,16 @@ async def bash_security_hook(input_data, tool_use_id=None, context=None):
     if input_data.get("tool_name") != "Bash":
         return {}
 
-    command = input_data.get("tool_input", {}).get("command", "")
+    command_raw: Any = input_data.get("tool_input", {}).get("command", "")
+    command = str(command_raw) if command_raw else ""
     if not command:
         return {}
 
     # Get project directory from context early (needed for denied command recording)
     project_dir = None
-    if context and isinstance(context, dict):
-        project_dir_str = context.get("project_dir")
-        if project_dir_str:
+    if context and isinstance(context, dict):  # type: ignore[misc]
+        project_dir_str: Any = context.get("project_dir")
+        if project_dir_str and isinstance(project_dir_str, str):
             project_dir = Path(project_dir_str)
 
     # SECURITY LAYER 1: Pre-validate for dangerous shell patterns
