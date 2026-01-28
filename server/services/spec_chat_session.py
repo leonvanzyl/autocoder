@@ -176,7 +176,6 @@ class SpecChatSession:
         # Detect alternative API mode (Ollama or GLM)
         base_url = sdk_env.get("ANTHROPIC_BASE_URL", "")
         is_alternative_api = bool(base_url)
-        is_ollama = "localhost:11434" in base_url or "127.0.0.1:11434" in base_url
 
         # Set default max output tokens for GLM 4.7 compatibility if not already set, but only for alternative APIs
         if is_alternative_api and "CLAUDE_CODE_MAX_OUTPUT_TOKENS" not in sdk_env:

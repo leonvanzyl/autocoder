@@ -19,13 +19,16 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-logger = logging.getLogger(__name__)
-
 # Setup sys.path for imports
 # Compute project root and ensure it's in sys.path
 project_root = Path(__file__).parent.parent.parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
+
+from templates.library import generate_app_spec, generate_features
+from templates.library import get_template as get_template_data
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/templates", tags=["templates"])
 
@@ -165,7 +168,7 @@ async def get_template(template_id: str):
     Get detailed information about a specific template.
     """
     try:
-        template = get_template(template_id)
+        template = get_template_data(template_id)
 
         if not template:
             raise HTTPException(status_code=404, detail=f"Template not found: {template_id}")
@@ -209,7 +212,7 @@ async def preview_template(request: PreviewRequest):
     Does not create any files - just returns the content.
     """
     try:
-        template = get_template(request.template_id)
+        template = get_template_data(request.template_id)
         if not template:
             raise HTTPException(status_code=404, detail=f"Template not found: {request.template_id}")
 
@@ -244,7 +247,7 @@ async def apply_template(request: ApplyRequest):
     Does NOT register the project or create features - use the projects API for that.
     """
     try:
-        template = get_template(request.template_id)
+        template = get_template_data(request.template_id)
         if not template:
             raise HTTPException(status_code=404, detail=f"Template not found: {request.template_id}")
 
@@ -309,7 +312,7 @@ async def get_template_features(template_id: str):
     Returns features in bulk_create format.
     """
     try:
-        template = get_template(template_id)
+        template = get_template_data(template_id)
         if not template:
             raise HTTPException(status_code=404, detail=f"Template not found: {template_id}")
 

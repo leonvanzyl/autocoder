@@ -118,7 +118,7 @@ class StackDetector:
                     all_endpoints.extend(analysis.get("endpoints", []))
                     all_components.extend(analysis.get("components", []))
 
-                except Exception as e:
+                except Exception:
                     # Log but don't fail - continue with other analyzers
                     logger.exception(f"Warning: {analyzer.stack_name} analyzer failed")
 

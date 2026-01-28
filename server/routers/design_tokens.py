@@ -128,7 +128,7 @@ def get_project_dir(project_name: str) -> Path:
 
     # For arbitrary paths, resolve and validate
     path = Path(project_name).resolve()
-    
+
     # Security: Check if path is in a blocked location
     from .filesystem import is_path_blocked
     if is_path_blocked(path):
@@ -136,7 +136,7 @@ def get_project_dir(project_name: str) -> Path:
             status_code=404,
             detail=f"Project not found or access denied: {project_name}"
         )
-    
+
     # Ensure the path exists and is a directory
     if not path.exists() or not path.is_dir():
         raise HTTPException(status_code=404, detail=f"Project not found: {project_name}")
@@ -146,10 +146,10 @@ def get_project_dir(project_name: str) -> Path:
 
 def _validate_project_path(path: Path) -> None:
     """Validate that a project path is not blocked.
-    
+
     Args:
         path: The resolved project path to validate
-        
+
     Raises:
         HTTPException: If the path is blocked
     """
@@ -157,7 +157,7 @@ def _validate_project_path(path: Path) -> None:
     if is_path_blocked(path):
         raise HTTPException(
             status_code=404,
-            detail=f"Project access denied: Path is in a restricted location"
+            detail="Project access denied: Path is in a restricted location"
         )
 
 
@@ -253,14 +253,16 @@ async def generate_token_files(project_name: str, output_dir: Optional[str] = No
             # Resolve and validate output_dir to prevent directory traversal
             target = (project_dir / output_dir).resolve()
             project_resolved = project_dir.resolve()
-            
-            # Validate that target is within project_dir
-            if not str(target).startswith(str(project_resolved)):
+
+            # Validate that target is within project_dir using proper path containment
+            try:
+                target.relative_to(project_resolved)
+            except ValueError:
                 raise HTTPException(
-                    status_code=400, 
+                    status_code=400,
                     detail=f"Invalid output directory: '{output_dir}'. Directory must be within the project directory."
                 )
-            
+
             result = manager.generate_all(target)
         else:
             result = manager.generate_all()

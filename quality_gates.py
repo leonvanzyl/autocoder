@@ -85,7 +85,7 @@ def _detect_js_linter(project_dir: Path) -> tuple[str, list[str]] | None:
     eslint_path = shutil.which("eslint")
     if eslint_path:
         return ("eslint", [eslint_path, ".", "--max-warnings=0"])
-    
+
     # Check for eslint in node_modules/.bin (fallback for non-global installs)
     node_eslint = project_dir / "node_modules/.bin/eslint"
     if node_eslint.exists():
@@ -95,7 +95,7 @@ def _detect_js_linter(project_dir: Path) -> tuple[str, list[str]] | None:
     biome_path = shutil.which("biome")
     if biome_path:
         return ("biome", [biome_path, "lint", "."])
-    
+
     # Check for biome in node_modules/.bin (fallback for non-global installs)
     node_biome = project_dir / "node_modules/.bin/biome"
     if node_biome.exists():
@@ -133,20 +133,23 @@ def _detect_python_linter(project_dir: Path) -> tuple[str, list[str]] | None:
         return ("flake8", [flake8_path, "."])
 
     # Check in virtual environment for both Unix and Windows paths
-    venv_paths = [
+    venv_ruff_paths = [
         project_dir / "venv/bin/ruff",
-        project_dir / "venv/Scripts/ruff.exe",
+        project_dir / "venv/Scripts/ruff.exe"
+    ]
+
+    venv_flake8_paths = [
         project_dir / "venv/bin/flake8",
         project_dir / "venv/Scripts/flake8.exe"
     ]
-    
+
     # Check for ruff in venv
-    for venv_ruff in venv_paths:
+    for venv_ruff in venv_ruff_paths:
         if venv_ruff.exists():
             return ("ruff", [str(venv_ruff), "check", "."])
 
-    # Check for flake8 in venv  
-    for venv_flake8 in venv_paths:
+    # Check for flake8 in venv
+    for venv_flake8 in venv_flake8_paths:
         if venv_flake8.exists():
             return ("flake8", [str(venv_flake8), "."])
 
@@ -314,10 +317,10 @@ def run_custom_script(
     # Determine the appropriate command and runner based on platform and script extension
     script_str = str(script_full_path)
     script_ext = script_full_path.suffix.lower()
-    
+
     # Platform detection
     is_windows = os.name == "nt" or platform.system() == "Windows"
-    
+
     if is_windows:
         # Windows: check script extension and use appropriate runner
         if script_ext == ".ps1":
@@ -342,7 +345,6 @@ def run_custom_script(
         else:
             # Last resort: try to execute directly
             command = [script_str]
-    
     exit_code, output, duration_ms = _run_command(
         command,
         project_dir,

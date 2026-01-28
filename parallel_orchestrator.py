@@ -1210,11 +1210,11 @@ class ParallelOrchestrator:
         """
         if self._engine is None:
             return  # Already cleaned up, idempotent safe
-        
+
         # Capture engine and clear reference immediately to make cleanup idempotent
         engine = self._engine
         self._engine = None
-        
+
         try:
             debug_log.log("CLEANUP", "Forcing WAL checkpoint before dispose")
             with engine.connect() as conn:

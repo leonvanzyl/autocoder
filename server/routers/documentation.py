@@ -109,28 +109,28 @@ def get_project_dir(project_name: str) -> Path:
 
 def _validate_project_path(path: Path) -> None:
     """Validate that a project path is within allowed boundaries.
-    
+
     Args:
         path: The resolved project path to validate
-        
+
     Raises:
         HTTPException: If the path is outside allowed boundaries
     """
     # Use current working directory as the allowed projects root
     # This prevents directory traversal attacks
     allowed_root = Path.cwd().resolve()
-    
+
     try:
         # Check if the path is within the allowed root directory
         if not path.is_relative_to(allowed_root):
             raise HTTPException(
-                status_code=403, 
+                status_code=403,
                 detail=f"Access denied: Project path '{path}' is outside allowed directory boundary"
             )
     except ValueError:
         # Handle case where path comparison fails
         raise HTTPException(
-            status_code=403, 
+            status_code=403,
             detail=f"Access denied: Project path '{path}' is outside allowed directory boundary"
         )
 
@@ -234,7 +234,7 @@ async def get_doc_content(project_name: str, filename: str):
         filename: Documentation file path (e.g., "README.md" or "docs/API.md")
     """
     project_dir = get_project_dir(project_name)
-    
+
     # Resolve both paths to handle symlinks and get absolute paths
     resolved_project_dir = project_dir.resolve()
     resolved_file_path = (project_dir / filename).resolve()
@@ -321,7 +321,7 @@ async def delete_doc(project_name: str, filename: str):
         filename: Documentation file path
     """
     project_dir = get_project_dir(project_name)
-    
+
     # Resolve both paths to handle symlinks and get absolute paths
     resolved_project_dir = project_dir.resolve()
     resolved_file_path = (project_dir / filename).resolve()

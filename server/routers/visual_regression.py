@@ -159,7 +159,7 @@ def get_project_dir(project_name: str) -> Path:
             status_code=403,
             detail="Access to this path is forbidden"
         )
-    
+
     if path.exists() and path.is_dir():
         return path
 

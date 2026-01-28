@@ -47,19 +47,19 @@ class ColorToken:
     def to_hsl(self) -> tuple[float, float, float]:
         """Convert hex to HSL."""
         hex_color = self.value.lstrip("#")
-        
+
         # Validate hex color format
         if not all(c in "0123456789abcdefABCDEF" for c in hex_color):
             raise ValueError(f"Invalid hex color format: {self.value}")
-        
+
         hex_color = hex_color.lower()
-        
+
         # Normalize short hex format (3 digits -> 6 digits)
         if len(hex_color) == 3:
             hex_color = "".join([c * 2 for c in hex_color])
         elif len(hex_color) != 6:
             raise ValueError(f"Hex color must be 3 or 6 digits, got {len(hex_color)}: {self.value}")
-        
+
         # Parse RGB components
         r, g, b = tuple(int(hex_color[i : i + 2], 16) / 255 for i in (0, 2, 4))
         hue, lightness, sat = colorsys.rgb_to_hls(r, g, b)
