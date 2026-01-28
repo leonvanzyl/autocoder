@@ -318,12 +318,15 @@ class DesignTokensManager:
         # Colors with shades
         lines.append("  /* Colors */")
         for name, value in tokens.colors.items():
-            color_token = ColorToken(name=name, value=value)
-            shades = color_token.generate_shades()
-
-            lines.append(f"  --color-{name}: {value};")
-            for shade, shade_value in shades.items():
-                lines.append(f"  --color-{name}-{shade}: {shade_value};")
+            try:
+                color_token = ColorToken(name=name, value=value)
+                shades = color_token.generate_shades()
+                lines.append(f"  --color-{name}: {value};")
+                for shade, shade_value in shades.items():
+                    lines.append(f"  --color-{name}-{shade}: {shade_value};")
+            except ValueError as e:
+                logger.warning(f"Skipping invalid color '{name}': {e}")
+                lines.append(f"  /* Invalid color '{name}': {value} */")
 
         # Spacing
         lines.append("")
@@ -402,12 +405,16 @@ class DesignTokensManager:
         # Build color config with shades
         colors = {}
         for name, value in tokens.colors.items():
-            color_token = ColorToken(name=name, value=value)
-            shades = color_token.generate_shades()
-            colors[name] = {
-                "DEFAULT": value,
-                **shades,
-            }
+            try:
+                color_token = ColorToken(name=name, value=value)
+                shades = color_token.generate_shades()
+                colors[name] = {
+                    "DEFAULT": value,
+                    **shades,
+                }
+            except ValueError as e:
+                logger.warning(f"Skipping invalid color '{name}': {e}")
+                colors[name] = {"DEFAULT": value}
 
         # Build spacing config
         spacing = {}
@@ -468,12 +475,15 @@ module.exports = {config_json}
         ]
 
         for name, value in tokens.colors.items():
-            color_token = ColorToken(name=name, value=value)
-            shades = color_token.generate_shades()
-
-            lines.append(f"$color-{name}: {value};")
-            for shade, shade_value in shades.items():
-                lines.append(f"$color-{name}-{shade}: {shade_value};")
+            try:
+                color_token = ColorToken(name=name, value=value)
+                shades = color_token.generate_shades()
+                lines.append(f"$color-{name}: {value};")
+                for shade, shade_value in shades.items():
+                    lines.append(f"$color-{name}-{shade}: {shade_value};")
+            except ValueError as e:
+                logger.warning(f"Skipping invalid color '{name}': {e}")
+                lines.append(f"/* Invalid color '{name}': {value} */")
 
         lines.append("")
         lines.append("// Spacing")

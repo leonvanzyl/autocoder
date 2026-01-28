@@ -147,20 +147,28 @@ def _validate_project_dir(resolved_path: Path) -> None:
     """
     # Blocklist for dangerous locations
     dangerous_roots = [
-        Path("/").resolve(),  # Root
-        Path("/etc").resolve(),  # System config
-        Path("/var").resolve(),  # System variables
-        Path.home().resolve(),  # User home (allow subpaths, block direct home)
+        (Path("/etc").resolve(), "tree"),  # System config - block entire tree
+        (Path("/var").resolve(), "tree"),  # System variables - block entire tree
+        (Path.home().resolve(), "exact"),  # User home - block exact match only, allow subpaths
     ]
 
     # Check if path is in dangerous locations
-    for dangerous in dangerous_roots:
+    for dangerous, block_type in dangerous_roots:
         try:
-            if dangerous in resolved_path.parents or dangerous == resolved_path:
-                raise HTTPException(
-                    status_code=404,
-                    detail=f"Project not found: {resolved_path}"
-                )
+            if block_type == "tree":
+                # Block entire directory tree (e.g., /etc, /var)
+                if resolved_path.is_relative_to(dangerous):
+                    raise HTTPException(
+                        status_code=404,
+                        detail=f"Project not found: {resolved_path}"
+                    )
+            elif block_type == "exact":
+                # Block exact match only (e.g., home directory itself)
+                if resolved_path == dangerous:
+                    raise HTTPException(
+                        status_code=404,
+                        detail=f"Project not found: {resolved_path}"
+                    )
         except (ValueError, OSError):
             pass
 
@@ -202,7 +210,7 @@ async def run_code_review(request: RunReviewRequest):
     # Validate file paths to prevent directory traversal
     if request.files:
         for file_path in request.files:
-            if ".." in file_path or file_path.startswith("/") or file_path.startswith("\\"):
+            if ".." in file_path or file_path.startswith("/") or file_path.startswith("\\") or Path(file_path).is_absolute():
                 raise HTTPException(status_code=400, detail=f"Invalid file path: {file_path}")
 
     # Configure checks
@@ -241,8 +249,8 @@ async def run_code_review(request: RunReviewRequest):
         )
 
     except Exception as e:
-        logger.error(f"Review failed for {project_dir}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Review failed for {project_dir}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Code review failed. Check server logs for details.")
 
 
 @router.get("/reports/{project_name}", response_model=ReportListResponse)
@@ -275,7 +283,7 @@ async def list_reports(project_name: str):
                 )
             )
         except Exception as e:
-            logger.warning(f"Error reading report {report_file}: {e}")
+            logger.warning(f"Error reading report {report_file}: {e}", exc_info=True)
             continue
 
     return ReportListResponse(reports=reports, count=len(reports))
@@ -300,7 +308,8 @@ async def get_report(project_name: str, filename: str):
         with open(report_path) as f:
             return json.load(f)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error reading report: {e}")
+        logger.error(f"Error reading report {report_path}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Error reading report. Check server logs for details.")
 
 
 @router.post("/create-features", response_model=CreateFeaturesResponse)
@@ -361,8 +370,10 @@ async def create_features_from_issues(request: CreateFeaturesRequest):
         )
 
     except Exception as e:
-        logger.error(f"Failed to create features: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        if session:
+            session.rollback()
+        logger.error(f"Failed to create features: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to create features. Check server logs for details.")
     finally:
         if session:
             session.close()
@@ -387,4 +398,5 @@ async def delete_report(project_name: str, filename: str):
         report_path.unlink()
         return {"deleted": True, "filename": filename}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error deleting report: {e}")
+        logger.error(f"Error deleting report {report_path}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Error deleting report. Check server logs for details.")

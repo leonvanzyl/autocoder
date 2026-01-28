@@ -89,7 +89,11 @@ class StackDetector:
         all_components: list[dict] = []
 
         for analyzer in self._analyzers:
-            can_analyze, confidence = analyzer.can_analyze()
+            try:
+                can_analyze, confidence = analyzer.can_analyze()
+            except Exception:
+                logger.exception(f"Warning: {analyzer.stack_name} can_analyze failed")
+                continue
 
             if can_analyze and confidence > 0.3:  # Minimum confidence threshold
                 try:
@@ -177,7 +181,12 @@ class StackDetector:
         results = []
 
         for analyzer in self._analyzers:
-            can_analyze, confidence = analyzer.can_analyze()
+            try:
+                can_analyze, confidence = analyzer.can_analyze()
+            except Exception:
+                logger.exception(f"Warning: {analyzer.stack_name} can_analyze failed")
+                continue
+
             if can_analyze and confidence > 0.3:
                 results.append({
                     "name": analyzer.stack_name,

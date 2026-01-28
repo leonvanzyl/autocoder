@@ -129,35 +129,33 @@ def get_project_dir(project_name: str) -> Path:
     # For arbitrary paths, resolve and validate
     path = Path(project_name).resolve()
 
-    # Security: Check if path is in a blocked location
-    from .filesystem import is_path_blocked
-    if is_path_blocked(path):
-        raise HTTPException(
-            status_code=404,
-            detail=f"Project not found or access denied: {project_name}"
-        )
-
-    # Ensure the path exists and is a directory
-    if not path.exists() or not path.is_dir():
-        raise HTTPException(status_code=404, detail=f"Project not found: {project_name}")
+    # Validate path is not blocked, exists, and is a directory
+    _validate_project_path(path)
 
     return path
 
 
 def _validate_project_path(path: Path) -> None:
-    """Validate that a project path is not blocked.
+    """Validate that a project path is not blocked and exists as a directory.
 
     Args:
         path: The resolved project path to validate
 
     Raises:
-        HTTPException: If the path is blocked
+        HTTPException: If the path is blocked or doesn't exist
     """
     from .filesystem import is_path_blocked
     if is_path_blocked(path):
         raise HTTPException(
             status_code=404,
             detail="Project access denied: Path is in a restricted location"
+        )
+
+    # Ensure the path exists and is a directory
+    if not path.exists() or not path.is_dir():
+        raise HTTPException(
+            status_code=404,
+            detail=f"Project not found: {path}"
         )
 
 
@@ -207,17 +205,32 @@ async def update_design_tokens(project_name: str, request: DesignTokensRequest):
 
         # Update only provided fields (explicit None checks allow empty dicts/lists for clearing)
         if request.colors is not None:
-            current.colors.update(request.colors)
+            if request.colors:
+                current.colors.update(request.colors)
+            else:
+                current.colors = {}
         if request.spacing is not None:
             current.spacing = request.spacing
         if request.typography is not None:
-            current.typography.update(request.typography)
+            if request.typography:
+                current.typography.update(request.typography)
+            else:
+                current.typography = {}
         if request.borders is not None:
-            current.borders.update(request.borders)
+            if request.borders:
+                current.borders.update(request.borders)
+            else:
+                current.borders = {}
         if request.shadows is not None:
-            current.shadows.update(request.shadows)
+            if request.shadows:
+                current.shadows.update(request.shadows)
+            else:
+                current.shadows = {}
         if request.animations is not None:
-            current.animations.update(request.animations)
+            if request.animations:
+                current.animations.update(request.animations)
+            else:
+                current.animations = {}
 
         manager.save(current)
 

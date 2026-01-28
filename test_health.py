@@ -4,7 +4,8 @@ from fastapi.testclient import TestClient
 
 from server.main import app
 
-client = TestClient(app)
+# Use base_url to simulate localhost access
+client = TestClient(app, base_url="http://127.0.0.1")
 
 
 def test_health_returns_ok():

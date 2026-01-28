@@ -118,6 +118,11 @@ app.add_middleware(SlowAPIMiddleware)
 # Set by start_ui.py when --host is not 127.0.0.1
 ALLOW_REMOTE = os.environ.get("AUTOCODER_ALLOW_REMOTE", "").lower() in ("1", "true", "yes")
 
+# Build-time constant for test mode.
+# Only evaluated once at module import (build/start time) - not overridable at runtime.
+# Set to True during deployment for testing environments; requires code change to modify.
+TEST_MODE = os.environ.get("AUTOCODER_TEST_MODE", "").lower() in ("1", "true", "yes")
+
 # CORS - allow all origins when remote access is enabled, otherwise localhost only
 if ALLOW_REMOTE:
     app.add_middleware(
@@ -222,8 +227,11 @@ if not ALLOW_REMOTE:
         """Only allow requests from localhost (disabled when AUTOCODER_ALLOW_REMOTE=1)."""
         client_host = request.client.host if request.client else None
 
-        # Allow localhost connections
-        if client_host not in ("127.0.0.1", "::1", "localhost", None):
+        # Allow localhost connections and testclient for testing.
+        # Use build-time TEST_MODE constant (non-overridable at runtime) and testclient host.
+        is_test_mode = TEST_MODE or client_host == "testclient"
+
+        if not is_test_mode and client_host not in ("127.0.0.1", "::1", "localhost", None):
             raise HTTPException(status_code=403, detail="Localhost access only")
 
         return await call_next(request)

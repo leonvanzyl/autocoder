@@ -21,13 +21,14 @@ from pydantic import BaseModel, Field
 
 # Setup sys.path for imports
 # Compute project root and ensure it's in sys.path
-project_root = Path(__file__).parent.parent.parent.parent
+project_root = Path(__file__).parent.parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-from templates.library import generate_app_spec, generate_features
-from templates.library import get_template as get_template_data
-from templates.library import list_templates as load_templates_list
+from templates.library import generate_app_spec as generate_app_spec_lib
+from templates.library import generate_features as generate_features_lib
+from templates.library import get_template as get_template_lib
+from templates.library import list_templates as list_templates_lib
 
 logger = logging.getLogger(__name__)
 
@@ -141,7 +142,7 @@ async def list_templates():
     Returns basic information about each template.
     """
     try:
-        templates = load_templates_list()
+        templates = list_templates_lib()
 
         return TemplateListResponse(
             templates=[
@@ -169,7 +170,7 @@ async def get_template(template_id: str):
     Get detailed information about a specific template.
     """
     try:
-        template = get_template_data(template_id)
+        template = get_template_lib(template_id)
 
         if not template:
             raise HTTPException(status_code=404, detail=f"Template not found: {template_id}")
@@ -213,17 +214,17 @@ async def preview_template(request: PreviewRequest):
     Does not create any files - just returns the content.
     """
     try:
-        template = get_template_data(request.template_id)
+        template = get_template_lib(request.template_id)
         if not template:
             raise HTTPException(status_code=404, detail=f"Template not found: {request.template_id}")
 
-        app_spec_content = generate_app_spec(
+        app_spec_content = generate_app_spec_lib(
             template,
             request.app_name,
             request.customizations,
         )
 
-        features = generate_features(template)
+        features = generate_features_lib(template)
 
         return PreviewResponse(
             template_id=request.template_id,
@@ -248,7 +249,7 @@ async def apply_template(request: ApplyRequest):
     Does NOT register the project or create features - use the projects API for that.
     """
     try:
-        template = get_template_data(request.template_id)
+        template = get_template_lib(request.template_id)
         if not template:
             raise HTTPException(status_code=404, detail=f"Template not found: {request.template_id}")
 
@@ -277,7 +278,7 @@ async def apply_template(request: ApplyRequest):
         prompts_dir.mkdir(parents=True, exist_ok=True)
 
         # Generate and save app_spec.txt
-        app_spec_content = generate_app_spec(
+        app_spec_content = generate_app_spec_lib(
             template,
             request.project_name,
             request.customizations,
@@ -287,7 +288,7 @@ async def apply_template(request: ApplyRequest):
         with open(app_spec_path, "w", encoding="utf-8") as f:
             f.write(app_spec_content)
 
-        features = generate_features(template)
+        features = generate_features_lib(template)
 
         return ApplyResponse(
             success=True,
@@ -313,11 +314,11 @@ async def get_template_features(template_id: str):
     Returns features in bulk_create format.
     """
     try:
-        template = get_template_data(template_id)
+        template = get_template_lib(template_id)
         if not template:
             raise HTTPException(status_code=404, detail=f"Template not found: {template_id}")
 
-        features = generate_features(template)
+        features = generate_features_lib(template)
 
         return {
             "template_id": template_id,
