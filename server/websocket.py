@@ -618,6 +618,31 @@ class ConnectionManager:
         """Get number of active connections for a project."""
         return len(self.active_connections.get(project_name, set()))
 
+    async def disconnect_all_for_project(self, project_name: str) -> int:
+        """Disconnect all WebSocket connections for a specific project.
+        
+        Args:
+            project_name: Name of the project
+            
+        Returns:
+            Number of connections that were disconnected
+        """
+        async with self._lock:
+            connections = list(self.active_connections.get(project_name, set()))
+            if project_name in self.active_connections:
+                del self.active_connections[project_name]
+        
+        # Close connections outside the lock to avoid deadlock
+        closed_count = 0
+        for connection in connections:
+            try:
+                await connection.close(code=1000, reason="Project deleted")
+                closed_count += 1
+            except Exception as e:
+                logger.warning(f"Error closing WebSocket connection for project {project_name}: {e}")
+        
+        return closed_count
+
 
 # Global connection manager
 manager = ConnectionManager()

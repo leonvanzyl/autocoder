@@ -633,6 +633,27 @@ async def cleanup_all_managers() -> None:
         _managers.clear()
 
 
+async def cleanup_manager(project_name: str, project_dir: Path) -> None:
+    """Stop and remove a specific project's agent process manager.
+    
+    Args:
+        project_name: Name of the project
+        project_dir: Absolute path to the project directory
+    """
+    with _managers_lock:
+        # Use composite key to match get_manager
+        key = (project_name, str(project_dir.resolve()))
+        manager = _managers.pop(key, None)
+    
+    if manager:
+        try:
+            if manager.status != "stopped":
+                await manager.stop()
+            logger.info(f"Cleaned up agent process manager for project: {project_name}")
+        except Exception as e:
+            logger.warning(f"Error stopping manager for {project_name}: {e}")
+
+
 def cleanup_orphaned_locks() -> int:
     """
     Clean up orphaned lock files from previous server runs.

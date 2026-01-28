@@ -28,10 +28,12 @@ import {
   Square,
   ChevronDown,
   ChevronRight,
+  Trash2,
 } from 'lucide-react'
 import { useImportProject } from '../hooks/useImportProject'
-import { useCreateProject, useDeleteProject } from '../hooks/useProjects'
+import { useCreateProject, useDeleteProject, useProjects } from '../hooks/useProjects'
 import { FolderBrowser } from './FolderBrowser'
+import { ConfirmDialog } from './ConfirmDialog'
 
 type Step = 'folder' | 'analyzing' | 'detected' | 'features' | 'register' | 'complete'
 
@@ -50,6 +52,11 @@ export function ImportProjectModal({
   const [projectName, setProjectName] = useState('')
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set())
   const [registerError, setRegisterError] = useState<string | null>(null)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [projectToDelete, setProjectToDelete] = useState<string | null>(null)
+
+  // Fetch existing projects to check for conflicts
+  const { data: existingProjects } = useProjects()
 
   const {
     state,
@@ -148,6 +155,27 @@ export function ImportProjectModal({
     setRegisterError(null)
     reset()
     onClose()
+  }
+
+  const handleDeleteExistingProject = async () => {
+    if (!projectToDelete) return
+
+
+    try {
+      await deleteProject.mutateAsync(projectToDelete)
+      setShowDeleteConfirm(false)
+      setProjectToDelete(null)
+      
+      // Refresh the import step to reflect the deletion
+      if (step === 'register') {
+        // Stay on register step so user can now create the project with same name
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to delete project'
+      setRegisterError(`Delete failed: ${errorMessage}`)
+      setShowDeleteConfirm(false)
+      setProjectToDelete(null)
+    }
   }
 
   const handleBack = () => {
@@ -529,6 +557,11 @@ export function ImportProjectModal({
 
   // Register project step
   if (step === 'register') {
+    // Check if project name already exists
+    const existingProject = existingProjects?.find(p => p.name === projectName)
+    const nameConflict = !!existingProject
+
+
     return (
       <div className="neo-modal-backdrop" onClick={handleClose}>
         <div
@@ -557,10 +590,41 @@ export function ImportProjectModal({
                 className="neo-input"
                 pattern="^[a-zA-Z0-9_-]+$"
                 autoFocus
+                disabled={createProject.isPending}
               />
               <p className="text-sm text-[var(--color-neo-text-secondary)] mt-2">
                 Use letters, numbers, hyphens, and underscores only.
               </p>
+              {nameConflict && (
+                <div className="mt-3 p-3 bg-[var(--color-neo-error-bg)] border-3 border-[var(--color-neo-error-border)] rounded">
+                  <p className="text-sm text-[var(--color-neo-error-text)] font-bold mb-1">
+                    Project name already exists!
+                  </p>
+                  <p className="text-xs text-[var(--color-neo-error-text)] mb-2">
+                    A project named "{projectName}" is already registered.
+                  </p>
+                  <button
+                    onClick={() => {
+                      setProjectToDelete(projectName)
+                      setShowDeleteConfirm(true)
+                    }}
+                    className="neo-btn neo-btn-destructive text-sm"
+                    disabled={deleteProject.isPending}
+                  >
+                    {deleteProject.isPending ? (
+                      <>
+                        <Loader2 size={14} className="animate-spin mr-1" />
+                        Deleting...
+                      </>
+                    ) : (
+                      <>
+                        <Trash2 size={14} className="mr-1" />
+                        Delete Existing Project
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
             </div>
 
             <div className="mb-6 p-4 bg-[var(--color-neo-bg-secondary)] border-3 border-[var(--color-neo-border)]">
@@ -645,6 +709,33 @@ export function ImportProjectModal({
           </div>
         </div>
       </div>
+    )
+  }
+
+  // Delete confirmation dialog
+  if (showDeleteConfirm) {
+    return (
+      <ConfirmDialog
+        isOpen={showDeleteConfirm}
+        title="Delete Existing Project"
+        message={`Are you sure you want to delete "${projectToDelete}"? This will:
+
+• Remove the project from the registry
+• Disconnect all WebSocket connections
+• Stop any running agent processes
+• Delete all database files (features.db, assistant.db)
+• Stop any dev servers
+• Preserve the project files on disk`}
+        confirmLabel="Delete Project"
+        cancelLabel="Cancel"
+        variant="danger"
+        isLoading={deleteProject.isPending}
+        onConfirm={handleDeleteExistingProject}
+        onCancel={() => {
+          setShowDeleteConfirm(false)
+          setProjectToDelete(null)
+        }}
+      />
     )
   }
 

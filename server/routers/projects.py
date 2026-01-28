@@ -331,11 +331,18 @@ async def get_project(name: str):
 @router.delete("/{name}")
 async def delete_project(name: str, delete_files: bool = False):
     """
-    Delete a project from the registry.
+    Delete a project from the registry and perform comprehensive cleanup.
+
+    This removes the project from:
+    - Registry (project registration)
+    - Database (features.db file)
+    - WebSocket connections (all active connections)
+    - Agent processes (stop and cleanup)
+    - Dev servers (stop if running)
 
     Args:
         name: Project name to delete
-        delete_files: If True, also delete the project directory and files
+        delete_files: If True, also delete the project directory and all files
     """
     _init_imports()
     _, unregister_project, get_project_path, _, _ = _get_registry_functions()
@@ -354,19 +361,63 @@ async def delete_project(name: str, delete_files: bool = False):
             detail="Cannot delete project while agent is running. Stop the agent first."
         )
 
-    # Optionally delete files
+    # Step 1: Disconnect all WebSocket connections for this project
+    from .websocket import manager as websocket_manager
+    try:
+        disconnected = await websocket_manager.disconnect_all_for_project(name)
+        logger.info(f"Disconnected {disconnected} WebSocket connection(s) for project '{name}'")
+    except Exception as e:
+        logger.warning(f"Error disconnecting WebSocket connections for project '{name}': {e}")
+
+    # Step 2: Stop agent process manager for this project
+    from .services.process_manager import cleanup_manager as cleanup_process_manager
+    from .services.dev_server_manager import get_devserver_manager
+    try:
+        await cleanup_process_manager(name, project_dir)
+        logger.info(f"Stopped agent process manager for project '{name}'")
+    except Exception as e:
+        logger.warning(f"Error stopping agent process manager for project '{name}': {e}")
+
+    # Step 3: Stop dev server if running for this project
+    try:
+        devserver_mgr = get_devserver_manager()
+        await devserver_mgr.stop_server(name)
+        logger.info(f"Stopped dev server for project '{name}'")
+    except Exception as e:
+        logger.warning(f"Error stopping dev server for project '{name}': {e}")
+
+    # Step 4: Delete database files (features.db, assistant.db)
+    db_files = ["features.db", "assistant.db"]
+    deleted_dbs = []
+    for db_file in db_files:
+        db_path = project_dir / db_file
+        if db_path.exists():
+            try:
+                db_path.unlink()
+                deleted_dbs.append(db_file)
+                logger.info(f"Deleted {db_file} for project '{name}'")
+            except Exception as e:
+                logger.warning(f"Error deleting {db_file} for project '{name}': {e}")
+
+    # Step 5: Optionally delete the entire project directory
     if delete_files and project_dir.exists():
         try:
             shutil.rmtree(project_dir)
+            logger.info(f"Deleted project directory for '{name}'")
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to delete project files: {e}")
 
-    # Unregister from registry
+    # Step 6: Unregister from registry (do this last)
     unregister_project(name)
+    logger.info(f"Unregistered project '{name}' from registry")
 
     return {
         "success": True,
-        "message": f"Project '{name}' deleted" + (" (files removed)" if delete_files else " (files preserved)")
+        "message": f"Project '{name}' deleted completely" + (" (including files)" if delete_files else " (files preserved)"),
+        "details": {
+            "databases_deleted": deleted_dbs,
+            "files_deleted": delete_files
+        }
     }
 
 
