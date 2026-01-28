@@ -27,6 +27,7 @@ if str(project_root) not in sys.path:
 
 from templates.library import generate_app_spec, generate_features
 from templates.library import get_template as get_template_data
+from templates.library import list_templates as load_templates_list
 
 logger = logging.getLogger(__name__)
 
@@ -140,7 +141,7 @@ async def list_templates():
     Returns basic information about each template.
     """
     try:
-        templates = list_templates()
+        templates = load_templates_list()
 
         return TemplateListResponse(
             templates=[

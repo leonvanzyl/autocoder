@@ -325,6 +325,12 @@ async def update_baseline(request: UpdateBaselineRequest):
     """
     project_dir = get_project_dir(request.project_name)
 
+    # Validate inputs (same checks as delete_baseline)
+    if ".." in request.name or "/" in request.name or "\\" in request.name:
+        raise HTTPException(status_code=400, detail="Invalid name")
+    if ".." in request.viewport or "/" in request.viewport or "\\" in request.viewport:
+        raise HTTPException(status_code=400, detail="Invalid viewport")
+
     try:
         tester = VisualRegressionTester(project_dir)
         success = tester.update_baseline(request.name, request.viewport)

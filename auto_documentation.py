@@ -86,8 +86,19 @@ class DocumentationGenerator:
     """
 
     def __init__(self, project_dir: Path, output_dir: str = "docs"):
-        self.project_dir = Path(project_dir)
-        self.output_dir = self.project_dir / output_dir
+        self.project_dir = Path(project_dir).resolve()
+
+        # Validate that output directory is contained within project_dir
+        resolved_output = (self.project_dir / output_dir).resolve()
+        try:
+            resolved_output.relative_to(self.project_dir)
+        except ValueError:
+            raise ValueError(
+                f"Output directory '{output_dir}' escapes project directory boundary. "
+                f"Resolved to '{resolved_output}' but project_dir is '{self.project_dir}'"
+            )
+
+        self.output_dir = resolved_output
         self.app_spec: Optional[dict] = None
 
     def generate(self) -> ProjectDocs:

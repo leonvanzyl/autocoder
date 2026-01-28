@@ -132,23 +132,22 @@ def _detect_python_linter(project_dir: Path) -> tuple[str, list[str]] | None:
     if flake8_path:
         return ("flake8", [flake8_path, "."])
 
-    # Check in virtual environment for both Unix and Windows paths
+    # Check in virtual environment for ruff (both Unix and Windows paths)
     venv_ruff_paths = [
         project_dir / "venv/bin/ruff",
         project_dir / "venv/Scripts/ruff.exe"
     ]
 
+    for venv_ruff in venv_ruff_paths:
+        if venv_ruff.exists():
+            return ("ruff", [str(venv_ruff), "check", "."])
+
+    # Check in virtual environment for flake8 (both Unix and Windows paths)
     venv_flake8_paths = [
         project_dir / "venv/bin/flake8",
         project_dir / "venv/Scripts/flake8.exe"
     ]
 
-    # Check for ruff in venv
-    for venv_ruff in venv_ruff_paths:
-        if venv_ruff.exists():
-            return ("ruff", [str(venv_ruff), "check", "."])
-
-    # Check for flake8 in venv
     for venv_flake8 in venv_flake8_paths:
         if venv_flake8.exists():
             return ("flake8", [str(venv_flake8), "."])

@@ -205,18 +205,18 @@ async def update_design_tokens(project_name: str, request: DesignTokensRequest):
         manager = DesignTokensManager(project_dir)
         current = manager.load()
 
-        # Update only provided fields
-        if request.colors:
+        # Update only provided fields (explicit None checks allow empty dicts/lists for clearing)
+        if request.colors is not None:
             current.colors.update(request.colors)
-        if request.spacing:
+        if request.spacing is not None:
             current.spacing = request.spacing
-        if request.typography:
+        if request.typography is not None:
             current.typography.update(request.typography)
-        if request.borders:
+        if request.borders is not None:
             current.borders.update(request.borders)
-        if request.shadows:
+        if request.shadows is not None:
             current.shadows.update(request.shadows)
-        if request.animations:
+        if request.animations is not None:
             current.animations.update(request.animations)
 
         manager.save(current)
@@ -339,7 +339,16 @@ async def validate_tokens(project_name: str):
 
         hex_pattern = re.compile(r"^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
         for name, value in tokens.colors.items():
-            if not hex_pattern.match(value):
+            if not isinstance(value, str):
+                issues.append(
+                    {
+                        "type": "color_format",
+                        "field": f"colors.{name}",
+                        "value": value,
+                        "message": "Non-string color value",
+                    }
+                )
+            elif not hex_pattern.match(value):
                 issues.append(
                     {
                         "type": "color_format",

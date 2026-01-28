@@ -109,7 +109,7 @@ def get_denied_commands(limit: int = 50) -> list[dict[str, Any]]:
             {
                 "timestamp": cmd.timestamp,
                 "command": redact_string(cmd.command),
-                "reason": cmd.reason,
+                "reason": redact_string(cmd.reason),
                 "project_dir": cmd.project_dir,
             }
             for cmd in commands

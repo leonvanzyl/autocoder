@@ -119,14 +119,65 @@ def get_project_dir(project_name: str) -> Path:
     # Try to get from registry
     project_path = get_project_path(project_name)
     if project_path:
-        return Path(project_path)
+        # Resolve and validate the registered path
+        resolved_path = project_path.resolve()
+        _validate_project_dir(resolved_path)
+        return resolved_path
 
     # Check if it's a direct path
     path = Path(project_name)
     if path.exists() and path.is_dir():
-        return path
+        # Resolve and validate the provided path
+        resolved_path = path.resolve()
+        _validate_project_dir(resolved_path)
+        return resolved_path
 
     raise HTTPException(status_code=404, detail=f"Project not found: {project_name}")
+
+
+def _validate_project_dir(resolved_path: Path) -> None:
+    """
+    Validate that a project directory is within allowed boundaries.
+
+    Args:
+        resolved_path: The resolved project path to validate
+
+    Raises:
+        HTTPException: If the path is outside allowed boundaries or is dangerous
+    """
+    # Blocklist for dangerous locations
+    dangerous_roots = [
+        Path("/").resolve(),  # Root
+        Path("/etc").resolve(),  # System config
+        Path("/var").resolve(),  # System variables
+        Path.home().resolve(),  # User home (allow subpaths, block direct home)
+    ]
+
+    # Check if path is in dangerous locations
+    for dangerous in dangerous_roots:
+        try:
+            if dangerous in resolved_path.parents or dangerous == resolved_path:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Project not found: {resolved_path}"
+                )
+        except (ValueError, OSError):
+            pass
+
+    # Ensure path is contained within an allowed root
+    allowed_root = Path.cwd().resolve()
+
+    try:
+        if resolved_path.is_relative_to(allowed_root):
+            return
+    except ValueError:
+        pass
+
+    # Path is not within allowed boundaries
+    raise HTTPException(
+        status_code=404,
+        detail=f"Project not found: {resolved_path}"
+    )
 
 
 # ============================================================================

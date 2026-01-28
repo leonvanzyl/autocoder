@@ -19,7 +19,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from auto_documentation import DocumentationGenerator
-from registry import get_project_path
+from registry import get_project_path, list_registered_projects
 
 logger = logging.getLogger(__name__)
 
@@ -121,18 +121,30 @@ def _validate_project_path(path: Path) -> None:
     allowed_root = Path.cwd().resolve()
 
     try:
-        # Check if the path is within the allowed root directory
-        if not path.is_relative_to(allowed_root):
-            raise HTTPException(
-                status_code=403,
-                detail=f"Access denied: Project path '{path}' is outside allowed directory boundary"
-            )
+        # First check if the path is within the allowed root directory (cwd)
+        if path.is_relative_to(allowed_root):
+            return
     except ValueError:
-        # Handle case where path comparison fails
-        raise HTTPException(
-            status_code=403,
-            detail=f"Access denied: Project path '{path}' is outside allowed directory boundary"
-        )
+        pass
+
+    # Check if the path matches or is within any registered project path
+    try:
+        registered_projects = list_registered_projects()
+        for proj_name, proj_info in registered_projects.items():
+            registered_path = Path(proj_info["path"]).resolve()
+            try:
+                if path == registered_path or path.is_relative_to(registered_path):
+                    return
+            except ValueError:
+                continue
+    except Exception as e:
+        logger.warning(f"Failed to check registry: {e}")
+
+    # Path is not within allowed boundaries
+    raise HTTPException(
+        status_code=403,
+        detail=f"Access denied: Project path '{path}' is outside allowed directory boundary"
+    )
 
 
 # ============================================================================
@@ -177,6 +189,9 @@ async def generate_docs(request: GenerateDocsRequest):
             message=f"Generated {len(generated)} documentation files",
         )
 
+    except ValueError as e:
+        logger.error(f"Invalid output directory: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"Documentation generation failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))

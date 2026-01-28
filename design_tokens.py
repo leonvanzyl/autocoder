@@ -524,7 +524,19 @@ module.exports = {config_json}
         # Check primary colors against white/black backgrounds
         for name, value in tokens.colors.items():
             color_token = ColorToken(name=name, value=value)
-            _hue, _sat, lightness = color_token.to_hsl()
+            try:
+                _hue, _sat, lightness = color_token.to_hsl()
+            except Exception as e:
+                # Log invalid color and continue to next token
+                issues.append(
+                    {
+                        "color": name,
+                        "value": value,
+                        "issue": "Invalid color value",
+                        "error": str(e),
+                    }
+                )
+                continue
 
             # Simple contrast check based on lightness
             if lightness > 50:
@@ -565,18 +577,26 @@ module.exports = {config_json}
         tokens = self.load()
         output = output_dir or self.project_dir / "src" / "styles"
 
+        # Create Path objects for output files
+        css_path = output / "tokens.css"
+        scss_path = output / "_tokens.scss"
+
+        # Generate files and pass Path objects
+        self.generate_css(tokens, css_path)
+        self.generate_scss(tokens, scss_path)
+
         results = {
-            "css": str(self.generate_css(tokens, output / "tokens.css")),
-            "scss": str(self.generate_scss(tokens, output / "_tokens.scss")),
+            "css": str(css_path),
+            "scss": str(scss_path),
         }
 
         # Check for Tailwind
         if (self.project_dir / "tailwind.config.js").exists() or (
             self.project_dir / "tailwind.config.ts"
         ).exists():
-            results["tailwind"] = str(
-                self.generate_tailwind_config(tokens, output / "tailwind.tokens.js")
-            )
+            tailwind_path = output / "tailwind.tokens.js"
+            self.generate_tailwind_config(tokens, tailwind_path)
+            results["tailwind"] = str(tailwind_path)
 
         # Validate and report
         issues = self.validate_contrast(tokens)
