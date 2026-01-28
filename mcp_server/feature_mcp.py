@@ -41,7 +41,7 @@ from sqlalchemy import text
 # Add parent directory to path so we can import from api module
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from api.database import Feature, atomic_transaction, create_database
+from api.database import atomic_transaction, create_database, Feature
 from api.dependency_resolver import (
     MAX_DEPENDENCIES_PER_FEATURE,
     compute_scheduling_scores,
