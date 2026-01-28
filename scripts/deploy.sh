@@ -34,7 +34,13 @@ prompt_required LETSENCRYPT_EMAIL "Enter email for Let's Encrypt notifications"
 if [[ "${DOMAIN}" == *.duckdns.org ]]; then
   DUCKDNS_SUBDOMAIN="${DOMAIN%.duckdns.org}"
 else
-  DUCKDNS_SUBDOMAIN="${DOMAIN}"
+  echo "WARNING: Domain '${DOMAIN}' does not end with .duckdns.org."
+  echo "DuckDNS API requires a duckdns.org subdomain."
+  read -r -p "Enter just the DuckDNS subdomain (without .duckdns.org): " DUCKDNS_SUBDOMAIN
+  if [[ -z "$DUCKDNS_SUBDOMAIN" ]]; then
+    echo "DuckDNS subdomain cannot be empty." >&2
+    exit 1
+  fi
 fi
 
 read -r -p "Git repo URL [https://github.com/heidi-dang/autocoder.git]: " REPO_URL

@@ -372,7 +372,7 @@ post_checks() {
 }
 
 print_notes() {
-  cat <<'EOF'
+  cat <<EOF
 
 Deployment complete.
 
@@ -382,7 +382,7 @@ If the domain does not come up immediately:
 3. Check logs:
    docker compose -f docker-compose.yml -f docker-compose.traefik.yml logs -f
 4. Confirm backend health locally:
-   curl -fsS http://127.0.0.1:8888/api/health || true
+   curl -fsS http://127.0.0.1:${APP_PORT:-8888}/api/health || true
 
 To update later, rerun this script. It will git pull and restart.
 EOF
@@ -390,9 +390,9 @@ EOF
 
 ensure_packages
 configure_duckdns
+preserve_env_file
 clone_repo
 assert_compose_files
-preserve_env_file
 write_env
 prepare_ssl_storage
 run_compose
