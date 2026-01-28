@@ -234,10 +234,10 @@ class AssistantChatSession:
 
         Creates a new conversation if none exists, then sends an initial greeting.
         For resumed conversations, skips the greeting since history is loaded from DB.
-        
+
         Args:
             skip_greeting: If True, skip sending the greeting even for new conversations.
-        
+
         Yields message chunks as they stream in.
         """
         # Track if this is a new conversation (for greeting decision)

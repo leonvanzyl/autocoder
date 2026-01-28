@@ -377,7 +377,7 @@ def extract_commands(command_string: str) -> list[str]:
             if re.search(r'\|\||&&|\||&', segment):
                 # Segment has operators but shlex failed - refuse to parse for safety
                 continue
-            
+
             # Try fallback extraction for single-command segments
             fallback_cmd = _extract_primary_command(segment)
             if fallback_cmd:
