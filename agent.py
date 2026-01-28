@@ -27,6 +27,7 @@ from prompts import (
     get_coding_prompt_yolo,
     get_initializer_prompt,
 )
+from resource_cleanup import ResourceCleanupManager
 
 # Configuration
 AUTO_CONTINUE_DELAY_SECONDS = 3
@@ -139,6 +140,10 @@ async def run_autonomous_agent(
     # Create project directory
     project_dir.mkdir(parents=True, exist_ok=True)
 
+    # Initialize resource cleanup manager
+    # This tracks processes spawned during sessions and cleans up between them
+    cleanup_manager = ResourceCleanupManager(project_dir)
+
     # Check if this is a fresh start or continuation
     # Uses has_features() which checks if the database actually has features,
     # not just if the file exists (empty db should still trigger initializer)
@@ -174,6 +179,10 @@ async def run_autonomous_agent(
         # Print session header
         print_session_header(iteration, is_first_run)
 
+        # Snapshot running processes before the session starts
+        # so we can identify what was spawned during the session
+        cleanup_manager.snapshot_processes()
+
         # Create client (fresh context)
         client = create_client(project_dir, model, yolo_mode=yolo_mode)
 
@@ -192,6 +201,22 @@ async def run_autonomous_agent(
         # Run session with async context manager
         async with client:
             status, response = await run_agent_session(client, prompt, project_dir)
+
+        # Clean up resources between sessions (browsers, dev servers, temp files)
+        # This catches anything the agent didn't close on its own
+        try:
+            results = cleanup_manager.cleanup_between_sessions()
+            total_cleaned = (
+                results["browsers_killed"]
+                + results["dev_servers_killed"]
+                + results["files_cleaned"]
+            )
+            if total_cleaned > 0:
+                print(f"\n[Cleanup] Freed {results['browsers_killed']} browser(s), "
+                      f"{results['dev_servers_killed']} dev server(s), "
+                      f"{results['files_cleaned']} temp file(s)")
+        except Exception as e:
+            print(f"\n[Cleanup] Warning: cleanup encountered an error: {e}")
 
         # Handle status
         if status == "continue":

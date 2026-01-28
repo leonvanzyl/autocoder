@@ -400,6 +400,38 @@ Update `claude-progress.txt` with testing session summary:
 
 ## ENDING THIS SESSION
 
+### Resource Cleanup (MANDATORY)
+
+**CRITICAL:** You MUST clean up all resources before ending the session.
+Leaving browsers and servers running wastes system resources and causes issues.
+
+#### Close All Browser Sessions
+
+```
+# Close browser after EACH test, and again at session end
+Use the browser_close tool
+```
+
+**Close the browser after testing EACH feature, not just at session end.**
+
+#### Stop Test Servers
+
+If you started any test servers during this session, stop them:
+
+```bash
+# Kill dev/test servers you started
+pkill node
+```
+
+#### Remove Test Artifacts
+
+```bash
+# Clean up screenshots, reports, and temp files
+rm -rf screenshots/ test-results/ playwright-report/ verification/
+```
+
+### Standard End-of-Session Steps
+
 1. Run the full test suite one final time
 2. Ensure all test failures are tracked as tasks
 3. Commit any new test files
