@@ -252,6 +252,19 @@ For API endpoints used by this feature:
 - Verify response contains actual database data
 - Empty database = empty response (not pre-populated mock data)
 
+### STEP 6.7: CLOSE BROWSER AFTER TESTING (MANDATORY)
+
+**After verifying a feature, ALWAYS close the browser before moving on:**
+
+```
+# Close the browser to free resources after testing
+Use the browser_close tool
+```
+
+Do NOT leave browser tabs open between features. Each feature test should
+open a fresh browser and close it when done. This prevents resource leaks,
+port conflicts, and stale state from affecting the next test.
+
 ### STEP 7: UPDATE FEATURE STATUS (CAREFULLY!)
 
 **YOU CAN ONLY MODIFY ONE FIELD: "passes"**
@@ -298,9 +311,39 @@ Update `claude-progress.txt` with:
 - What should be worked on next
 - Current completion status (e.g., "45/200 tests passing")
 
-### STEP 10: END SESSION CLEANLY
+### STEP 10: CLEAN UP RESOURCES AND END SESSION
 
-Before context fills up:
+**CRITICAL:** Before ending the session, you MUST clean up all resources.
+Leaving browsers open and dev servers running wastes system resources and causes
+issues for subsequent sessions.
+
+#### 10.1: Close All Browser Sessions (MANDATORY)
+
+```
+# Close the browser to free resources
+Use the browser_close tool
+```
+
+**Close the browser after EACH feature verification, not just at session end.**
+Every time you finish testing a feature in the browser, close it before moving on.
+
+#### 10.2: Stop Dev Servers You Started
+
+If you started dev servers during this session (not via `init.sh`), stop them:
+
+```bash
+# Kill dev servers you started for testing
+pkill node
+```
+
+#### 10.3: Remove Test Artifacts
+
+```bash
+# Clean up screenshots and temp files from testing
+rm -rf screenshots/ test-results/ playwright-report/ verification/
+```
+
+#### 10.4: Standard End-of-Session
 
 1. Commit all working code
 2. Update claude-progress.txt

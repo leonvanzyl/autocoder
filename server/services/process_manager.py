@@ -18,6 +18,8 @@ from typing import Awaitable, Callable, Literal, Set
 
 import psutil
 
+from resource_cleanup import kill_project_child_processes
+
 logger = logging.getLogger(__name__)
 
 # Patterns for sensitive data that should be redacted from output
@@ -302,6 +304,19 @@ class AgentProcessManager:
                 await loop.run_in_executor(None, self.process.wait)
 
             self._remove_lock()
+
+            # Kill any orphaned child processes (browsers, dev servers)
+            # that the agent may have spawned during its session
+            try:
+                child_killed = kill_project_child_processes(self.project_dir)
+                if child_killed > 0:
+                    logger.info(
+                        f"Cleaned up {child_killed} orphaned child process(es) "
+                        f"for project {self.project_name}"
+                    )
+            except Exception as e:
+                logger.warning(f"Error cleaning up child processes: {e}")
+
             self.status = "stopped"
             self.process = None
             self.started_at = None

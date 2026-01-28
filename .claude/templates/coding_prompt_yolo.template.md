@@ -180,9 +180,27 @@ Update `claude-progress.txt` with:
 - What should be worked on next
 - Current completion status (e.g., "45/200 features passing")
 
-### STEP 9: END SESSION CLEANLY
+### STEP 9: CLEAN UP RESOURCES AND END SESSION
 
-Before context fills up:
+**CRITICAL:** Before ending the session, clean up all resources.
+
+#### 9.1: Stop Dev Servers You Started
+
+If you started dev servers during this session (not via `init.sh`), stop them:
+
+```bash
+# Kill dev servers you started
+pkill node
+```
+
+#### 9.2: Remove Temp Files
+
+```bash
+# Clean up any temp files created during the session
+rm -rf screenshots/ test-results/ .tmp/
+```
+
+#### 9.3: Standard End-of-Session
 
 1. Commit all working code
 2. Update claude-progress.txt

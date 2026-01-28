@@ -247,9 +247,27 @@ task_mark_reviewed with task_id={id}, review_score={1-5}, review_notes="..."
 
 ---
 
-## END SESSION CLEANLY
+## CLEAN UP RESOURCES AND END SESSION
 
-Before context fills up:
+**CRITICAL:** Before ending the session, clean up all resources.
+
+### Stop Dev Servers You Started
+
+If you started dev servers during this session (not via `init.sh`), stop them:
+
+```bash
+# Kill dev servers you started
+pkill node
+```
+
+### Remove Temp Files
+
+```bash
+# Clean up any temp files created during the session
+rm -rf screenshots/ test-results/ .tmp/
+```
+
+### Standard End-of-Session
 
 1. Complete current feature or review cycle
 2. Commit all working code
