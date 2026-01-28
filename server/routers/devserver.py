@@ -6,7 +6,6 @@ API endpoints for dev server control (start/stop) and configuration.
 Uses project registry for path lookups and project_config for command detection.
 """
 
-import re
 import sys
 from pathlib import Path
 
@@ -26,6 +25,7 @@ from ..services.project_config import (
     get_project_config,
     set_dev_command,
 )
+from ..utils.validation import validate_project_name
 
 # Add root to path for registry import
 _root = Path(__file__).parent.parent.parent
@@ -46,16 +46,6 @@ router = APIRouter(prefix="/api/projects/{project_name}/devserver", tags=["devse
 # ============================================================================
 # Helper Functions
 # ============================================================================
-
-
-def validate_project_name(name: str) -> str:
-    """Validate and sanitize project name to prevent path traversal."""
-    if not re.match(r'^[a-zA-Z0-9_-]{1,50}$', name):
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid project name"
-        )
-    return name
 
 
 def get_project_dir(project_name: str) -> Path:

@@ -48,6 +48,21 @@ export function useDeleteProject() {
   })
 }
 
+export function useResetProject() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ name, fullReset = false }: { name: string; fullReset?: boolean }) =>
+      api.resetProject(name, fullReset),
+    onSuccess: (_, { name }) => {
+      // Invalidate both projects and features queries
+      queryClient.invalidateQueries({ queryKey: ['projects'] })
+      queryClient.invalidateQueries({ queryKey: ['features', name] })
+      queryClient.invalidateQueries({ queryKey: ['project', name] })
+    },
+  })
+}
+
 // ============================================================================
 // Features
 // ============================================================================
@@ -239,6 +254,7 @@ const DEFAULT_SETTINGS: Settings = {
   glm_mode: false,
   ollama_mode: false,
   testing_agent_ratio: 1,
+  preferred_ide: null,
 }
 
 export function useAvailableModels() {

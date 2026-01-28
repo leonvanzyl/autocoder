@@ -1,0 +1,80 @@
+name: "API Service"
+description: "RESTful API service with authentication, rate limiting, and documentation"
+
+tech_stack:
+  backend: "FastAPI"
+  database: "PostgreSQL"
+  auth: "JWT"
+  hosting: "Docker"
+
+feature_categories:
+  core_api:
+    - "Health check endpoint"
+    - "Version endpoint"
+    - "OpenAPI documentation"
+    - "Swagger UI"
+    - "ReDoc documentation"
+
+  authentication:
+    - "User registration"
+    - "User login"
+    - "Token refresh"
+    - "Password reset"
+    - "API key authentication"
+    - "OAuth2 support"
+
+  user_management:
+    - "Get current user"
+    - "Update user profile"
+    - "Change password"
+    - "Delete account"
+    - "List users (admin)"
+
+  resource_crud:
+    - "Create resource"
+    - "Read resource"
+    - "Update resource"
+    - "Delete resource"
+    - "List resources"
+    - "Search resources"
+    - "Filter resources"
+    - "Paginate results"
+
+  security:
+    - "Rate limiting"
+    - "Request validation"
+    - "Input sanitization"
+    - "CORS configuration"
+    - "Security headers"
+
+  monitoring:
+    - "Request logging"
+    - "Error tracking"
+    - "Performance metrics"
+    - "Health checks"
+
+  admin:
+    - "Admin endpoints"
+    - "User management"
+    - "System statistics"
+    - "Audit logs"
+
+design_tokens:
+  colors:
+    primary: "#059669"
+    secondary: "#0EA5E9"
+    accent: "#F59E0B"
+    background: "#F9FAFB"
+    text: "#111827"
+  spacing: [4, 8, 12, 16, 24, 32]
+  fonts:
+    heading: "Inter"
+    body: "Inter"
+  border_radius:
+    small: "4px"
+    medium: "6px"
+    large: "8px"
+
+estimated_features: 30
+tags: ["api", "rest", "backend", "microservice"]
+difficulty: "intermediate"

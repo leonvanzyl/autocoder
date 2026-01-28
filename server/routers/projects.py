@@ -6,14 +6,24 @@ API endpoints for project management.
 Uses project registry for path lookups instead of fixed generations/ directory.
 """
 
+import logging
+import os
 import re
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 
+logger = logging.getLogger(__name__)
+
 from ..schemas import (
+    DatabaseHealth,
+    KnowledgeFile,
+    KnowledgeFileContent,
+    KnowledgeFileList,
+    KnowledgeFileUpload,
     ProjectCreate,
     ProjectDetail,
     ProjectPrompts,
@@ -21,6 +31,7 @@ from ..schemas import (
     ProjectStats,
     ProjectSummary,
 )
+from ..utils.validation import validate_project_name
 
 # Lazy imports to avoid circular dependencies
 _imports_initialized = False
@@ -73,16 +84,6 @@ def _get_registry_functions():
 
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
-
-
-def validate_project_name(name: str) -> str:
-    """Validate and sanitize project name to prevent path traversal."""
-    if not re.match(r'^[a-zA-Z0-9_-]{1,50}$', name):
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid project name. Use only letters, numbers, hyphens, and underscores (1-50 chars)."
-        )
-    return name
 
 
 def get_project_stats(project_dir: Path) -> ProjectStats:
@@ -206,6 +207,102 @@ async def create_project(project: ProjectCreate):
     )
 
 
+@router.post("/import", response_model=ProjectSummary)
+async def import_project(project: ProjectCreate):
+    """
+    Import/reconnect to an existing project after reinstallation.
+
+    This endpoint allows reconnecting to a project that exists on disk
+    but is not registered in the current autocoder installation's registry.
+
+    The project path must:
+    - Exist as a directory
+    - Contain a .autocoder folder (indicating it was previously an autocoder project)
+
+    This is useful when:
+    - Reinstalling autocoder
+    - Moving to a new machine
+    - Recovering from registry corruption
+    """
+    _init_imports()
+    register_project, _, get_project_path, list_registered_projects, _ = _get_registry_functions()
+
+    name = validate_project_name(project.name)
+    project_path = Path(project.path).resolve()
+
+    # Check if project name already registered
+    existing = get_project_path(name)
+    if existing:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Project '{name}' already exists at {existing}. Use a different name or delete the existing project first."
+        )
+
+    # Check if path already registered under a different name
+    all_projects = list_registered_projects()
+    for existing_name, info in all_projects.items():
+        existing_path = Path(info["path"]).resolve()
+        if sys.platform == "win32":
+            paths_match = str(existing_path).lower() == str(project_path).lower()
+        else:
+            paths_match = existing_path == project_path
+
+        if paths_match:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Path '{project_path}' is already registered as project '{existing_name}'"
+            )
+
+    # Validate the path exists and is a directory
+    if not project_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail=f"Project path does not exist: {project_path}"
+        )
+
+    if not project_path.is_dir():
+        raise HTTPException(
+            status_code=400,
+            detail="Path exists but is not a directory"
+        )
+
+    # Check for .autocoder folder to confirm it's a valid autocoder project
+    autocoder_dir = project_path / ".autocoder"
+    if not autocoder_dir.exists():
+        raise HTTPException(
+            status_code=400,
+            detail="Path does not appear to be an autocoder project (missing .autocoder folder). Use 'Create Project' instead."
+        )
+
+    # Security check
+    from .filesystem import is_path_blocked
+    if is_path_blocked(project_path):
+        raise HTTPException(
+            status_code=403,
+            detail="Cannot import project from system or sensitive directory"
+        )
+
+    # Register in registry
+    try:
+        register_project(name, project_path)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to register project: {e}"
+        )
+
+    # Get project stats
+    has_spec = _check_spec_exists(project_path)
+    stats = get_project_stats(project_path)
+
+    return ProjectSummary(
+        name=name,
+        path=project_path.as_posix(),
+        has_spec=has_spec,
+        stats=stats,
+    )
+
+
 @router.get("/{name}", response_model=ProjectDetail)
 async def get_project(name: str):
     """Get detailed information about a project."""
@@ -237,11 +334,18 @@ async def get_project(name: str):
 @router.delete("/{name}")
 async def delete_project(name: str, delete_files: bool = False):
     """
-    Delete a project from the registry.
+    Delete a project from the registry and perform comprehensive cleanup.
+
+    This removes the project from:
+    - Registry (project registration)
+    - Database (features.db file)
+    - WebSocket connections (all active connections)
+    - Agent processes (stop and cleanup)
+    - Dev servers (stop if running)
 
     Args:
         name: Project name to delete
-        delete_files: If True, also delete the project directory and files
+        delete_files: If True, also delete the project directory and all files
     """
     _init_imports()
     _, unregister_project, get_project_path, _, _ = _get_registry_functions()
@@ -260,20 +364,213 @@ async def delete_project(name: str, delete_files: bool = False):
             detail="Cannot delete project while agent is running. Stop the agent first."
         )
 
-    # Optionally delete files
+    # Step 1: Disconnect all WebSocket connections for this project
+    from .websocket import manager as websocket_manager
+    try:
+        disconnected = await websocket_manager.disconnect_all_for_project(name)
+        logger.info(f"Disconnected {disconnected} WebSocket connection(s) for project '{name}'")
+    except Exception as e:
+        logger.warning(f"Error disconnecting WebSocket connections for project '{name}': {e}")
+
+    # Step 2: Stop agent process manager for this project
+    from .services.dev_server_manager import get_devserver_manager
+    from .services.process_manager import cleanup_manager as cleanup_process_manager
+    try:
+        await cleanup_process_manager(name, project_dir)
+        logger.info(f"Stopped agent process manager for project '{name}'")
+    except Exception as e:
+        logger.warning(f"Error stopping agent process manager for project '{name}': {e}")
+
+    # Step 3: Stop dev server if running for this project
+    try:
+        devserver_mgr = get_devserver_manager()
+        await devserver_mgr.stop_server(name)
+        logger.info(f"Stopped dev server for project '{name}'")
+    except Exception as e:
+        logger.warning(f"Error stopping dev server for project '{name}': {e}")
+
+    # Step 4: Delete database files (features.db, assistant.db)
+    db_files = ["features.db", "assistant.db"]
+    deleted_dbs = []
+    for db_file in db_files:
+        db_path = project_dir / db_file
+        if db_path.exists():
+            try:
+                db_path.unlink()
+                deleted_dbs.append(db_file)
+                logger.info(f"Deleted {db_file} for project '{name}'")
+            except Exception as e:
+                logger.warning(f"Error deleting {db_file} for project '{name}': {e}")
+
+    # Step 5: Optionally delete the entire project directory
     if delete_files and project_dir.exists():
         try:
             shutil.rmtree(project_dir)
+            logger.info(f"Deleted project directory for '{name}'")
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to delete project files: {e}")
 
-    # Unregister from registry
+    # Step 6: Unregister from registry (do this last)
     unregister_project(name)
+    logger.info(f"Unregistered project '{name}' from registry")
 
     return {
         "success": True,
-        "message": f"Project '{name}' deleted" + (" (files removed)" if delete_files else " (files preserved)")
+        "message": f"Project '{name}' deleted completely" + (" (including files)" if delete_files else " (files preserved)"),
+        "details": {
+            "databases_deleted": deleted_dbs,
+            "files_deleted": delete_files
+        }
     }
+
+
+@router.post("/{name}/reset")
+async def reset_project(name: str, full_reset: bool = False):
+    """
+    Reset a project to its initial state.
+
+    This clears all features, assistant chat history, and settings.
+    Use this to restart a project from scratch without having to re-register it.
+
+    Args:
+        name: Project name to reset
+        full_reset: If True, also deletes prompts directory for complete fresh start
+
+    Always Deletes:
+    - features.db (feature tracking database)
+    - assistant.db (assistant chat history)
+    - .claude_settings.json (agent settings)
+    - .claude_assistant_settings.json (assistant settings)
+
+    When full_reset=True, Also Deletes:
+    - prompts/ directory (app_spec.txt, initializer_prompt.md, coding_prompt.md)
+
+    Preserves:
+    - Project registration in registry
+    """
+    _init_imports()
+    _, _, get_project_path, _, _ = _get_registry_functions()
+
+    name = validate_project_name(name)
+    project_dir = get_project_path(name)
+
+    if not project_dir:
+        raise HTTPException(status_code=404, detail=f"Project '{name}' not found")
+
+    if not project_dir.exists():
+        raise HTTPException(status_code=404, detail="Project directory not found")
+
+    # Check if agent is running
+    lock_file = project_dir / ".agent.lock"
+    if lock_file.exists():
+        raise HTTPException(
+            status_code=409,
+            detail="Cannot reset project while agent is running. Stop the agent first."
+        )
+
+    # Files to delete
+    files_to_delete = [
+        "features.db",
+        "assistant.db",
+        ".claude_settings.json",
+        ".claude_assistant_settings.json",
+    ]
+
+    deleted_files = []
+    errors = []
+
+    for filename in files_to_delete:
+        filepath = project_dir / filename
+        if filepath.exists():
+            try:
+                filepath.unlink()
+                deleted_files.append(filename)
+            except Exception as e:
+                errors.append(f"{filename}: {e}")
+
+    # If full reset, also delete prompts directory
+    if full_reset:
+        prompts_dir = project_dir / "prompts"
+        if prompts_dir.exists():
+            try:
+                shutil.rmtree(prompts_dir)
+                deleted_files.append("prompts/")
+            except Exception as e:
+                errors.append(f"prompts/: {e}")
+
+    if errors:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to delete some files: {'; '.join(errors)}"
+        )
+
+    reset_type = "fully reset" if full_reset else "reset"
+    return {
+        "success": True,
+        "message": f"Project '{name}' has been {reset_type}",
+        "deleted_files": deleted_files,
+        "full_reset": full_reset,
+    }
+
+
+@router.post("/{name}/open-in-ide")
+async def open_project_in_ide(name: str, ide: str):
+    """Open a project in the specified IDE.
+
+    Args:
+        name: Project name
+        ide: IDE to use ('vscode', 'cursor', or 'antigravity')
+    """
+    _init_imports()
+    _, _, get_project_path, _, _ = _get_registry_functions()
+
+    name = validate_project_name(name)
+    project_dir = get_project_path(name)
+
+    if not project_dir:
+        raise HTTPException(status_code=404, detail=f"Project '{name}' not found")
+
+    if not project_dir.exists():
+        raise HTTPException(status_code=404, detail=f"Project directory not found: {project_dir}")
+
+    # Validate IDE parameter
+    ide_commands = {
+        'vscode': 'code',
+        'cursor': 'cursor',
+        'antigravity': 'antigravity',
+    }
+
+    if ide not in ide_commands:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid IDE. Must be one of: {list(ide_commands.keys())}"
+        )
+
+    cmd = ide_commands[ide]
+    project_path = str(project_dir)
+
+    try:
+        if sys.platform == "win32":
+            # Try to find the command in PATH first
+            cmd_path = shutil.which(cmd)
+            if cmd_path:
+                subprocess.Popen([cmd_path, project_path])
+            else:
+                # Fall back to cmd /c which uses shell PATH
+                subprocess.Popen(
+                    ["cmd", "/c", cmd, project_path],
+                    creationflags=subprocess.CREATE_NO_WINDOW,
+                )
+        else:
+            # Unix-like systems
+            subprocess.Popen([cmd, project_path], start_new_session=True)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to open IDE: {e}"
+        )
+
+    return {"status": "success", "message": f"Opening {project_path} in {ide}"}
 
 
 @router.get("/{name}/prompts", response_model=ProjectPrompts)
@@ -355,3 +652,186 @@ async def get_project_stats_endpoint(name: str):
         raise HTTPException(status_code=404, detail="Project directory not found")
 
     return get_project_stats(project_dir)
+
+
+@router.get("/{name}/db-health", response_model=DatabaseHealth)
+async def get_database_health(name: str):
+    """Check database health for a project.
+
+    Returns integrity status, journal mode, and any errors.
+    Use this to diagnose database corruption issues.
+    """
+    _, _, get_project_path, _, _ = _get_registry_functions()
+
+    name = validate_project_name(name)
+    project_dir = get_project_path(name)
+
+    if not project_dir:
+        raise HTTPException(status_code=404, detail=f"Project '{name}' not found")
+
+    if not project_dir.exists():
+        raise HTTPException(status_code=404, detail="Project directory not found")
+
+    # Import health check function
+    root = Path(__file__).parent.parent.parent
+    if str(root) not in sys.path:
+        sys.path.insert(0, str(root))
+
+    from api.database import check_database_health, get_database_path
+
+    db_path = get_database_path(project_dir)
+    result = check_database_health(db_path)
+
+    return DatabaseHealth(**result)
+
+
+# =============================================================================
+# Knowledge Files Endpoints
+# =============================================================================
+
+def get_knowledge_dir(project_dir: Path) -> Path:
+    """Get the knowledge directory for a project."""
+    return project_dir / "knowledge"
+
+
+@router.get("/{name}/knowledge", response_model=KnowledgeFileList)
+async def list_knowledge_files(name: str):
+    """List all knowledge files for a project."""
+    _init_imports()
+    _, _, get_project_path, _, _ = _get_registry_functions()
+
+    name = validate_project_name(name)
+    project_dir = get_project_path(name)
+
+    if not project_dir:
+        raise HTTPException(status_code=404, detail=f"Project '{name}' not found")
+
+    if not project_dir.exists():
+        raise HTTPException(status_code=404, detail="Project directory not found")
+
+    knowledge_dir = get_knowledge_dir(project_dir)
+
+    if not knowledge_dir.exists():
+        return KnowledgeFileList(files=[], count=0)
+
+    files = []
+    for filepath in knowledge_dir.glob("*.md"):
+        if filepath.is_file():
+            stat = filepath.stat()
+            from datetime import datetime
+            files.append(KnowledgeFile(
+                name=filepath.name,
+                size=stat.st_size,
+                modified=datetime.fromtimestamp(stat.st_mtime)
+            ))
+
+    # Sort by name
+    files.sort(key=lambda f: f.name.lower())
+
+    return KnowledgeFileList(files=files, count=len(files))
+
+
+@router.get("/{name}/knowledge/{filename}", response_model=KnowledgeFileContent)
+async def get_knowledge_file(name: str, filename: str):
+    """Get the content of a specific knowledge file."""
+    _init_imports()
+    _, _, get_project_path, _, _ = _get_registry_functions()
+
+    name = validate_project_name(name)
+    project_dir = get_project_path(name)
+
+    if not project_dir:
+        raise HTTPException(status_code=404, detail=f"Project '{name}' not found")
+
+    if not project_dir.exists():
+        raise HTTPException(status_code=404, detail="Project directory not found")
+
+    # Validate filename (prevent path traversal)
+    if not re.match(r'^[a-zA-Z0-9_\-\.]+\.md$', filename):
+        raise HTTPException(status_code=400, detail="Invalid filename")
+
+    knowledge_dir = get_knowledge_dir(project_dir)
+    filepath = knowledge_dir / filename
+
+    if not filepath.exists():
+        raise HTTPException(status_code=404, detail=f"Knowledge file '{filename}' not found")
+
+    try:
+        content = filepath.read_text(encoding="utf-8")
+        return KnowledgeFileContent(name=filename, content=content)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to read file: {e}")
+
+
+@router.post("/{name}/knowledge", response_model=KnowledgeFileContent)
+async def upload_knowledge_file(name: str, file: KnowledgeFileUpload):
+    """Upload a knowledge file to a project."""
+    _init_imports()
+    _, _, get_project_path, _, _ = _get_registry_functions()
+
+    name = validate_project_name(name)
+    project_dir = get_project_path(name)
+
+    if not project_dir:
+        raise HTTPException(status_code=404, detail=f"Project '{name}' not found")
+
+    if not project_dir.exists():
+        raise HTTPException(status_code=404, detail="Project directory not found")
+
+    # Validate filename (prevent path traversal)
+    # CVE-2026-24486: python-multipart >=0.0.22 strips directory components from filenames
+    # Defense-in-depth: Ensure filename contains no path separators
+    if not re.match(r'^[a-zA-Z0-9_\-\.]+\.md$', file.filename):
+        raise HTTPException(status_code=400, detail="Invalid filename")
+
+    # Additional validation: Ensure no directory traversal via os.path.basename
+    safe_filename = os.path.basename(file.filename)
+    if safe_filename != file.filename or '/' in file.filename or '\\' in file.filename:
+        raise HTTPException(status_code=400, detail="Filename must not contain path separators")
+
+    knowledge_dir = get_knowledge_dir(project_dir)
+    knowledge_dir.mkdir(parents=True, exist_ok=True)
+
+    filepath = knowledge_dir / safe_filename
+
+    try:
+        filepath.write_text(file.content, encoding="utf-8")
+        return KnowledgeFileContent(name=safe_filename, content=file.content)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to write file: {e}")
+
+
+@router.delete("/{name}/knowledge/{filename}")
+async def delete_knowledge_file(name: str, filename: str):
+    """Delete a knowledge file from a project."""
+    _init_imports()
+    _, _, get_project_path, _, _ = _get_registry_functions()
+
+    name = validate_project_name(name)
+    project_dir = get_project_path(name)
+
+    # Check if project exists before proceeding
+    if project_dir is None or not project_dir.exists():
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # CVE-2026-24486: python-multipart >=0.0.22 strips directory components from filenames
+    # Defense-in-depth: Ensure filename contains no path separators
+    if not re.match(r'^[a-zA-Z0-9_\-\.]+\.md$', filename):
+        raise HTTPException(status_code=400, detail="Invalid filename")
+
+    # Additional validation: Ensure no directory traversal
+    safe_filename = os.path.basename(filename)
+    if safe_filename != filename or '/' in filename or '\\' in filename:
+        raise HTTPException(status_code=400, detail="Filename must not contain path separators")
+
+    knowledge_dir = get_knowledge_dir(project_dir)
+    filepath = knowledge_dir / safe_filename
+
+    if not filepath.exists():
+        raise HTTPException(status_code=404, detail=f"Knowledge file '{safe_filename}' not found")
+
+    try:
+        filepath.unlink()
+        return {"success": True, "message": f"Deleted '{safe_filename}'"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete file: {e}")

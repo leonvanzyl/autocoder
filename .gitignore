@@ -6,6 +6,9 @@ temp/
 nul
 issues/
 
+# Local Codex/Claude configuration (do not commit)
+.code/
+
 # Browser profiles for parallel agent execution
 .browser-profiles/
 

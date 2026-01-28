@@ -22,6 +22,7 @@ from ..services.expand_chat_session import (
     list_expand_sessions,
     remove_expand_session,
 )
+from ..utils.auth import reject_unauthenticated_websocket
 from ..utils.validation import validate_project_name
 
 logger = logging.getLogger(__name__)
@@ -119,6 +120,10 @@ async def expand_project_websocket(websocket: WebSocket, project_name: str):
     - {"type": "error", "content": "..."} - Error message
     - {"type": "pong"} - Keep-alive pong
     """
+    # Check authentication if Basic Auth is enabled
+    if not await reject_unauthenticated_websocket(websocket):
+        return
+
     try:
         project_name = validate_project_name(project_name)
     except HTTPException:

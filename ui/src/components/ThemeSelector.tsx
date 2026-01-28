@@ -13,7 +13,7 @@ export function ThemeSelector({ themes, currentTheme, onThemeChange }: ThemeSele
   const [isOpen, setIsOpen] = useState(false)
   const [previewTheme, setPreviewTheme] = useState<ThemeId | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -32,7 +32,7 @@ export function ThemeSelector({ themes, currentTheme, onThemeChange }: ThemeSele
   useEffect(() => {
     if (previewTheme) {
       const root = document.documentElement
-      root.classList.remove('theme-claude', 'theme-neo-brutalism', 'theme-retro-arcade', 'theme-aurora')
+      root.classList.remove('theme-claude', 'theme-neo-brutalism', 'theme-retro-arcade', 'theme-aurora', 'theme-business')
       if (previewTheme === 'claude') {
         root.classList.add('theme-claude')
       } else if (previewTheme === 'neo-brutalism') {
@@ -41,6 +41,8 @@ export function ThemeSelector({ themes, currentTheme, onThemeChange }: ThemeSele
         root.classList.add('theme-retro-arcade')
       } else if (previewTheme === 'aurora') {
         root.classList.add('theme-aurora')
+      } else if (previewTheme === 'business') {
+        root.classList.add('theme-business')
       }
     }
 
@@ -48,7 +50,7 @@ export function ThemeSelector({ themes, currentTheme, onThemeChange }: ThemeSele
     return () => {
       if (previewTheme) {
         const root = document.documentElement
-        root.classList.remove('theme-claude', 'theme-neo-brutalism', 'theme-retro-arcade', 'theme-aurora')
+        root.classList.remove('theme-claude', 'theme-neo-brutalism', 'theme-retro-arcade', 'theme-aurora', 'theme-business')
         if (currentTheme === 'claude') {
           root.classList.add('theme-claude')
         } else if (currentTheme === 'neo-brutalism') {
@@ -57,6 +59,8 @@ export function ThemeSelector({ themes, currentTheme, onThemeChange }: ThemeSele
           root.classList.add('theme-retro-arcade')
         } else if (currentTheme === 'aurora') {
           root.classList.add('theme-aurora')
+        } else if (currentTheme === 'business') {
+          root.classList.add('theme-business')
         }
       }
     }

@@ -36,7 +36,13 @@ Example Usage:
 
 import argparse
 import asyncio
+import sys
 from pathlib import Path
+
+# Windows-specific: Set ProactorEventLoop policy for subprocess support
+# This MUST be set before any other asyncio operations
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
 from dotenv import load_dotenv
 
@@ -46,6 +52,39 @@ load_dotenv()
 
 from agent import run_autonomous_agent
 from registry import DEFAULT_MODEL, get_project_path
+from structured_logging import get_logger
+
+
+def safe_asyncio_run(coro):
+    """
+    Run an async coroutine with proper cleanup to avoid Windows subprocess errors.
+
+    On Windows, subprocess transports may raise 'Event loop is closed' errors
+    during garbage collection if not properly cleaned up.
+    """
+    if sys.platform == "win32":
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            return loop.run_until_complete(coro)
+        finally:
+            # Cancel all pending tasks
+            pending = asyncio.all_tasks(loop)
+            for task in pending:
+                task.cancel()
+
+            # Allow cancelled tasks to complete
+            if pending:
+                loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+
+            # Shutdown async generators and executors
+            loop.run_until_complete(loop.shutdown_asyncgens())
+            if hasattr(loop, 'shutdown_default_executor'):
+                loop.run_until_complete(loop.shutdown_default_executor())
+
+            loop.close()
+    else:
+        return asyncio.run(coro)
 
 
 def parse_args() -> argparse.Namespace:
@@ -178,6 +217,9 @@ def main() -> None:
     project_dir_input = args.project_dir
     project_dir = Path(project_dir_input)
 
+    # Logger will be initialized after project_dir is resolved
+    logger = None
+
     if project_dir.is_absolute():
         # Absolute path provided - use directly
         if not project_dir.exists():
@@ -193,10 +235,21 @@ def main() -> None:
             print("Use an absolute path or register the project first.")
             return
 
+    # Initialize logger now that project_dir is resolved
+    logger = get_logger(project_dir, agent_id="entry-point", console_output=False)
+    logger.info(
+        "Script started",
+        input_path=project_dir_input,
+        resolved_path=str(project_dir),
+        agent_type=args.agent_type,
+        concurrency=args.concurrency,
+        yolo_mode=args.yolo,
+    )
+
     try:
         if args.agent_type:
             # Subprocess mode - spawned by orchestrator for a specific role
-            asyncio.run(
+            safe_asyncio_run(
                 run_autonomous_agent(
                     project_dir=project_dir,
                     model=args.model,
@@ -216,7 +269,7 @@ def main() -> None:
             if concurrency != args.concurrency:
                 print(f"Clamping concurrency to valid range: {concurrency}", flush=True)
 
-            asyncio.run(
+            safe_asyncio_run(
                 run_parallel_orchestrator(
                     project_dir=project_dir,
                     max_concurrency=concurrency,
@@ -228,8 +281,12 @@ def main() -> None:
     except KeyboardInterrupt:
         print("\n\nInterrupted by user")
         print("To resume, run the same command again")
+        if logger:
+            logger.info("Interrupted by user")
     except Exception as e:
         print(f"\nFatal error: {e}")
+        if logger:
+            logger.error("Fatal error", error_type=type(e).__name__, message=str(e)[:200])
         raise
 
 

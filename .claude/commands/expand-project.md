@@ -170,6 +170,24 @@ feature_create_bulk(features=[
 - Each feature needs: category, name, description, steps (array of strings)
 - The tool will return the count of created features - verify it matches your expected count
 
+**IMPORTANT - XML Fallback:**
+If the `feature_create_bulk` tool is unavailable or fails, output features in this XML format as a backup:
+
+```xml
+<features_to_create>
+[
+  {
+    "category": "functional",
+    "name": "Feature name",
+    "description": "Description",
+    "steps": ["Step 1", "Step 2"]
+  }
+]
+</features_to_create>
+```
+
+The system will parse this XML and create features automatically.
+
 ---
 
 # FEATURE QUALITY STANDARDS
