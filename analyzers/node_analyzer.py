@@ -29,6 +29,7 @@ class NodeAnalyzer(BaseAnalyzer):
     def __init__(self, project_dir: Path):
         super().__init__(project_dir)
         self._detected_stack = "nodejs"  # Default, may change to "express" or "nestjs"
+        self._detection_confidence: float | None = None  # Store confidence from can_analyze()
 
     def can_analyze(self) -> tuple[bool, float]:
         """Detect if this is a Node.js/Express/NestJS project."""
@@ -48,6 +49,7 @@ class NodeAnalyzer(BaseAnalyzer):
                 if "@nestjs/core" in deps:
                     self._detected_stack = "nestjs"
                     confidence = 0.95
+                    self._detection_confidence = confidence
                     return True, confidence
 
                 # Check for Express
@@ -60,24 +62,28 @@ class NodeAnalyzer(BaseAnalyzer):
                        (self.project_dir / "src" / "routes").exists():
                         confidence = 0.9
 
+                    self._detection_confidence = confidence
                     return True, confidence
 
                 # Check for Fastify
                 if "fastify" in deps:
                     self._detected_stack = "fastify"
                     confidence = 0.85
+                    self._detection_confidence = confidence
                     return True, confidence
 
                 # Check for Koa
                 if "koa" in deps:
                     self._detected_stack = "koa"
                     confidence = 0.85
+                    self._detection_confidence = confidence
                     return True, confidence
 
                 # Generic Node.js (has node-specific files but no specific framework)
                 if "type" in data and data["type"] == "module":
                     self._detected_stack = "nodejs"
                     confidence = 0.5
+                    self._detection_confidence = confidence
                     return True, confidence
 
             except (json.JSONDecodeError, OSError):
@@ -88,7 +94,9 @@ class NodeAnalyzer(BaseAnalyzer):
         for file in common_files:
             if (self.project_dir / file).exists():
                 self._detected_stack = "nodejs"
-                return True, 0.5
+                confidence = 0.5
+                self._detection_confidence = confidence
+                return True, confidence
 
         return False, 0.0
 
@@ -158,9 +166,13 @@ class NodeAnalyzer(BaseAnalyzer):
         # Routes is the same as endpoints for Node.js analyzers
         routes = endpoints
 
+        # Use stored detection confidence with fallback to 0.85, clamped to [0.0, 1.0]
+        confidence = float(self._detection_confidence) if self._detection_confidence is not None else 0.85
+        confidence = max(0.0, min(1.0, confidence))
+
         return {
             "stack_name": self._detected_stack,
-            "confidence": 0.85,
+            "confidence": confidence,
             "routes": routes,
             "components": components,
             "endpoints": endpoints,
