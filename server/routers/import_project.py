@@ -208,7 +208,7 @@ async def analyze_project(request: AnalyzeRequest):
 
     except Exception as e:
         logger.exception(f"Error analyzing project: {e}")
-        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Analysis failed")
 
 
 @router.post("/extract-features", response_model=ExtractFeaturesResponse)
