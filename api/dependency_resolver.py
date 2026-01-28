@@ -300,15 +300,20 @@ def compute_scheduling_scores(features: list[dict]) -> dict[int, float]:
                 parents[f["id"]].append(dep_id)
 
     # Calculate depths via BFS from roots
+    # Use visited set to prevent infinite loops from circular dependencies
     depths: dict[int, int] = {}
+    visited: set[int] = set()
     roots = [f["id"] for f in features if not parents[f["id"]]]
     queue = [(root, 0) for root in roots]
     while queue:
         node_id, depth = queue.pop(0)
-        if node_id not in depths or depth > depths[node_id]:
-            depths[node_id] = depth
+        if node_id in visited:
+            continue  # Skip already visited nodes (handles cycles)
+        visited.add(node_id)
+        depths[node_id] = depth
         for child_id in children[node_id]:
-            queue.append((child_id, depth + 1))
+            if child_id not in visited:
+                queue.append((child_id, depth + 1))
 
     # Handle orphaned nodes (shouldn't happen but be safe)
     for f in features:
