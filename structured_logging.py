@@ -488,7 +488,9 @@ class LogQuery:
         where_clause = "1=1"
         if since:
             where_clause = "timestamp >= ?"
-            params.append(since.isoformat())
+            # Use consistent timestamp format with "Z" suffix to match stored timestamps
+            ts = since.isoformat().replace("+00:00", "Z")
+            params.append(ts if ts.endswith("Z") else since.isoformat())
 
         cursor.execute(
             f"""
