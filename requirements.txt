@@ -13,6 +13,7 @@ pywinpty~=2.0; sys_platform == "win32"
 pyyaml~=6.0
 slowapi~=0.1.9
 pydantic-settings~=2.0
+openai>=1.52.0
 
 # Dev dependencies
 ruff~=0.8.0

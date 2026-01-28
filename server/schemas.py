@@ -263,6 +263,7 @@ class SetupStatus(BaseModel):
     credentials: bool
     node: bool
     npm: bool
+    gemini: bool = False
 
 
 # ============================================================================
