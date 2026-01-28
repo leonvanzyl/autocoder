@@ -121,7 +121,11 @@ export function useAssistantChat({
       try {
         const data = JSON.parse(event.data) as AssistantChatServerMessage;
         if (import.meta.env.DEV) {
-          console.debug('[useAssistantChat] Received WebSocket message:', data.type, data);
+          console.debug(
+            "[useAssistantChat] Received WebSocket message:",
+            data.type,
+            data,
+          );
         }
 
         switch (data.type) {
@@ -281,7 +285,7 @@ export function useAssistantChat({
             setConversationId(existingConversationId);
           }
           if (import.meta.env.DEV) {
-            console.debug('[useAssistantChat] Sending start message:', payload);
+            console.debug("[useAssistantChat] Sending start message:", payload);
           }
           wsRef.current.send(JSON.stringify(payload));
         } else if (wsRef.current?.readyState === WebSocket.CONNECTING) {

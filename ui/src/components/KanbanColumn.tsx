@@ -1,30 +1,30 @@
-import { FeatureCard } from './FeatureCard'
-import { Plus, Sparkles, Wand2 } from 'lucide-react'
-import type { Feature, ActiveAgent } from '../lib/types'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
+import { FeatureCard } from "./FeatureCard";
+import { Plus, Sparkles, Wand2 } from "lucide-react";
+import type { Feature, ActiveAgent } from "../lib/types";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 
 interface KanbanColumnProps {
-  title: string
-  count: number
-  features: Feature[]
-  allFeatures?: Feature[]
-  activeAgents?: ActiveAgent[]
-  color: 'pending' | 'progress' | 'done'
-  onFeatureClick: (feature: Feature) => void
-  onAddFeature?: () => void
-  onExpandProject?: () => void
-  showExpandButton?: boolean
-  onCreateSpec?: () => void
-  showCreateSpec?: boolean
+  title: string;
+  count: number;
+  features: Feature[];
+  allFeatures?: Feature[];
+  activeAgents?: ActiveAgent[];
+  color: "pending" | "progress" | "done";
+  onFeatureClick: (feature: Feature) => void;
+  onAddFeature?: () => void;
+  onExpandProject?: () => void;
+  showExpandButton?: boolean;
+  onCreateSpec?: () => void;
+  showCreateSpec?: boolean;
 }
 
 const colorMap = {
-  pending: 'border-t-4 border-t-muted',
-  progress: 'border-t-4 border-t-primary',
-  done: 'border-t-4 border-t-primary',
-}
+  pending: "border-t-4 border-t-muted",
+  progress: "border-t-4 border-t-primary",
+  done: "border-t-4 border-t-primary",
+};
 
 export function KanbanColumn({
   title,
@@ -42,8 +42,8 @@ export function KanbanColumn({
 }: KanbanColumnProps) {
   // Create a map of feature ID to active agent for quick lookup
   const agentByFeatureId = new Map(
-    activeAgents.map(agent => [agent.featureId, agent])
-  )
+    activeAgents.map((agent) => [agent.featureId, agent]),
+  );
 
   return (
     <Card className={`overflow-hidden ${colorMap[color]} py-0`}>
@@ -93,7 +93,7 @@ export function KanbanColumn({
                     </Button>
                   </div>
                 ) : (
-                  'No features'
+                  "No features"
                 )}
               </div>
             ) : (
@@ -106,7 +106,7 @@ export function KanbanColumn({
                   <FeatureCard
                     feature={feature}
                     onClick={() => onFeatureClick(feature)}
-                    isInProgress={color === 'progress'}
+                    isInProgress={color === "progress"}
                     allFeatures={allFeatures}
                     activeAgent={agentByFeatureId.get(feature.id)}
                   />
@@ -117,5 +117,5 @@ export function KanbanColumn({
         </div>
       </CardContent>
     </Card>
-  )
+  );
 }

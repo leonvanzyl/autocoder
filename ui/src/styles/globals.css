@@ -48,7 +48,8 @@
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
   --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --shadow-lg:
+    0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
 
   /* Log level colors (kept for Terminal/Debug components) */
   --color-log-error: #ef4444;
@@ -63,8 +64,8 @@
   --color-status-done: oklch(0.85 0.08 245);
 
   /* Font stacks */
-  --font-sans: 'Open Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-mono: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  --font-sans: "Open Sans", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", "Consolas", monospace;
 
   /* Transitions */
   --transition-fast: 150ms;
@@ -79,7 +80,7 @@
   --card-foreground: oklch(0.95 0 0);
   --popover: oklch(0.16 0.005 250);
   --popover-foreground: oklch(0.95 0 0);
-  --primary: oklch(0.6692 0.1607 245.0110);
+  --primary: oklch(0.6692 0.1607 245.011);
   --primary-foreground: oklch(0.985 0 0);
   --secondary: oklch(0.269 0 0);
   --secondary-foreground: oklch(0.985 0 0);
@@ -89,9 +90,9 @@
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.704 0.191 22.216);
   --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.30 0 0);
+  --border: oklch(0.3 0 0);
   --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.6692 0.1607 245.0110);
+  --ring: oklch(0.6692 0.1607 245.011);
   --chart-1: oklch(0.488 0.243 264.376);
   --chart-2: oklch(0.696 0.17 162.48);
   --chart-3: oklch(0.769 0.188 70.08);
@@ -110,7 +111,8 @@
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
   --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.4), 0 1px 2px -1px rgb(0 0 0 / 0.3);
   --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.4), 0 2px 4px -2px rgb(0 0 0 / 0.3);
-  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.4), 0 4px 6px -4px rgb(0 0 0 / 0.3);
+  --shadow-lg:
+    0 10px 15px -3px rgb(0 0 0 / 0.4), 0 4px 6px -4px rgb(0 0 0 / 0.3);
 
   /* Log level colors for dark mode */
   --color-log-error: #f87171;
@@ -134,42 +136,46 @@
   --radius: 0.5rem;
   --background: oklch(0.9818 0.0054 95.0986);
   --foreground: oklch(0.3438 0.0269 95.7226);
-  --card: oklch(0.9650 0.0080 90);
+  --card: oklch(0.965 0.008 90);
   --card-foreground: oklch(0.3438 0.0269 95.7226);
   --popover: oklch(0.9818 0.0054 95.0986);
   --popover-foreground: oklch(0.3438 0.0269 95.7226);
   --primary: oklch(0.6171 0.1375 39.0427);
   --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.9400 0.0120 85);
+  --secondary: oklch(0.94 0.012 85);
   --secondary-foreground: oklch(0.3438 0.0269 95.7226);
-  --muted: oklch(0.9300 0.0100 90);
-  --muted-foreground: oklch(0.5500 0.0200 95);
-  --accent: oklch(0.9200 0.0150 80);
+  --muted: oklch(0.93 0.01 90);
+  --muted-foreground: oklch(0.55 0.02 95);
+  --accent: oklch(0.92 0.015 80);
   --accent-foreground: oklch(0.3438 0.0269 95.7226);
   --destructive: oklch(0.6188 0.2376 25.7658);
   --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.8900 0.0180 85);
-  --input: oklch(0.9500 0.0080 90);
+  --border: oklch(0.89 0.018 85);
+  --input: oklch(0.95 0.008 90);
   --ring: oklch(0.6171 0.1375 39.0427);
   --chart-1: oklch(0.6171 0.1375 39.0427);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
   --chart-4: oklch(0.828 0.189 84.429);
   --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.9700 0.0070 92);
+  --sidebar: oklch(0.97 0.007 92);
   --sidebar-foreground: oklch(0.3438 0.0269 95.7226);
   --sidebar-primary: oklch(0.6171 0.1375 39.0427);
   --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.9200 0.0150 80);
+  --sidebar-accent: oklch(0.92 0.015 80);
   --sidebar-accent-foreground: oklch(0.3438 0.0269 95.7226);
-  --sidebar-border: oklch(0.8900 0.0180 85);
+  --sidebar-border: oklch(0.89 0.018 85);
   --sidebar-ring: oklch(0.6171 0.1375 39.0427);
 
   /* Shadow variables - softer for Claude theme */
   --shadow-sm: 0 1px 2px 0 rgb(139 115 85 / 0.05);
-  --shadow: 0 1px 3px 0 rgb(139 115 85 / 0.08), 0 1px 2px -1px rgb(139 115 85 / 0.06);
-  --shadow-md: 0 4px 6px -1px rgb(139 115 85 / 0.08), 0 2px 4px -2px rgb(139 115 85 / 0.06);
-  --shadow-lg: 0 10px 15px -3px rgb(139 115 85 / 0.08), 0 4px 6px -4px rgb(139 115 85 / 0.06);
+  --shadow:
+    0 1px 3px 0 rgb(139 115 85 / 0.08), 0 1px 2px -1px rgb(139 115 85 / 0.06);
+  --shadow-md:
+    0 4px 6px -1px rgb(139 115 85 / 0.08), 0 2px 4px -2px rgb(139 115 85 / 0.06);
+  --shadow-lg:
+    0 10px 15px -3px rgb(139 115 85 / 0.08),
+    0 4px 6px -4px rgb(139 115 85 / 0.06);
 
   /* Log level colors */
   --color-log-error: #dc6b52;
@@ -179,54 +185,60 @@
   --color-log-success: #6b9e6b;
 
   /* Status colors for Kanban */
-  --color-status-pending: oklch(0.9200 0.0300 80);
-  --color-status-progress: oklch(0.8800 0.0500 60);
-  --color-status-done: oklch(0.8800 0.0500 140);
+  --color-status-pending: oklch(0.92 0.03 80);
+  --color-status-progress: oklch(0.88 0.05 60);
+  --color-status-done: oklch(0.88 0.05 140);
 
   /* Font stacks - system fonts for Claude theme */
-  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  --font-mono: 'SF Mono', SFMono-Regular, ui-monospace, 'DejaVu Sans Mono', Menlo, Consolas, monospace;
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
+    Arial, sans-serif;
+  --font-mono:
+    "SF Mono", SFMono-Regular, ui-monospace, "DejaVu Sans Mono", Menlo,
+    Consolas, monospace;
 }
 
 .theme-claude.dark {
   --background: oklch(0.2679 0.0036 106.6427);
   --foreground: oklch(0.8074 0.0142 93.0137);
-  --card: oklch(0.3200 0.0050 100);
+  --card: oklch(0.32 0.005 100);
   --card-foreground: oklch(0.8074 0.0142 93.0137);
-  --popover: oklch(0.3200 0.0050 100);
+  --popover: oklch(0.32 0.005 100);
   --popover-foreground: oklch(0.8074 0.0142 93.0137);
-  --primary: oklch(0.6800 0.1500 39);
+  --primary: oklch(0.68 0.15 39);
   --primary-foreground: oklch(0.15 0 0);
-  --secondary: oklch(0.3500 0.0080 100);
+  --secondary: oklch(0.35 0.008 100);
   --secondary-foreground: oklch(0.8074 0.0142 93.0137);
-  --muted: oklch(0.3800 0.0060 100);
-  --muted-foreground: oklch(0.6500 0.0120 93);
-  --accent: oklch(0.4000 0.0100 90);
+  --muted: oklch(0.38 0.006 100);
+  --muted-foreground: oklch(0.65 0.012 93);
+  --accent: oklch(0.4 0.01 90);
   --accent-foreground: oklch(0.8074 0.0142 93.0137);
   --destructive: oklch(0.704 0.191 22.216);
   --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.4200 0.0080 95);
-  --input: oklch(0.3500 0.0050 100);
-  --ring: oklch(0.6800 0.1500 39);
-  --chart-1: oklch(0.6800 0.1500 39);
+  --border: oklch(0.42 0.008 95);
+  --input: oklch(0.35 0.005 100);
+  --ring: oklch(0.68 0.15 39);
+  --chart-1: oklch(0.68 0.15 39);
   --chart-2: oklch(0.696 0.17 162.48);
   --chart-3: oklch(0.769 0.188 70.08);
   --chart-4: oklch(0.627 0.265 303.9);
   --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.2900 0.0040 105);
+  --sidebar: oklch(0.29 0.004 105);
   --sidebar-foreground: oklch(0.8074 0.0142 93.0137);
-  --sidebar-primary: oklch(0.6800 0.1500 39);
+  --sidebar-primary: oklch(0.68 0.15 39);
   --sidebar-primary-foreground: oklch(0.15 0 0);
-  --sidebar-accent: oklch(0.3800 0.0080 95);
+  --sidebar-accent: oklch(0.38 0.008 95);
   --sidebar-accent-foreground: oklch(0.8074 0.0142 93.0137);
-  --sidebar-border: oklch(0.4000 0.0060 100);
-  --sidebar-ring: oklch(0.6800 0.1500 39);
+  --sidebar-border: oklch(0.4 0.006 100);
+  --sidebar-ring: oklch(0.68 0.15 39);
 
   /* Shadow variables - dark mode */
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.25);
   --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.35), 0 1px 2px -1px rgb(0 0 0 / 0.25);
-  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.35), 0 2px 4px -2px rgb(0 0 0 / 0.25);
-  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.35), 0 4px 6px -4px rgb(0 0 0 / 0.25);
+  --shadow-md:
+    0 4px 6px -1px rgb(0 0 0 / 0.35), 0 2px 4px -2px rgb(0 0 0 / 0.25);
+  --shadow-lg:
+    0 10px 15px -3px rgb(0 0 0 / 0.35), 0 4px 6px -4px rgb(0 0 0 / 0.25);
 
   /* Log level colors for dark mode */
   --color-log-error: #e8877a;
@@ -236,9 +248,9 @@
   --color-log-success: #8bb58b;
 
   /* Status colors for Kanban - dark mode */
-  --color-status-pending: oklch(0.3500 0.0300 80);
-  --color-status-progress: oklch(0.4000 0.0500 60);
-  --color-status-done: oklch(0.4000 0.0500 140);
+  --color-status-pending: oklch(0.35 0.03 80);
+  --color-status-progress: oklch(0.4 0.05 60);
+  --color-status-done: oklch(0.4 0.05 140);
 }
 
 /* ============================================================================
@@ -248,38 +260,38 @@
 
 .theme-neo-brutalism {
   --radius: 0px;
-  --background: oklch(1.0000 0 0);
+  --background: oklch(1 0 0);
   --foreground: oklch(0 0 0);
-  --card: oklch(0.9800 0.0150 95);
+  --card: oklch(0.98 0.015 95);
   --card-foreground: oklch(0 0 0);
-  --popover: oklch(1.0000 0 0);
+  --popover: oklch(1 0 0);
   --popover-foreground: oklch(0 0 0);
-  --primary: oklch(0.6489 0.2370 26.9728);
+  --primary: oklch(0.6489 0.237 26.9728);
   --primary-foreground: oklch(0 0 0);
-  --secondary: oklch(0.9500 0.1500 100);
+  --secondary: oklch(0.95 0.15 100);
   --secondary-foreground: oklch(0 0 0);
-  --muted: oklch(0.9400 0.0100 90);
-  --muted-foreground: oklch(0.4000 0 0);
-  --accent: oklch(0.8800 0.1800 85);
+  --muted: oklch(0.94 0.01 90);
+  --muted-foreground: oklch(0.4 0 0);
+  --accent: oklch(0.88 0.18 85);
   --accent-foreground: oklch(0 0 0);
-  --destructive: oklch(0.6500 0.2500 25);
+  --destructive: oklch(0.65 0.25 25);
   --destructive-foreground: oklch(0 0 0);
   --border: oklch(0 0 0);
-  --input: oklch(1.0000 0 0);
-  --ring: oklch(0.6489 0.2370 26.9728);
-  --chart-1: oklch(0.6489 0.2370 26.9728);
-  --chart-2: oklch(0.8000 0.2000 130);
-  --chart-3: oklch(0.7000 0.2200 280);
-  --chart-4: oklch(0.8800 0.1800 85);
-  --chart-5: oklch(0.6500 0.2500 330);
-  --sidebar: oklch(0.9500 0.1500 100);
+  --input: oklch(1 0 0);
+  --ring: oklch(0.6489 0.237 26.9728);
+  --chart-1: oklch(0.6489 0.237 26.9728);
+  --chart-2: oklch(0.8 0.2 130);
+  --chart-3: oklch(0.7 0.22 280);
+  --chart-4: oklch(0.88 0.18 85);
+  --chart-5: oklch(0.65 0.25 330);
+  --sidebar: oklch(0.95 0.15 100);
   --sidebar-foreground: oklch(0 0 0);
-  --sidebar-primary: oklch(0.6489 0.2370 26.9728);
+  --sidebar-primary: oklch(0.6489 0.237 26.9728);
   --sidebar-primary-foreground: oklch(0 0 0);
-  --sidebar-accent: oklch(0.8800 0.1800 85);
+  --sidebar-accent: oklch(0.88 0.18 85);
   --sidebar-accent-foreground: oklch(0 0 0);
   --sidebar-border: oklch(0 0 0);
-  --sidebar-ring: oklch(0.6489 0.2370 26.9728);
+  --sidebar-ring: oklch(0.6489 0.237 26.9728);
 
   /* Shadow variables - hard shadows */
   --shadow-sm: 2px 2px 0px rgb(0 0 0);
@@ -295,48 +307,48 @@
   --color-log-success: #00cc00;
 
   /* Status colors for Kanban */
-  --color-status-pending: oklch(0.9500 0.1500 100);
-  --color-status-progress: oklch(0.8200 0.1800 200);
-  --color-status-done: oklch(0.8000 0.2000 130);
+  --color-status-pending: oklch(0.95 0.15 100);
+  --color-status-progress: oklch(0.82 0.18 200);
+  --color-status-done: oklch(0.8 0.2 130);
 
   /* Font stacks - DM Sans for Neo Brutalism */
-  --font-sans: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-mono: 'Space Mono', 'JetBrains Mono', monospace;
+  --font-sans: "DM Sans", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: "Space Mono", "JetBrains Mono", monospace;
 }
 
 .theme-neo-brutalism.dark {
-  --background: oklch(0.1200 0 0);
-  --foreground: oklch(1.0000 0 0);
-  --card: oklch(0.1800 0.0080 280);
-  --card-foreground: oklch(1.0000 0 0);
-  --popover: oklch(0.1500 0 0);
-  --popover-foreground: oklch(1.0000 0 0);
-  --primary: oklch(0.7200 0.2500 27);
+  --background: oklch(0.12 0 0);
+  --foreground: oklch(1 0 0);
+  --card: oklch(0.18 0.008 280);
+  --card-foreground: oklch(1 0 0);
+  --popover: oklch(0.15 0 0);
+  --popover-foreground: oklch(1 0 0);
+  --primary: oklch(0.72 0.25 27);
   --primary-foreground: oklch(0 0 0);
-  --secondary: oklch(0.4500 0.1200 100);
-  --secondary-foreground: oklch(1.0000 0 0);
-  --muted: oklch(0.2500 0.0050 0);
-  --muted-foreground: oklch(0.6500 0 0);
-  --accent: oklch(0.5500 0.1500 85);
+  --secondary: oklch(0.45 0.12 100);
+  --secondary-foreground: oklch(1 0 0);
+  --muted: oklch(0.25 0.005 0);
+  --muted-foreground: oklch(0.65 0 0);
+  --accent: oklch(0.55 0.15 85);
   --accent-foreground: oklch(0 0 0);
-  --destructive: oklch(0.6500 0.2500 25);
+  --destructive: oklch(0.65 0.25 25);
   --destructive-foreground: oklch(0 0 0);
-  --border: oklch(0.7000 0 0);
-  --input: oklch(0.2000 0 0);
-  --ring: oklch(0.7200 0.2500 27);
-  --chart-1: oklch(0.7200 0.2500 27);
-  --chart-2: oklch(0.7500 0.1800 130);
-  --chart-3: oklch(0.6500 0.2000 280);
-  --chart-4: oklch(0.7000 0.1500 85);
-  --chart-5: oklch(0.6000 0.2200 330);
-  --sidebar: oklch(0.1500 0.0050 280);
-  --sidebar-foreground: oklch(1.0000 0 0);
-  --sidebar-primary: oklch(0.7200 0.2500 27);
+  --border: oklch(0.7 0 0);
+  --input: oklch(0.2 0 0);
+  --ring: oklch(0.72 0.25 27);
+  --chart-1: oklch(0.72 0.25 27);
+  --chart-2: oklch(0.75 0.18 130);
+  --chart-3: oklch(0.65 0.2 280);
+  --chart-4: oklch(0.7 0.15 85);
+  --chart-5: oklch(0.6 0.22 330);
+  --sidebar: oklch(0.15 0.005 280);
+  --sidebar-foreground: oklch(1 0 0);
+  --sidebar-primary: oklch(0.72 0.25 27);
   --sidebar-primary-foreground: oklch(0 0 0);
-  --sidebar-accent: oklch(0.4500 0.1200 85);
-  --sidebar-accent-foreground: oklch(1.0000 0 0);
-  --sidebar-border: oklch(0.5000 0 0);
-  --sidebar-ring: oklch(0.7200 0.2500 27);
+  --sidebar-accent: oklch(0.45 0.12 85);
+  --sidebar-accent-foreground: oklch(1 0 0);
+  --sidebar-border: oklch(0.5 0 0);
+  --sidebar-ring: oklch(0.72 0.25 27);
 
   /* Shadow variables - hard shadows for dark mode */
   --shadow-sm: 2px 2px 0px rgb(255 255 255 / 0.3);
@@ -352,9 +364,9 @@
   --color-log-success: #44dd44;
 
   /* Status colors for Kanban - dark mode */
-  --color-status-pending: oklch(0.4500 0.1200 100);
-  --color-status-progress: oklch(0.4500 0.1500 200);
-  --color-status-done: oklch(0.4500 0.1500 130);
+  --color-status-pending: oklch(0.45 0.12 100);
+  --color-status-progress: oklch(0.45 0.15 200);
+  --color-status-done: oklch(0.45 0.15 130);
 }
 
 /* ============================================================================
@@ -366,42 +378,50 @@
   --radius: 0.25rem;
   --background: oklch(0.9735 0.0261 90.0953);
   --foreground: oklch(0.3092 0.0518 219.6516);
-  --card: oklch(0.9306 0.0260 92.4020);
+  --card: oklch(0.9306 0.026 92.402);
   --card-foreground: oklch(0.3092 0.0518 219.6516);
-  --popover: oklch(0.9306 0.0260 92.4020);
+  --popover: oklch(0.9306 0.026 92.402);
   --popover-foreground: oklch(0.3092 0.0518 219.6516);
   --primary: oklch(0.5924 0.2025 355.8943);
-  --primary-foreground: oklch(1.0000 0 0);
-  --secondary: oklch(0.6437 0.1019 187.3840);
-  --secondary-foreground: oklch(1.0000 0 0);
-  --muted: oklch(0.6979 0.0159 196.7940);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.6437 0.1019 187.384);
+  --secondary-foreground: oklch(1 0 0);
+  --muted: oklch(0.6979 0.0159 196.794);
   --muted-foreground: oklch(0.3092 0.0518 219.6516);
   --accent: oklch(0.5808 0.1732 39.5003);
-  --accent-foreground: oklch(1.0000 0 0);
+  --accent-foreground: oklch(1 0 0);
   --destructive: oklch(0.5863 0.2064 27.1172);
-  --destructive-foreground: oklch(1.0000 0 0);
+  --destructive-foreground: oklch(1 0 0);
   --border: oklch(0.6537 0.0197 205.2618);
   --input: oklch(0.6537 0.0197 205.2618);
   --ring: oklch(0.5924 0.2025 355.8943);
   --chart-1: oklch(0.6149 0.1394 244.9273);
-  --chart-2: oklch(0.6437 0.1019 187.3840);
+  --chart-2: oklch(0.6437 0.1019 187.384);
   --chart-3: oklch(0.5924 0.2025 355.8943);
   --chart-4: oklch(0.5808 0.1732 39.5003);
   --chart-5: oklch(0.5863 0.2064 27.1172);
   --sidebar: oklch(0.9735 0.0261 90.0953);
   --sidebar-foreground: oklch(0.3092 0.0518 219.6516);
   --sidebar-primary: oklch(0.5924 0.2025 355.8943);
-  --sidebar-primary-foreground: oklch(1.0000 0 0);
-  --sidebar-accent: oklch(0.6437 0.1019 187.3840);
-  --sidebar-accent-foreground: oklch(1.0000 0 0);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.6437 0.1019 187.384);
+  --sidebar-accent-foreground: oklch(1 0 0);
   --sidebar-border: oklch(0.6537 0.0197 205.2618);
   --sidebar-ring: oklch(0.5924 0.2025 355.8943);
 
   /* Shadow variables - retro arcade style */
-  --shadow-sm: 2px 2px 4px 0px hsl(196 83% 10% / 0.15), 2px 1px 2px -1px hsl(196 83% 10% / 0.15);
-  --shadow: 2px 2px 4px 0px hsl(196 83% 10% / 0.15), 2px 1px 2px -1px hsl(196 83% 10% / 0.15);
-  --shadow-md: 2px 2px 4px 0px hsl(196 83% 10% / 0.15), 2px 2px 4px -1px hsl(196 83% 10% / 0.15);
-  --shadow-lg: 2px 2px 4px 0px hsl(196 83% 10% / 0.15), 2px 4px 6px -1px hsl(196 83% 10% / 0.15);
+  --shadow-sm:
+    2px 2px 4px 0px hsl(196 83% 10% / 0.15),
+    2px 1px 2px -1px hsl(196 83% 10% / 0.15);
+  --shadow:
+    2px 2px 4px 0px hsl(196 83% 10% / 0.15),
+    2px 1px 2px -1px hsl(196 83% 10% / 0.15);
+  --shadow-md:
+    2px 2px 4px 0px hsl(196 83% 10% / 0.15),
+    2px 2px 4px -1px hsl(196 83% 10% / 0.15);
+  --shadow-lg:
+    2px 2px 4px 0px hsl(196 83% 10% / 0.15),
+    2px 4px 6px -1px hsl(196 83% 10% / 0.15);
 
   /* Log level colors */
   --color-log-error: #e8457c;
@@ -411,54 +431,62 @@
   --color-log-success: #6bbd6b;
 
   /* Status colors for Kanban */
-  --color-status-pending: oklch(0.9306 0.0260 92.4020);
-  --color-status-progress: oklch(0.6437 0.1019 187.3840);
+  --color-status-pending: oklch(0.9306 0.026 92.402);
+  --color-status-progress: oklch(0.6437 0.1019 187.384);
   --color-status-done: oklch(0.5924 0.2025 355.8943);
 
   /* Font stacks - Outfit for Retro Arcade */
-  --font-sans: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-mono: 'Space Mono', 'JetBrains Mono', monospace;
+  --font-sans: "Outfit", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: "Space Mono", "JetBrains Mono", monospace;
 }
 
 .theme-retro-arcade.dark {
   --background: oklch(0.2673 0.0486 219.8169);
-  --foreground: oklch(0.6979 0.0159 196.7940);
+  --foreground: oklch(0.6979 0.0159 196.794);
   --card: oklch(0.3092 0.0518 219.6516);
-  --card-foreground: oklch(0.6979 0.0159 196.7940);
+  --card-foreground: oklch(0.6979 0.0159 196.794);
   --popover: oklch(0.3092 0.0518 219.6516);
-  --popover-foreground: oklch(0.6979 0.0159 196.7940);
+  --popover-foreground: oklch(0.6979 0.0159 196.794);
   --primary: oklch(0.5924 0.2025 355.8943);
-  --primary-foreground: oklch(1.0000 0 0);
-  --secondary: oklch(0.6437 0.1019 187.3840);
-  --secondary-foreground: oklch(1.0000 0 0);
-  --muted: oklch(0.5230 0.0283 219.1365);
-  --muted-foreground: oklch(0.6979 0.0159 196.7940);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.6437 0.1019 187.384);
+  --secondary-foreground: oklch(1 0 0);
+  --muted: oklch(0.523 0.0283 219.1365);
+  --muted-foreground: oklch(0.6979 0.0159 196.794);
   --accent: oklch(0.5808 0.1732 39.5003);
-  --accent-foreground: oklch(1.0000 0 0);
+  --accent-foreground: oklch(1 0 0);
   --destructive: oklch(0.5863 0.2064 27.1172);
-  --destructive-foreground: oklch(1.0000 0 0);
-  --border: oklch(0.5230 0.0283 219.1365);
-  --input: oklch(0.5230 0.0283 219.1365);
+  --destructive-foreground: oklch(1 0 0);
+  --border: oklch(0.523 0.0283 219.1365);
+  --input: oklch(0.523 0.0283 219.1365);
   --ring: oklch(0.5924 0.2025 355.8943);
   --chart-1: oklch(0.6149 0.1394 244.9273);
-  --chart-2: oklch(0.6437 0.1019 187.3840);
+  --chart-2: oklch(0.6437 0.1019 187.384);
   --chart-3: oklch(0.5924 0.2025 355.8943);
   --chart-4: oklch(0.5808 0.1732 39.5003);
   --chart-5: oklch(0.5863 0.2064 27.1172);
   --sidebar: oklch(0.2673 0.0486 219.8169);
-  --sidebar-foreground: oklch(0.6979 0.0159 196.7940);
+  --sidebar-foreground: oklch(0.6979 0.0159 196.794);
   --sidebar-primary: oklch(0.5924 0.2025 355.8943);
-  --sidebar-primary-foreground: oklch(1.0000 0 0);
-  --sidebar-accent: oklch(0.6437 0.1019 187.3840);
-  --sidebar-accent-foreground: oklch(1.0000 0 0);
-  --sidebar-border: oklch(0.5230 0.0283 219.1365);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.6437 0.1019 187.384);
+  --sidebar-accent-foreground: oklch(1 0 0);
+  --sidebar-border: oklch(0.523 0.0283 219.1365);
   --sidebar-ring: oklch(0.5924 0.2025 355.8943);
 
   /* Shadow variables - retro arcade dark mode */
-  --shadow-sm: 2px 2px 4px 0px hsl(196 83% 10% / 0.15), 2px 1px 2px -1px hsl(196 83% 10% / 0.15);
-  --shadow: 2px 2px 4px 0px hsl(196 83% 10% / 0.15), 2px 1px 2px -1px hsl(196 83% 10% / 0.15);
-  --shadow-md: 2px 2px 4px 0px hsl(196 83% 10% / 0.15), 2px 2px 4px -1px hsl(196 83% 10% / 0.15);
-  --shadow-lg: 2px 2px 4px 0px hsl(196 83% 10% / 0.15), 2px 4px 6px -1px hsl(196 83% 10% / 0.15);
+  --shadow-sm:
+    2px 2px 4px 0px hsl(196 83% 10% / 0.15),
+    2px 1px 2px -1px hsl(196 83% 10% / 0.15);
+  --shadow:
+    2px 2px 4px 0px hsl(196 83% 10% / 0.15),
+    2px 1px 2px -1px hsl(196 83% 10% / 0.15);
+  --shadow-md:
+    2px 2px 4px 0px hsl(196 83% 10% / 0.15),
+    2px 2px 4px -1px hsl(196 83% 10% / 0.15);
+  --shadow-lg:
+    2px 2px 4px 0px hsl(196 83% 10% / 0.15),
+    2px 4px 6px -1px hsl(196 83% 10% / 0.15);
 
   /* Log level colors for dark mode */
   --color-log-error: #f06b99;
@@ -469,8 +497,8 @@
 
   /* Status colors for Kanban - dark mode */
   --color-status-pending: oklch(0.3092 0.0518 219.6516);
-  --color-status-progress: oklch(0.5230 0.0800 187);
-  --color-status-done: oklch(0.5000 0.1500 355);
+  --color-status-progress: oklch(0.523 0.08 187);
+  --color-status-done: oklch(0.5 0.15 355);
 }
 
 /* ============================================================================
@@ -481,44 +509,50 @@
 
 .theme-aurora {
   --radius: 0.5rem;
-  --background: oklch(0.9850 0.0080 285);
-  --foreground: oklch(0.2500 0.0400 285);
-  --card: oklch(0.9700 0.0120 285);
-  --card-foreground: oklch(0.2500 0.0400 285);
-  --popover: oklch(0.9800 0.0100 285);
-  --popover-foreground: oklch(0.2500 0.0400 285);
-  --primary: oklch(0.5500 0.2200 285);
-  --primary-foreground: oklch(1.0000 0 0);
-  --secondary: oklch(0.7000 0.1400 175);
-  --secondary-foreground: oklch(0.1500 0.0300 175);
-  --muted: oklch(0.9400 0.0150 285);
-  --muted-foreground: oklch(0.4500 0.0300 285);
-  --accent: oklch(0.7500 0.1500 170);
-  --accent-foreground: oklch(0.1500 0.0300 170);
-  --destructive: oklch(0.6000 0.2000 25);
-  --destructive-foreground: oklch(1.0000 0 0);
-  --border: oklch(0.8800 0.0200 285);
-  --input: oklch(0.9200 0.0150 285);
-  --ring: oklch(0.5500 0.2200 285);
-  --chart-1: oklch(0.5500 0.2200 285);
-  --chart-2: oklch(0.7000 0.1400 175);
-  --chart-3: oklch(0.6500 0.1800 320);
-  --chart-4: oklch(0.7500 0.1500 170);
-  --chart-5: oklch(0.6000 0.2000 25);
-  --sidebar: oklch(0.9600 0.0150 285);
-  --sidebar-foreground: oklch(0.2500 0.0400 285);
-  --sidebar-primary: oklch(0.5500 0.2200 285);
-  --sidebar-primary-foreground: oklch(1.0000 0 0);
-  --sidebar-accent: oklch(0.7000 0.1400 175);
-  --sidebar-accent-foreground: oklch(0.1500 0.0300 175);
-  --sidebar-border: oklch(0.8800 0.0200 285);
-  --sidebar-ring: oklch(0.5500 0.2200 285);
+  --background: oklch(0.985 0.008 285);
+  --foreground: oklch(0.25 0.04 285);
+  --card: oklch(0.97 0.012 285);
+  --card-foreground: oklch(0.25 0.04 285);
+  --popover: oklch(0.98 0.01 285);
+  --popover-foreground: oklch(0.25 0.04 285);
+  --primary: oklch(0.55 0.22 285);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.7 0.14 175);
+  --secondary-foreground: oklch(0.15 0.03 175);
+  --muted: oklch(0.94 0.015 285);
+  --muted-foreground: oklch(0.45 0.03 285);
+  --accent: oklch(0.75 0.15 170);
+  --accent-foreground: oklch(0.15 0.03 170);
+  --destructive: oklch(0.6 0.2 25);
+  --destructive-foreground: oklch(1 0 0);
+  --border: oklch(0.88 0.02 285);
+  --input: oklch(0.92 0.015 285);
+  --ring: oklch(0.55 0.22 285);
+  --chart-1: oklch(0.55 0.22 285);
+  --chart-2: oklch(0.7 0.14 175);
+  --chart-3: oklch(0.65 0.18 320);
+  --chart-4: oklch(0.75 0.15 170);
+  --chart-5: oklch(0.6 0.2 25);
+  --sidebar: oklch(0.96 0.015 285);
+  --sidebar-foreground: oklch(0.25 0.04 285);
+  --sidebar-primary: oklch(0.55 0.22 285);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.7 0.14 175);
+  --sidebar-accent-foreground: oklch(0.15 0.03 175);
+  --sidebar-border: oklch(0.88 0.02 285);
+  --sidebar-ring: oklch(0.55 0.22 285);
 
   /* Shadow variables - soft violet-tinted shadows */
   --shadow-sm: 0 1px 2px 0 oklch(0.3 0.05 285 / 0.08);
-  --shadow: 0 1px 3px 0 oklch(0.3 0.05 285 / 0.12), 0 1px 2px -1px oklch(0.3 0.05 285 / 0.08);
-  --shadow-md: 0 4px 6px -1px oklch(0.3 0.05 285 / 0.12), 0 2px 4px -2px oklch(0.3 0.05 285 / 0.08);
-  --shadow-lg: 0 10px 15px -3px oklch(0.3 0.05 285 / 0.12), 0 4px 6px -4px oklch(0.3 0.05 285 / 0.08);
+  --shadow:
+    0 1px 3px 0 oklch(0.3 0.05 285 / 0.12),
+    0 1px 2px -1px oklch(0.3 0.05 285 / 0.08);
+  --shadow-md:
+    0 4px 6px -1px oklch(0.3 0.05 285 / 0.12),
+    0 2px 4px -2px oklch(0.3 0.05 285 / 0.08);
+  --shadow-lg:
+    0 10px 15px -3px oklch(0.3 0.05 285 / 0.12),
+    0 4px 6px -4px oklch(0.3 0.05 285 / 0.08);
 
   /* Log level colors */
   --color-log-error: #e879a0;
@@ -528,54 +562,61 @@
   --color-log-success: #2dd4bf;
 
   /* Status colors for Kanban */
-  --color-status-pending: oklch(0.9400 0.0150 285);
-  --color-status-progress: oklch(0.8500 0.0800 175);
-  --color-status-done: oklch(0.8000 0.1200 285);
+  --color-status-pending: oklch(0.94 0.015 285);
+  --color-status-progress: oklch(0.85 0.08 175);
+  --color-status-done: oklch(0.8 0.12 285);
 
   /* Font stacks - Inter for Aurora's clean, readable feel */
-  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  --font-sans:
+    "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", monospace;
 }
 
 .theme-aurora.dark {
-  --background: oklch(0.1600 0.0300 285);
-  --foreground: oklch(0.9000 0.0150 285);
-  --card: oklch(0.2000 0.0350 285);
-  --card-foreground: oklch(0.9000 0.0150 285);
-  --popover: oklch(0.1800 0.0320 285);
-  --popover-foreground: oklch(0.9000 0.0150 285);
-  --primary: oklch(0.6500 0.2400 285);
-  --primary-foreground: oklch(0.1000 0.0200 285);
-  --secondary: oklch(0.6500 0.1600 175);
-  --secondary-foreground: oklch(0.1000 0.0200 175);
-  --muted: oklch(0.2500 0.0280 285);
-  --muted-foreground: oklch(0.6500 0.0200 285);
-  --accent: oklch(0.6800 0.1700 170);
-  --accent-foreground: oklch(0.1000 0.0200 170);
-  --destructive: oklch(0.6500 0.2000 25);
-  --destructive-foreground: oklch(1.0000 0 0);
-  --border: oklch(0.3200 0.0350 285);
-  --input: oklch(0.2200 0.0300 285);
-  --ring: oklch(0.6500 0.2400 285);
-  --chart-1: oklch(0.6500 0.2400 285);
-  --chart-2: oklch(0.6500 0.1600 175);
-  --chart-3: oklch(0.7000 0.2000 320);
-  --chart-4: oklch(0.6800 0.1700 170);
-  --chart-5: oklch(0.6500 0.2000 25);
-  --sidebar: oklch(0.1400 0.0280 285);
-  --sidebar-foreground: oklch(0.9000 0.0150 285);
-  --sidebar-primary: oklch(0.6500 0.2400 285);
-  --sidebar-primary-foreground: oklch(0.1000 0.0200 285);
-  --sidebar-accent: oklch(0.6500 0.1600 175);
-  --sidebar-accent-foreground: oklch(0.1000 0.0200 175);
-  --sidebar-border: oklch(0.3000 0.0300 285);
-  --sidebar-ring: oklch(0.6500 0.2400 285);
+  --background: oklch(0.16 0.03 285);
+  --foreground: oklch(0.9 0.015 285);
+  --card: oklch(0.2 0.035 285);
+  --card-foreground: oklch(0.9 0.015 285);
+  --popover: oklch(0.18 0.032 285);
+  --popover-foreground: oklch(0.9 0.015 285);
+  --primary: oklch(0.65 0.24 285);
+  --primary-foreground: oklch(0.1 0.02 285);
+  --secondary: oklch(0.65 0.16 175);
+  --secondary-foreground: oklch(0.1 0.02 175);
+  --muted: oklch(0.25 0.028 285);
+  --muted-foreground: oklch(0.65 0.02 285);
+  --accent: oklch(0.68 0.17 170);
+  --accent-foreground: oklch(0.1 0.02 170);
+  --destructive: oklch(0.65 0.2 25);
+  --destructive-foreground: oklch(1 0 0);
+  --border: oklch(0.32 0.035 285);
+  --input: oklch(0.22 0.03 285);
+  --ring: oklch(0.65 0.24 285);
+  --chart-1: oklch(0.65 0.24 285);
+  --chart-2: oklch(0.65 0.16 175);
+  --chart-3: oklch(0.7 0.2 320);
+  --chart-4: oklch(0.68 0.17 170);
+  --chart-5: oklch(0.65 0.2 25);
+  --sidebar: oklch(0.14 0.028 285);
+  --sidebar-foreground: oklch(0.9 0.015 285);
+  --sidebar-primary: oklch(0.65 0.24 285);
+  --sidebar-primary-foreground: oklch(0.1 0.02 285);
+  --sidebar-accent: oklch(0.65 0.16 175);
+  --sidebar-accent-foreground: oklch(0.1 0.02 175);
+  --sidebar-border: oklch(0.3 0.03 285);
+  --sidebar-ring: oklch(0.65 0.24 285);
 
   /* Shadow variables - deep glowing shadows */
   --shadow-sm: 0 1px 2px 0 oklch(0.1 0.03 285 / 0.4);
-  --shadow: 0 1px 3px 0 oklch(0.1 0.03 285 / 0.5), 0 1px 2px -1px oklch(0.1 0.03 285 / 0.4);
-  --shadow-md: 0 4px 6px -1px oklch(0.1 0.03 285 / 0.5), 0 2px 4px -2px oklch(0.1 0.03 285 / 0.4);
-  --shadow-lg: 0 10px 15px -3px oklch(0.1 0.03 285 / 0.5), 0 4px 6px -4px oklch(0.1 0.03 285 / 0.4);
+  --shadow:
+    0 1px 3px 0 oklch(0.1 0.03 285 / 0.5),
+    0 1px 2px -1px oklch(0.1 0.03 285 / 0.4);
+  --shadow-md:
+    0 4px 6px -1px oklch(0.1 0.03 285 / 0.5),
+    0 2px 4px -2px oklch(0.1 0.03 285 / 0.4);
+  --shadow-lg:
+    0 10px 15px -3px oklch(0.1 0.03 285 / 0.5),
+    0 4px 6px -4px oklch(0.1 0.03 285 / 0.4);
 
   /* Log level colors for dark mode - more luminous */
   --color-log-error: #f472b6;
@@ -585,9 +626,9 @@
   --color-log-success: #5eead4;
 
   /* Status colors for Kanban - dark mode */
-  --color-status-pending: oklch(0.2500 0.0280 285);
-  --color-status-progress: oklch(0.4000 0.1000 175);
-  --color-status-done: oklch(0.4500 0.1500 285);
+  --color-status-pending: oklch(0.25 0.028 285);
+  --color-status-progress: oklch(0.4 0.1 175);
+  --color-status-done: oklch(0.45 0.15 285);
 }
 
 /* ============================================================================
@@ -670,7 +711,9 @@
 
   /* Smooth theme transitions */
   :root {
-    transition: background-color 0.2s ease, color 0.2s ease;
+    transition:
+      background-color 0.2s ease,
+      color 0.2s ease;
   }
 }
 
@@ -750,7 +793,8 @@
 }
 
 @keyframes pulse {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 1;
   }
   50% {
@@ -759,7 +803,8 @@
 }
 
 @keyframes bounce {
-  0%, 100% {
+  0%,
+  100% {
     transform: translateY(0);
   }
   50% {
@@ -769,7 +814,8 @@
 
 /* Agent mascot animations */
 @keyframes thinking {
-  0%, 100% {
+  0%,
+  100% {
     transform: translateY(0) scale(1);
   }
   25% {
@@ -784,7 +830,8 @@
 }
 
 @keyframes working {
-  0%, 100% {
+  0%,
+  100% {
     transform: translateX(0);
   }
   25% {
@@ -796,7 +843,8 @@
 }
 
 @keyframes testing {
-  0%, 100% {
+  0%,
+  100% {
     transform: rotate(0deg);
   }
   25% {
@@ -808,7 +856,8 @@
 }
 
 @keyframes celebrate {
-  0%, 100% {
+  0%,
+  100% {
     transform: scale(1) rotate(0deg);
   }
   25% {
@@ -823,13 +872,16 @@
 }
 
 @keyframes shake {
-  0%, 100% {
+  0%,
+  100% {
     transform: translateX(0);
   }
-  20%, 60% {
+  20%,
+  60% {
     transform: translateX(-2px);
   }
-  40%, 80% {
+  40%,
+  80% {
     transform: translateX(2px);
   }
 }
@@ -847,7 +899,8 @@
 
 /* Orchestrator (Maestro) animations */
 @keyframes conducting {
-  0%, 100% {
+  0%,
+  100% {
     transform: rotate(-10deg);
   }
   25% {
@@ -862,7 +915,8 @@
 }
 
 @keyframes batonTap {
-  0%, 100% {
+  0%,
+  100% {
     transform: translateY(0) rotate(0deg);
   }
   25% {
@@ -972,11 +1026,21 @@
   }
 
   /* Stagger delays for sequential animations */
-  .stagger-1 { animation-delay: 50ms; }
-  .stagger-2 { animation-delay: 100ms; }
-  .stagger-3 { animation-delay: 150ms; }
-  .stagger-4 { animation-delay: 200ms; }
-  .stagger-5 { animation-delay: 250ms; }
+  .stagger-1 {
+    animation-delay: 50ms;
+  }
+  .stagger-2 {
+    animation-delay: 100ms;
+  }
+  .stagger-3 {
+    animation-delay: 150ms;
+  }
+  .stagger-4 {
+    animation-delay: 200ms;
+  }
+  .stagger-5 {
+    animation-delay: 250ms;
+  }
 
   /* Font utilities */
   .font-sans {

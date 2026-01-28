@@ -8,12 +8,16 @@ Uses project registry for path lookups instead of fixed generations/ directory.
 
 import re
 import shutil
+import subprocess
 import sys
 from pathlib import Path
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, HTTPException
 
 from ..schemas import (
+    ProjectCloneRequest,
+    ProjectCloneResponse,
     ProjectCreate,
     ProjectDetail,
     ProjectPrompts,
@@ -83,6 +87,30 @@ def validate_project_name(name: str) -> str:
             detail="Invalid project name. Use only letters, numbers, hyphens, and underscores (1-50 chars)."
         )
     return name
+
+
+def _derive_repo_dirname(repo_url: str) -> str:
+    """Derive a reasonable default directory name from a repo URL."""
+    parsed = urlparse(repo_url)
+    candidate = parsed.path.rstrip("/").split("/")[-1] or "repo"
+    if candidate.endswith(".git"):
+        candidate = candidate[:-4]
+    return candidate or "repo"
+
+
+def _validate_target_dirname(dirname: str) -> str:
+    """Validate a clone target directory name (must be a simple relative name)."""
+    trimmed = dirname.strip()
+    if not trimmed:
+        raise HTTPException(status_code=400, detail="Target directory name cannot be empty")
+    if "/" in trimmed or "\\" in trimmed or ".." in trimmed:
+        raise HTTPException(status_code=400, detail="Target directory must be a simple name")
+    if not re.match(r"^[a-zA-Z0-9._-]{1,100}$", trimmed):
+        raise HTTPException(
+            status_code=400,
+            detail="Target directory contains invalid characters",
+        )
+    return trimmed
 
 
 def get_project_stats(project_dir: Path) -> ProjectStats:
@@ -355,3 +383,64 @@ async def get_project_stats_endpoint(name: str):
         raise HTTPException(status_code=404, detail="Project directory not found")
 
     return get_project_stats(project_dir)
+
+
+@router.post("/{name}/clone", response_model=ProjectCloneResponse)
+async def clone_repository(name: str, request: ProjectCloneRequest):
+    """Clone a git repository into a registered project directory."""
+    _init_imports()
+    _, _, get_project_path, _, _ = _get_registry_functions()
+
+    project_name = validate_project_name(name)
+    project_dir = get_project_path(project_name)
+
+    if not project_dir:
+        raise HTTPException(status_code=404, detail=f"Project '{project_name}' not found")
+
+    if not project_dir.exists():
+        raise HTTPException(status_code=404, detail="Project directory not found")
+
+    git_path = shutil.which("git")
+    if not git_path:
+        raise HTTPException(status_code=500, detail="git is not installed on the server")
+
+    repo_url = request.repo_url.strip()
+    if not repo_url:
+        raise HTTPException(status_code=400, detail="Repository URL is required")
+
+    target_dirname = _validate_target_dirname(request.target_dir) if request.target_dir else _derive_repo_dirname(repo_url)
+    clone_target = (project_dir / target_dirname).resolve()
+
+    # Safety: ensure the resolved target stays within the project directory
+    project_root = project_dir.resolve()
+    if project_root not in clone_target.parents and clone_target != project_root:
+        raise HTTPException(status_code=400, detail="Clone target must be inside the project directory")
+
+    if clone_target.exists():
+        raise HTTPException(status_code=409, detail=f"Target directory already exists: {clone_target}")
+
+    try:
+        result = subprocess.run(
+            [git_path, "clone", repo_url, str(clone_target)],
+            cwd=str(project_dir),
+            capture_output=True,
+            text=True,
+            timeout=300,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=504, detail="git clone timed out after 5 minutes")
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to run git clone: {exc}")
+
+    if result.returncode != 0:
+        stderr = (result.stderr or "").strip()
+        stdout = (result.stdout or "").strip()
+        detail = stderr or stdout or "git clone failed"
+        raise HTTPException(status_code=400, detail=detail[:500])
+
+    return ProjectCloneResponse(
+        success=True,
+        message=f"Cloned repository into {clone_target}",
+        path=clone_target.as_posix(),
+    )

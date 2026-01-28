@@ -1,68 +1,78 @@
-import { useState } from 'react'
-import { ChevronDown, ChevronUp, Code, FlaskConical, Clock, Lock, Sparkles } from 'lucide-react'
-import { OrchestratorAvatar } from './OrchestratorAvatar'
-import type { OrchestratorStatus, OrchestratorState } from '../lib/types'
-import { Card, CardContent } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
+import { useState } from "react";
+import {
+  ChevronDown,
+  ChevronUp,
+  Code,
+  FlaskConical,
+  Clock,
+  Lock,
+  Sparkles,
+} from "lucide-react";
+import { OrchestratorAvatar } from "./OrchestratorAvatar";
+import type { OrchestratorStatus, OrchestratorState } from "../lib/types";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 
 interface OrchestratorStatusCardProps {
-  status: OrchestratorStatus
+  status: OrchestratorStatus;
 }
 
 // Get a friendly state description
 function getStateText(state: OrchestratorState): string {
   switch (state) {
-    case 'idle':
-      return 'Standing by...'
-    case 'initializing':
-      return 'Setting up features...'
-    case 'scheduling':
-      return 'Planning next moves...'
-    case 'spawning':
-      return 'Deploying agents...'
-    case 'monitoring':
-      return 'Watching progress...'
-    case 'complete':
-      return 'Mission accomplished!'
+    case "idle":
+      return "Standing by...";
+    case "initializing":
+      return "Setting up features...";
+    case "scheduling":
+      return "Planning next moves...";
+    case "spawning":
+      return "Deploying agents...";
+    case "monitoring":
+      return "Watching progress...";
+    case "complete":
+      return "Mission accomplished!";
     default:
-      return 'Orchestrating...'
+      return "Orchestrating...";
   }
 }
 
 // Get state color
 function getStateColor(state: OrchestratorState): string {
   switch (state) {
-    case 'complete':
-      return 'text-primary'
-    case 'spawning':
-      return 'text-violet-600 dark:text-violet-400'
-    case 'scheduling':
-    case 'monitoring':
-      return 'text-primary'
-    case 'initializing':
-      return 'text-yellow-600 dark:text-yellow-400'
+    case "complete":
+      return "text-primary";
+    case "spawning":
+      return "text-violet-600 dark:text-violet-400";
+    case "scheduling":
+    case "monitoring":
+      return "text-primary";
+    case "initializing":
+      return "text-yellow-600 dark:text-yellow-400";
     default:
-      return 'text-muted-foreground'
+      return "text-muted-foreground";
   }
 }
 
 // Format timestamp to relative time
 function formatRelativeTime(timestamp: string): string {
-  const now = new Date()
-  const then = new Date(timestamp)
-  const diffMs = now.getTime() - then.getTime()
-  const diffSecs = Math.floor(diffMs / 1000)
+  const now = new Date();
+  const then = new Date(timestamp);
+  const diffMs = now.getTime() - then.getTime();
+  const diffSecs = Math.floor(diffMs / 1000);
 
-  if (diffSecs < 5) return 'just now'
-  if (diffSecs < 60) return `${diffSecs}s ago`
-  const diffMins = Math.floor(diffSecs / 60)
-  if (diffMins < 60) return `${diffMins}m ago`
-  return `${Math.floor(diffMins / 60)}h ago`
+  if (diffSecs < 5) return "just now";
+  if (diffSecs < 60) return `${diffSecs}s ago`;
+  const diffMins = Math.floor(diffSecs / 60);
+  if (diffMins < 60) return `${diffMins}m ago`;
+  return `${Math.floor(diffMins / 60)}h ago`;
 }
 
-export function OrchestratorStatusCard({ status }: OrchestratorStatusCardProps) {
-  const [showEvents, setShowEvents] = useState(false)
+export function OrchestratorStatusCard({
+  status,
+}: OrchestratorStatusCardProps) {
+  const [showEvents, setShowEvents] = useState(false);
 
   return (
     <Card className="mb-4 bg-gradient-to-r from-violet-50 to-purple-50 dark:from-violet-950/30 dark:to-purple-950/30 border-violet-200 dark:border-violet-800/50 py-4">
@@ -78,7 +88,9 @@ export function OrchestratorStatusCard({ status }: OrchestratorStatusCardProps) 
               <span className="font-semibold text-lg text-violet-700 dark:text-violet-300">
                 Maestro
               </span>
-              <span className={`text-sm font-medium ${getStateColor(status.state)}`}>
+              <span
+                className={`text-sm font-medium ${getStateColor(status.state)}`}
+              >
                 {getStateText(status.state)}
               </span>
             </div>
@@ -91,26 +103,38 @@ export function OrchestratorStatusCard({ status }: OrchestratorStatusCardProps) 
             {/* Status badges row */}
             <div className="flex flex-wrap items-center gap-2">
               {/* Coding agents badge */}
-              <Badge variant="outline" className="bg-blue-100 text-blue-700 border-blue-300 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-700">
+              <Badge
+                variant="outline"
+                className="bg-blue-100 text-blue-700 border-blue-300 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-700"
+              >
                 <Code size={12} />
                 Coding: {status.codingAgents}
               </Badge>
 
               {/* Testing agents badge */}
-              <Badge variant="outline" className="bg-purple-100 text-purple-700 border-purple-300 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-700">
+              <Badge
+                variant="outline"
+                className="bg-purple-100 text-purple-700 border-purple-300 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-700"
+              >
                 <FlaskConical size={12} />
                 Testing: {status.testingAgents}
               </Badge>
 
               {/* Ready queue badge */}
-              <Badge variant="outline" className="bg-green-100 text-green-700 border-green-300 dark:bg-green-900/30 dark:text-green-300 dark:border-green-700">
+              <Badge
+                variant="outline"
+                className="bg-green-100 text-green-700 border-green-300 dark:bg-green-900/30 dark:text-green-300 dark:border-green-700"
+              >
                 <Clock size={12} />
                 Ready: {status.readyCount}
               </Badge>
 
               {/* Blocked badge (only show if > 0) */}
               {status.blockedCount > 0 && (
-                <Badge variant="outline" className="bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-700">
+                <Badge
+                  variant="outline"
+                  className="bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-700"
+                >
                   <Lock size={12} />
                   Blocked: {status.blockedCount}
                 </Badge>
@@ -145,9 +169,7 @@ export function OrchestratorStatusCard({ status }: OrchestratorStatusCardProps) 
                   <span className="text-violet-500 dark:text-violet-400 shrink-0 font-mono">
                     {formatRelativeTime(event.timestamp)}
                   </span>
-                  <span className="text-foreground">
-                    {event.message}
-                  </span>
+                  <span className="text-foreground">{event.message}</span>
                 </div>
               ))}
             </div>
@@ -155,5 +177,5 @@ export function OrchestratorStatusCard({ status }: OrchestratorStatusCardProps) 
         )}
       </CardContent>
     </Card>
-  )
+  );
 }

@@ -1,13 +1,13 @@
-import { useCallback, useEffect, useState } from 'react'
-import { Sparkles, PartyPopper } from 'lucide-react'
-import { AgentAvatar } from './AgentAvatar'
-import type { AgentMascot } from '../lib/types'
-import { Card, CardContent } from '@/components/ui/card'
+import { useCallback, useEffect, useState } from "react";
+import { Sparkles, PartyPopper } from "lucide-react";
+import { AgentAvatar } from "./AgentAvatar";
+import type { AgentMascot } from "../lib/types";
+import { Card, CardContent } from "@/components/ui/card";
 
 interface CelebrationOverlayProps {
-  agentName: AgentMascot | 'Unknown'
-  featureName: string
-  onComplete?: () => void
+  agentName: AgentMascot | "Unknown";
+  featureName: string;
+  onComplete?: () => void;
 }
 
 // Generate random confetti particles
@@ -17,40 +17,46 @@ function generateConfetti(count: number) {
     x: Math.random() * 100,
     delay: Math.random() * 0.5,
     duration: 1 + Math.random() * 1,
-    color: ['#ff006e', '#ffd60a', '#70e000', '#00b4d8', '#8338ec'][Math.floor(Math.random() * 5)],
+    color: ["#ff006e", "#ffd60a", "#70e000", "#00b4d8", "#8338ec"][
+      Math.floor(Math.random() * 5)
+    ],
     rotation: Math.random() * 360,
-  }))
+  }));
 }
 
-export function CelebrationOverlay({ agentName, featureName, onComplete }: CelebrationOverlayProps) {
-  const [isVisible, setIsVisible] = useState(true)
-  const [confetti] = useState(() => generateConfetti(30))
+export function CelebrationOverlay({
+  agentName,
+  featureName,
+  onComplete,
+}: CelebrationOverlayProps) {
+  const [isVisible, setIsVisible] = useState(true);
+  const [confetti] = useState(() => generateConfetti(30));
 
   const dismiss = useCallback(() => {
-    setIsVisible(false)
-    setTimeout(() => onComplete?.(), 300) // Wait for fade animation
-  }, [onComplete])
+    setIsVisible(false);
+    setTimeout(() => onComplete?.(), 300); // Wait for fade animation
+  }, [onComplete]);
 
   useEffect(() => {
     // Auto-dismiss after 3 seconds
-    const timer = setTimeout(dismiss, 3000)
+    const timer = setTimeout(dismiss, 3000);
 
     // Escape key to dismiss early
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        dismiss()
+      if (e.key === "Escape") {
+        dismiss();
       }
-    }
+    };
 
-    window.addEventListener('keydown', handleKeyDown)
+    window.addEventListener("keydown", handleKeyDown);
     return () => {
-      clearTimeout(timer)
-      window.removeEventListener('keydown', handleKeyDown)
-    }
-  }, [dismiss])
+      clearTimeout(timer);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [dismiss]);
 
   if (!isVisible) {
-    return null
+    return null;
   }
 
   return (
@@ -59,7 +65,7 @@ export function CelebrationOverlay({ agentName, featureName, onComplete }: Celeb
         fixed inset-0 z-50 flex items-center justify-center
         pointer-events-none
         transition-opacity duration-300
-        ${isVisible ? 'opacity-100' : 'opacity-0'}
+        ${isVisible ? "opacity-100" : "opacity-0"}
       `}
     >
       {/* Confetti particles */}
@@ -70,7 +76,7 @@ export function CelebrationOverlay({ agentName, featureName, onComplete }: Celeb
             className="absolute w-3 h-3 animate-confetti"
             style={{
               left: `${particle.x}%`,
-              top: '-20px',
+              top: "-20px",
               backgroundColor: particle.color,
               animationDelay: `${particle.delay}s`,
               animationDuration: `${particle.duration}s`,
@@ -118,5 +124,5 @@ export function CelebrationOverlay({ agentName, featureName, onComplete }: Celeb
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }

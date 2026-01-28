@@ -1,0 +1,38 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: detect-private-key
+      - id: check-added-large-files
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.7.3
+    hooks:
+      - id: ruff
+        args: ["--fix"]
+        stages: [commit]
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.13.0
+    hooks:
+      - id: mypy
+        args: ["--ignore-missing-imports"]
+        additional_dependencies: []
+        stages: [commit]
+  - repo: local
+    hooks:
+      - id: forbid-dotenv
+        name: Block committing .env files
+        entry: bash -c 'if git diff --cached --name-only | grep -E "(^|/)\.env(\.|$)"; then echo "? .env files are blocked from commits"; exit 1; fi'
+        language: system
+        pass_filenames: false
+      - id: eslint
+        name: ESLint (ui)
+        entry: bash -c 'cd ui && npm run lint'
+        language: system
+        pass_filenames: false
+      - id: prettier
+        name: Prettier check (ui)
+        entry: bash -c 'cd ui && npm run format'
+        language: system
+        pass_filenames: false

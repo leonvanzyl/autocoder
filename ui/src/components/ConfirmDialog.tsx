@@ -5,8 +5,8 @@
  * Used to confirm destructive actions like deleting projects.
  */
 
-import type { ReactNode } from 'react'
-import { AlertTriangle } from 'lucide-react'
+import type { ReactNode } from "react";
+import { AlertTriangle } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -14,28 +14,28 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog'
-import { Button } from '@/components/ui/button'
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 
 interface ConfirmDialogProps {
-  isOpen: boolean
-  title: string
-  message: ReactNode
-  confirmLabel?: string
-  cancelLabel?: string
-  variant?: 'danger' | 'warning'
-  isLoading?: boolean
-  onConfirm: () => void
-  onCancel: () => void
+  isOpen: boolean;
+  title: string;
+  message: ReactNode;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  variant?: "danger" | "warning";
+  isLoading?: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
 }
 
 export function ConfirmDialog({
   isOpen,
   title,
   message,
-  confirmLabel = 'Confirm',
-  cancelLabel = 'Cancel',
-  variant = 'danger',
+  confirmLabel = "Confirm",
+  cancelLabel = "Cancel",
+  variant = "danger",
   isLoading = false,
   onConfirm,
   onCancel,
@@ -47,9 +47,9 @@ export function ConfirmDialog({
           <div className="flex items-center gap-3">
             <div
               className={`p-2 rounded-lg ${
-                variant === 'danger'
-                  ? 'bg-destructive/10 text-destructive'
-                  : 'bg-primary/10 text-primary'
+                variant === "danger"
+                  ? "bg-destructive/10 text-destructive"
+                  : "bg-primary/10 text-primary"
               }`}
             >
               <AlertTriangle size={20} />
@@ -65,14 +65,14 @@ export function ConfirmDialog({
             {cancelLabel}
           </Button>
           <Button
-            variant={variant === 'danger' ? 'destructive' : 'default'}
+            variant={variant === "danger" ? "destructive" : "default"}
             onClick={onConfirm}
             disabled={isLoading}
           >
-            {isLoading ? 'Deleting...' : confirmLabel}
+            {isLoading ? "Deleting..." : confirmLabel}
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  )
+  );
 }

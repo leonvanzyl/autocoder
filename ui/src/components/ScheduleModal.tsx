@@ -4,14 +4,14 @@
  * Modal for managing agent schedules (create, edit, delete).
  */
 
-import { useState, useEffect, useRef } from 'react'
-import { Clock, GitBranch, Trash2 } from 'lucide-react'
+import { useState, useEffect, useRef } from "react";
+import { Clock, GitBranch, Trash2 } from "lucide-react";
 import {
   useSchedules,
   useCreateSchedule,
   useDeleteSchedule,
   useToggleSchedule,
-} from '../hooks/useSchedules'
+} from "../hooks/useSchedules";
 import {
   utcToLocalWithDayShift,
   localToUTCWithDayShift,
@@ -20,136 +20,157 @@ import {
   DAYS,
   isDayActive,
   toggleDay,
-} from '../lib/timeUtils'
-import type { ScheduleCreate } from '../lib/types'
+} from "../lib/timeUtils";
+import type { ScheduleCreate } from "../lib/types";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogFooter,
-} from '@/components/ui/dialog'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Card, CardContent } from '@/components/ui/card'
-import { Checkbox } from '@/components/ui/checkbox'
-import { Separator } from '@/components/ui/separator'
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Card, CardContent } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Separator } from "@/components/ui/separator";
 
 interface ScheduleModalProps {
-  projectName: string
-  isOpen: boolean
-  onClose: () => void
+  projectName: string;
+  isOpen: boolean;
+  onClose: () => void;
 }
 
-export function ScheduleModal({ projectName, isOpen, onClose }: ScheduleModalProps) {
-  const modalRef = useRef<HTMLDivElement>(null)
-  const firstFocusableRef = useRef<HTMLButtonElement>(null)
+export function ScheduleModal({
+  projectName,
+  isOpen,
+  onClose,
+}: ScheduleModalProps) {
+  const modalRef = useRef<HTMLDivElement>(null);
+  const firstFocusableRef = useRef<HTMLButtonElement>(null);
 
   // Queries and mutations
-  const { data: schedulesData, isLoading } = useSchedules(projectName)
-  const createSchedule = useCreateSchedule(projectName)
-  const deleteSchedule = useDeleteSchedule(projectName)
-  const toggleSchedule = useToggleSchedule(projectName)
+  const { data: schedulesData, isLoading } = useSchedules(projectName);
+  const createSchedule = useCreateSchedule(projectName);
+  const deleteSchedule = useDeleteSchedule(projectName);
+  const toggleSchedule = useToggleSchedule(projectName);
 
   // Form state for new schedule
   const [newSchedule, setNewSchedule] = useState<ScheduleCreate>({
-    start_time: '22:00',
+    start_time: "22:00",
     duration_minutes: 240,
     days_of_week: 31, // Weekdays by default
     enabled: true,
     yolo_mode: false,
     model: null,
     max_concurrency: 3,
-  })
+  });
 
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null);
 
   // Focus trap
   useEffect(() => {
     if (isOpen && firstFocusableRef.current) {
-      firstFocusableRef.current.focus()
+      firstFocusableRef.current.focus();
     }
-  }, [isOpen])
+  }, [isOpen]);
 
-  const schedules = schedulesData?.schedules || []
+  const schedules = schedulesData?.schedules || [];
 
   const handleCreateSchedule = async () => {
     try {
-      setError(null)
+      setError(null);
 
       // Validate
       if (newSchedule.days_of_week === 0) {
-        setError('Please select at least one day')
-        return
+        setError("Please select at least one day");
+        return;
       }
 
       // Validate duration
-      if (newSchedule.duration_minutes < 1 || newSchedule.duration_minutes > 1440) {
-        setError('Duration must be between 1 and 1440 minutes')
-        return
+      if (
+        newSchedule.duration_minutes < 1 ||
+        newSchedule.duration_minutes > 1440
+      ) {
+        setError("Duration must be between 1 and 1440 minutes");
+        return;
       }
 
       // Convert local time to UTC and get day shift
-      const { time: utcTime, dayShift } = localToUTCWithDayShift(newSchedule.start_time)
+      const { time: utcTime, dayShift } = localToUTCWithDayShift(
+        newSchedule.start_time,
+      );
 
       // Adjust days_of_week based on day shift
-      const adjustedDays = adjustDaysForDayShift(newSchedule.days_of_week, dayShift)
+      const adjustedDays = adjustDaysForDayShift(
+        newSchedule.days_of_week,
+        dayShift,
+      );
 
       const scheduleToCreate = {
         ...newSchedule,
         start_time: utcTime,
         days_of_week: adjustedDays,
-      }
+      };
 
-      await createSchedule.mutateAsync(scheduleToCreate)
+      await createSchedule.mutateAsync(scheduleToCreate);
 
       // Reset form
       setNewSchedule({
-        start_time: '22:00',
+        start_time: "22:00",
         duration_minutes: 240,
         days_of_week: 31,
         enabled: true,
         yolo_mode: false,
         model: null,
         max_concurrency: 3,
-      })
+      });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create schedule')
+      setError(
+        err instanceof Error ? err.message : "Failed to create schedule",
+      );
     }
-  }
+  };
 
   const handleToggleSchedule = async (scheduleId: number, enabled: boolean) => {
     try {
-      setError(null)
-      await toggleSchedule.mutateAsync({ scheduleId, enabled: !enabled })
+      setError(null);
+      await toggleSchedule.mutateAsync({ scheduleId, enabled: !enabled });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to toggle schedule')
+      setError(
+        err instanceof Error ? err.message : "Failed to toggle schedule",
+      );
     }
-  }
+  };
 
   const handleDeleteSchedule = async (scheduleId: number) => {
-    if (!confirm('Are you sure you want to delete this schedule?')) return
+    if (!confirm("Are you sure you want to delete this schedule?")) return;
 
     try {
-      setError(null)
-      await deleteSchedule.mutateAsync(scheduleId)
+      setError(null);
+      await deleteSchedule.mutateAsync(scheduleId);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete schedule')
+      setError(
+        err instanceof Error ? err.message : "Failed to delete schedule",
+      );
     }
-  }
+  };
 
   const handleToggleDay = (dayBit: number) => {
     setNewSchedule((prev) => ({
       ...prev,
       days_of_week: toggleDay(prev.days_of_week, dayBit),
-    }))
-  }
+    }));
+  };
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent ref={modalRef} className="sm:max-w-[650px] max-h-[80vh] flex flex-col p-0">
+      <DialogContent
+        ref={modalRef}
+        className="sm:max-w-[650px] max-h-[80vh] flex flex-col p-0"
+      >
         {/* Header */}
         <DialogHeader className="p-6 pb-4">
           <DialogTitle className="flex items-center gap-2">
@@ -178,9 +199,14 @@ export function ScheduleModal({ projectName, isOpen, onClose }: ScheduleModalPro
             <div className="space-y-3 mb-6">
               {schedules.map((schedule) => {
                 // Convert UTC time to local and get day shift for display
-                const { time: localTime, dayShift } = utcToLocalWithDayShift(schedule.start_time)
-                const duration = formatDuration(schedule.duration_minutes)
-                const displayDays = adjustDaysForDayShift(schedule.days_of_week, dayShift)
+                const { time: localTime, dayShift } = utcToLocalWithDayShift(
+                  schedule.start_time,
+                );
+                const duration = formatDuration(schedule.duration_minutes);
+                const displayDays = adjustDaysForDayShift(
+                  schedule.days_of_week,
+                  dayShift,
+                );
 
                 return (
                   <Card key={schedule.id}>
@@ -189,7 +215,9 @@ export function ScheduleModal({ projectName, isOpen, onClose }: ScheduleModalPro
                         <div className="flex-1">
                           {/* Time and duration */}
                           <div className="flex items-baseline gap-2 mb-2">
-                            <span className="text-lg font-semibold">{localTime}</span>
+                            <span className="text-lg font-semibold">
+                              {localTime}
+                            </span>
                             <span className="text-sm text-muted-foreground">
                               for {duration}
                             </span>
@@ -198,34 +226,43 @@ export function ScheduleModal({ projectName, isOpen, onClose }: ScheduleModalPro
                           {/* Days */}
                           <div className="flex gap-1 mb-2">
                             {DAYS.map((day) => {
-                              const isActive = isDayActive(displayDays, day.bit)
+                              const isActive = isDayActive(
+                                displayDays,
+                                day.bit,
+                              );
                               return (
                                 <span
                                   key={day.label}
                                   className={`text-xs px-2 py-1 rounded border ${
                                     isActive
-                                      ? 'border-primary bg-primary text-primary-foreground font-medium'
-                                      : 'border-border text-muted-foreground'
+                                      ? "border-primary bg-primary text-primary-foreground font-medium"
+                                      : "border-border text-muted-foreground"
                                   }`}
                                 >
                                   {day.label}
                                 </span>
-                              )
+                              );
                             })}
                           </div>
 
                           {/* Metadata */}
                           <div className="flex gap-3 text-xs text-muted-foreground">
                             {schedule.yolo_mode && (
-                              <span className="font-semibold text-yellow-600">YOLO mode</span>
+                              <span className="font-semibold text-yellow-600">
+                                YOLO mode
+                              </span>
                             )}
                             <span className="flex items-center gap-1">
                               <GitBranch size={12} />
                               {schedule.max_concurrency}x
                             </span>
-                            {schedule.model && <span>Model: {schedule.model}</span>}
+                            {schedule.model && (
+                              <span>Model: {schedule.model}</span>
+                            )}
                             {schedule.crash_count > 0 && (
-                              <span className="text-destructive">Crashes: {schedule.crash_count}</span>
+                              <span className="text-destructive">
+                                Crashes: {schedule.crash_count}
+                              </span>
                             )}
                           </div>
                         </div>
@@ -236,11 +273,20 @@ export function ScheduleModal({ projectName, isOpen, onClose }: ScheduleModalPro
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => handleToggleSchedule(schedule.id, schedule.enabled)}
+                            onClick={() =>
+                              handleToggleSchedule(
+                                schedule.id,
+                                schedule.enabled,
+                              )
+                            }
                             disabled={toggleSchedule.isPending}
-                            className={schedule.enabled ? 'text-primary' : 'text-muted-foreground'}
+                            className={
+                              schedule.enabled
+                                ? "text-primary"
+                                : "text-muted-foreground"
+                            }
                           >
-                            {schedule.enabled ? 'Enabled' : 'Disabled'}
+                            {schedule.enabled ? "Enabled" : "Disabled"}
                           </Button>
 
                           {/* Delete button */}
@@ -257,7 +303,7 @@ export function ScheduleModal({ projectName, isOpen, onClose }: ScheduleModalPro
                       </div>
                     </CardContent>
                   </Card>
-                )
+                );
               })}
             </div>
           )}
@@ -284,7 +330,10 @@ export function ScheduleModal({ projectName, isOpen, onClose }: ScheduleModalPro
                   type="time"
                   value={newSchedule.start_time}
                   onChange={(e) =>
-                    setNewSchedule((prev) => ({ ...prev, start_time: e.target.value }))
+                    setNewSchedule((prev) => ({
+                      ...prev,
+                      start_time: e.target.value,
+                    }))
                   }
                 />
               </div>
@@ -296,12 +345,14 @@ export function ScheduleModal({ projectName, isOpen, onClose }: ScheduleModalPro
                   max="1440"
                   value={newSchedule.duration_minutes}
                   onChange={(e) => {
-                    const parsed = parseInt(e.target.value, 10)
-                    const value = isNaN(parsed) ? 1 : Math.max(1, Math.min(1440, parsed))
+                    const parsed = parseInt(e.target.value, 10);
+                    const value = isNaN(parsed)
+                      ? 1
+                      : Math.max(1, Math.min(1440, parsed));
                     setNewSchedule((prev) => ({
                       ...prev,
                       duration_minutes: value,
-                    }))
+                    }));
                   }}
                 />
                 <p className="text-xs text-muted-foreground">
@@ -315,17 +366,20 @@ export function ScheduleModal({ projectName, isOpen, onClose }: ScheduleModalPro
               <Label>Days</Label>
               <div className="flex gap-2">
                 {DAYS.map((day) => {
-                  const isActive = isDayActive(newSchedule.days_of_week, day.bit)
+                  const isActive = isDayActive(
+                    newSchedule.days_of_week,
+                    day.bit,
+                  );
                   return (
                     <Button
                       key={day.label}
-                      variant={isActive ? 'default' : 'outline'}
+                      variant={isActive ? "default" : "outline"}
                       size="sm"
                       onClick={() => handleToggleDay(day.bit)}
                     >
                       {day.label}
                     </Button>
-                  )
+                  );
                 })}
               </div>
             </div>
@@ -336,7 +390,10 @@ export function ScheduleModal({ projectName, isOpen, onClose }: ScheduleModalPro
                 id="yolo-mode"
                 checked={newSchedule.yolo_mode}
                 onCheckedChange={(checked) =>
-                  setNewSchedule((prev) => ({ ...prev, yolo_mode: checked === true }))
+                  setNewSchedule((prev) => ({
+                    ...prev,
+                    yolo_mode: checked === true,
+                  }))
                 }
               />
               <Label htmlFor="yolo-mode" className="font-normal">
@@ -350,7 +407,11 @@ export function ScheduleModal({ projectName, isOpen, onClose }: ScheduleModalPro
               <div className="flex items-center gap-3">
                 <GitBranch
                   size={16}
-                  className={newSchedule.max_concurrency > 1 ? 'text-primary' : 'text-muted-foreground'}
+                  className={
+                    newSchedule.max_concurrency > 1
+                      ? "text-primary"
+                      : "text-muted-foreground"
+                  }
                 />
                 <input
                   type="range"
@@ -358,7 +419,10 @@ export function ScheduleModal({ projectName, isOpen, onClose }: ScheduleModalPro
                   max={5}
                   value={newSchedule.max_concurrency}
                   onChange={(e) =>
-                    setNewSchedule((prev) => ({ ...prev, max_concurrency: Number(e.target.value) }))
+                    setNewSchedule((prev) => ({
+                      ...prev,
+                      max_concurrency: Number(e.target.value),
+                    }))
                   }
                   className="flex-1 h-2 accent-primary cursor-pointer"
                 />
@@ -367,7 +431,9 @@ export function ScheduleModal({ projectName, isOpen, onClose }: ScheduleModalPro
                 </span>
               </div>
               <p className="text-xs text-muted-foreground">
-                Run {newSchedule.max_concurrency} agent{newSchedule.max_concurrency > 1 ? 's' : ''} in parallel for faster feature completion
+                Run {newSchedule.max_concurrency} agent
+                {newSchedule.max_concurrency > 1 ? "s" : ""} in parallel for
+                faster feature completion
               </p>
             </div>
 
@@ -376,9 +442,12 @@ export function ScheduleModal({ projectName, isOpen, onClose }: ScheduleModalPro
               <Label>Model (optional, defaults to global setting)</Label>
               <Input
                 placeholder="e.g., claude-3-5-sonnet-20241022"
-                value={newSchedule.model || ''}
+                value={newSchedule.model || ""}
                 onChange={(e) =>
-                  setNewSchedule((prev) => ({ ...prev, model: e.target.value || null }))
+                  setNewSchedule((prev) => ({
+                    ...prev,
+                    model: e.target.value || null,
+                  }))
                 }
               />
             </div>
@@ -392,12 +461,14 @@ export function ScheduleModal({ projectName, isOpen, onClose }: ScheduleModalPro
           </Button>
           <Button
             onClick={handleCreateSchedule}
-            disabled={createSchedule.isPending || newSchedule.days_of_week === 0}
+            disabled={
+              createSchedule.isPending || newSchedule.days_of_week === 0
+            }
           >
-            {createSchedule.isPending ? 'Creating...' : 'Create Schedule'}
+            {createSchedule.isPending ? "Creating..." : "Create Schedule"}
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  )
+  );
 }

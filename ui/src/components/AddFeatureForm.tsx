@@ -1,64 +1,64 @@
-import { useState, useId } from 'react'
-import { X, Plus, Trash2, Loader2, AlertCircle } from 'lucide-react'
-import { useCreateFeature } from '../hooks/useProjects'
+import { useState, useId } from "react";
+import { X, Plus, Trash2, Loader2, AlertCircle } from "lucide-react";
+import { useCreateFeature } from "../hooks/useProjects";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogFooter,
-} from '@/components/ui/dialog'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
-import { Label } from '@/components/ui/label'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 interface Step {
-  id: string
-  value: string
+  id: string;
+  value: string;
 }
 
 interface AddFeatureFormProps {
-  projectName: string
-  onClose: () => void
+  projectName: string;
+  onClose: () => void;
 }
 
 export function AddFeatureForm({ projectName, onClose }: AddFeatureFormProps) {
-  const formId = useId()
-  const [category, setCategory] = useState('')
-  const [name, setName] = useState('')
-  const [description, setDescription] = useState('')
-  const [priority, setPriority] = useState('')
-  const [steps, setSteps] = useState<Step[]>([{ id: `${formId}-step-0`, value: '' }])
-  const [error, setError] = useState<string | null>(null)
-  const [stepCounter, setStepCounter] = useState(1)
+  const formId = useId();
+  const [category, setCategory] = useState("");
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [priority, setPriority] = useState("");
+  const [steps, setSteps] = useState<Step[]>([
+    { id: `${formId}-step-0`, value: "" },
+  ]);
+  const [error, setError] = useState<string | null>(null);
+  const [stepCounter, setStepCounter] = useState(1);
 
-  const createFeature = useCreateFeature(projectName)
+  const createFeature = useCreateFeature(projectName);
 
   const handleAddStep = () => {
-    setSteps([...steps, { id: `${formId}-step-${stepCounter}`, value: '' }])
-    setStepCounter(stepCounter + 1)
-  }
+    setSteps([...steps, { id: `${formId}-step-${stepCounter}`, value: "" }]);
+    setStepCounter(stepCounter + 1);
+  };
 
   const handleRemoveStep = (id: string) => {
-    setSteps(steps.filter(step => step.id !== id))
-  }
+    setSteps(steps.filter((step) => step.id !== id));
+  };
 
   const handleStepChange = (id: string, value: string) => {
-    setSteps(steps.map(step =>
-      step.id === id ? { ...step, value } : step
-    ))
-  }
+    setSteps(steps.map((step) => (step.id === id ? { ...step, value } : step)));
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError(null)
+    e.preventDefault();
+    setError(null);
 
     // Filter out empty steps
     const filteredSteps = steps
-      .map(s => s.value.trim())
-      .filter(s => s.length > 0)
+      .map((s) => s.value.trim())
+      .filter((s) => s.length > 0);
 
     try {
       await createFeature.mutateAsync({
@@ -67,14 +67,14 @@ export function AddFeatureForm({ projectName, onClose }: AddFeatureFormProps) {
         description: description.trim(),
         steps: filteredSteps,
         priority: priority ? parseInt(priority, 10) : undefined,
-      })
-      onClose()
+      });
+      onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create feature')
+      setError(err instanceof Error ? err.message : "Failed to create feature");
     }
-  }
+  };
 
-  const isValid = category.trim() && name.trim() && description.trim()
+  const isValid = category.trim() && name.trim() && description.trim();
 
   return (
     <Dialog open={true} onOpenChange={(open) => !open && onClose()}>
@@ -196,11 +196,7 @@ export function AddFeatureForm({ projectName, onClose }: AddFeatureFormProps) {
 
           {/* Actions */}
           <DialogFooter className="pt-4 border-t">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={onClose}
-            >
+            <Button type="button" variant="outline" onClick={onClose}>
               Cancel
             </Button>
             <Button
@@ -220,5 +216,5 @@ export function AddFeatureForm({ projectName, onClose }: AddFeatureFormProps) {
         </form>
       </DialogContent>
     </Dialog>
-  )
+  );
 }

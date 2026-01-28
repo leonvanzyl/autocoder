@@ -2,7 +2,7 @@
  * WebSocket Hook for Real-time Updates
  */
 
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback } from "react";
 import type {
   WSMessage,
   AgentStatus,
@@ -12,59 +12,64 @@ import type {
   AgentLogEntry,
   OrchestratorStatus,
   OrchestratorEvent,
-} from '../lib/types'
+} from "../lib/types";
 
 // Activity item for the feed
 interface ActivityItem {
-  agentName: string
-  thought: string
-  timestamp: string
-  featureId: number
+  agentName: string;
+  thought: string;
+  timestamp: string;
+  featureId: number;
 }
 
 // Celebration trigger for overlay
 interface CelebrationTrigger {
-  agentName: AgentMascot | 'Unknown'
-  featureName: string
-  featureId: number
+  agentName: AgentMascot | "Unknown";
+  featureName: string;
+  featureId: number;
 }
 
 interface WebSocketState {
   progress: {
-    passing: number
-    in_progress: number
-    total: number
-    percentage: number
-  }
-  agentStatus: AgentStatus
-  logs: Array<{ line: string; timestamp: string; featureId?: number; agentIndex?: number }>
-  isConnected: boolean
-  devServerStatus: DevServerStatus
-  devServerUrl: string | null
-  devLogs: Array<{ line: string; timestamp: string }>
+    passing: number;
+    in_progress: number;
+    total: number;
+    percentage: number;
+  };
+  agentStatus: AgentStatus;
+  logs: Array<{
+    line: string;
+    timestamp: string;
+    featureId?: number;
+    agentIndex?: number;
+  }>;
+  isConnected: boolean;
+  devServerStatus: DevServerStatus;
+  devServerUrl: string | null;
+  devLogs: Array<{ line: string; timestamp: string }>;
   // Multi-agent state
-  activeAgents: ActiveAgent[]
-  recentActivity: ActivityItem[]
+  activeAgents: ActiveAgent[];
+  recentActivity: ActivityItem[];
   // Per-agent logs for debugging (indexed by agentIndex)
-  agentLogs: Map<number, AgentLogEntry[]>
+  agentLogs: Map<number, AgentLogEntry[]>;
   // Celebration queue to handle rapid successes without race conditions
-  celebrationQueue: CelebrationTrigger[]
-  celebration: CelebrationTrigger | null
+  celebrationQueue: CelebrationTrigger[];
+  celebration: CelebrationTrigger | null;
   // Orchestrator state for Mission Control
-  orchestratorStatus: OrchestratorStatus | null
+  orchestratorStatus: OrchestratorStatus | null;
 }
 
-const MAX_LOGS = 100 // Keep last 100 log lines
-const MAX_ACTIVITY = 20 // Keep last 20 activity items
-const MAX_AGENT_LOGS = 500 // Keep last 500 log lines per agent
+const MAX_LOGS = 100; // Keep last 100 log lines
+const MAX_ACTIVITY = 20; // Keep last 20 activity items
+const MAX_AGENT_LOGS = 500; // Keep last 500 log lines per agent
 
 export function useProjectWebSocket(projectName: string | null) {
   const [state, setState] = useState<WebSocketState>({
     progress: { passing: 0, in_progress: 0, total: 0, percentage: 0 },
-    agentStatus: 'loading',
+    agentStatus: "loading",
     logs: [],
     isConnected: false,
-    devServerStatus: 'stopped',
+    devServerStatus: "stopped",
     devServerUrl: null,
     devLogs: [],
     activeAgents: [],
@@ -73,36 +78,36 @@ export function useProjectWebSocket(projectName: string | null) {
     celebrationQueue: [],
     celebration: null,
     orchestratorStatus: null,
-  })
+  });
 
-  const wsRef = useRef<WebSocket | null>(null)
-  const reconnectTimeoutRef = useRef<number | null>(null)
-  const reconnectAttempts = useRef(0)
+  const wsRef = useRef<WebSocket | null>(null);
+  const reconnectTimeoutRef = useRef<number | null>(null);
+  const reconnectAttempts = useRef(0);
 
   const connect = useCallback(() => {
-    if (!projectName) return
+    if (!projectName) return;
 
     // Build WebSocket URL
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const host = window.location.host
-    const wsUrl = `${protocol}//${host}/ws/projects/${encodeURIComponent(projectName)}`
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const host = window.location.host;
+    const wsUrl = `${protocol}//${host}/ws/projects/${encodeURIComponent(projectName)}`;
 
     try {
-      const ws = new WebSocket(wsUrl)
-      wsRef.current = ws
+      const ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
 
       ws.onopen = () => {
-        setState(prev => ({ ...prev, isConnected: true }))
-        reconnectAttempts.current = 0
-      }
+        setState((prev) => ({ ...prev, isConnected: true }));
+        reconnectAttempts.current = 0;
+      };
 
       ws.onmessage = (event) => {
         try {
-          const message: WSMessage = JSON.parse(event.data)
+          const message: WSMessage = JSON.parse(event.data);
 
           switch (message.type) {
-            case 'progress':
-              setState(prev => ({
+            case "progress":
+              setState((prev) => ({
                 ...prev,
                 progress: {
                   passing: message.passing,
@@ -110,24 +115,25 @@ export function useProjectWebSocket(projectName: string | null) {
                   total: message.total,
                   percentage: message.percentage,
                 },
-              }))
-              break
+              }));
+              break;
 
-            case 'agent_status':
-              setState(prev => ({
+            case "agent_status":
+              setState((prev) => ({
                 ...prev,
                 agentStatus: message.status,
                 // Clear active agents and orchestrator status when process stops OR crashes to prevent stale UI
-                ...((message.status === 'stopped' || message.status === 'crashed') && {
+                ...((message.status === "stopped" ||
+                  message.status === "crashed") && {
                   activeAgents: [],
                   recentActivity: [],
                   orchestratorStatus: null,
                 }),
-              }))
-              break
+              }));
+              break;
 
-            case 'log':
-              setState(prev => {
+            case "log":
+              setState((prev) => {
                 // Update global logs
                 const newLogs = [
                   ...prev.logs.slice(-MAX_LOGS + 1),
@@ -137,85 +143,87 @@ export function useProjectWebSocket(projectName: string | null) {
                     featureId: message.featureId,
                     agentIndex: message.agentIndex,
                   },
-                ]
+                ];
 
                 // Also store in per-agent logs if we have an agentIndex
-                let newAgentLogs = prev.agentLogs
+                let newAgentLogs = prev.agentLogs;
                 if (message.agentIndex !== undefined) {
-                  newAgentLogs = new Map(prev.agentLogs)
-                  const existingLogs = newAgentLogs.get(message.agentIndex) || []
+                  newAgentLogs = new Map(prev.agentLogs);
+                  const existingLogs =
+                    newAgentLogs.get(message.agentIndex) || [];
                   const logEntry: AgentLogEntry = {
                     line: message.line,
                     timestamp: message.timestamp,
-                    type: 'output',
-                  }
-                  newAgentLogs.set(
-                    message.agentIndex,
-                    [...existingLogs.slice(-MAX_AGENT_LOGS + 1), logEntry]
-                  )
+                    type: "output",
+                  };
+                  newAgentLogs.set(message.agentIndex, [
+                    ...existingLogs.slice(-MAX_AGENT_LOGS + 1),
+                    logEntry,
+                  ]);
                 }
 
-                return { ...prev, logs: newLogs, agentLogs: newAgentLogs }
-              })
-              break
+                return { ...prev, logs: newLogs, agentLogs: newAgentLogs };
+              });
+              break;
 
-            case 'feature_update':
+            case "feature_update":
               // Feature updates will trigger a refetch via React Query
-              break
+              break;
 
-            case 'agent_update':
-              setState(prev => {
+            case "agent_update":
+              setState((prev) => {
                 // Log state change to per-agent logs
-                const newAgentLogs = new Map(prev.agentLogs)
-                const existingLogs = newAgentLogs.get(message.agentIndex) || []
+                const newAgentLogs = new Map(prev.agentLogs);
+                const existingLogs = newAgentLogs.get(message.agentIndex) || [];
                 const stateLogEntry: AgentLogEntry = {
-                  line: `[STATE] ${message.state}${message.thought ? `: ${message.thought}` : ''}`,
+                  line: `[STATE] ${message.state}${message.thought ? `: ${message.thought}` : ""}`,
                   timestamp: message.timestamp,
-                  type: message.state === 'error' ? 'error' : 'state_change',
-                }
-                newAgentLogs.set(
-                  message.agentIndex,
-                  [...existingLogs.slice(-MAX_AGENT_LOGS + 1), stateLogEntry]
-                )
+                  type: message.state === "error" ? "error" : "state_change",
+                };
+                newAgentLogs.set(message.agentIndex, [
+                  ...existingLogs.slice(-MAX_AGENT_LOGS + 1),
+                  stateLogEntry,
+                ]);
 
                 // Get current logs for this agent to attach to ActiveAgent
-                const agentLogsArray = newAgentLogs.get(message.agentIndex) || []
+                const agentLogsArray =
+                  newAgentLogs.get(message.agentIndex) || [];
 
                 // Update or add the agent in activeAgents
                 const existingAgentIdx = prev.activeAgents.findIndex(
-                  a => a.agentIndex === message.agentIndex
-                )
+                  (a) => a.agentIndex === message.agentIndex,
+                );
 
-                let newAgents: ActiveAgent[]
-                if (message.state === 'success' || message.state === 'error') {
+                let newAgents: ActiveAgent[];
+                if (message.state === "success" || message.state === "error") {
                   // Remove agent from active list on completion (success or failure)
                   // But keep the logs in agentLogs map for debugging
                   if (message.agentIndex === -1) {
                     // Synthetic completion: remove by featureId
                     // This handles agents that weren't tracked but still completed
                     newAgents = prev.activeAgents.filter(
-                      a => a.featureId !== message.featureId
-                    )
+                      (a) => a.featureId !== message.featureId,
+                    );
                   } else {
                     // Normal completion: remove by agentIndex
                     newAgents = prev.activeAgents.filter(
-                      a => a.agentIndex !== message.agentIndex
-                    )
+                      (a) => a.agentIndex !== message.agentIndex,
+                    );
                   }
                 } else if (existingAgentIdx >= 0) {
                   // Update existing agent
-                  newAgents = [...prev.activeAgents]
+                  newAgents = [...prev.activeAgents];
                   newAgents[existingAgentIdx] = {
                     agentIndex: message.agentIndex,
                     agentName: message.agentName,
-                    agentType: message.agentType || 'coding',  // Default to coding for backwards compat
+                    agentType: message.agentType || "coding", // Default to coding for backwards compat
                     featureId: message.featureId,
                     featureName: message.featureName,
                     state: message.state,
                     thought: message.thought,
                     timestamp: message.timestamp,
                     logs: agentLogsArray,
-                  }
+                  };
                 } else {
                   // Add new agent
                   newAgents = [
@@ -223,7 +231,7 @@ export function useProjectWebSocket(projectName: string | null) {
                     {
                       agentIndex: message.agentIndex,
                       agentName: message.agentName,
-                      agentType: message.agentType || 'coding',  // Default to coding for backwards compat
+                      agentType: message.agentType || "coding", // Default to coding for backwards compat
                       featureId: message.featureId,
                       featureName: message.featureName,
                       state: message.state,
@@ -231,11 +239,11 @@ export function useProjectWebSocket(projectName: string | null) {
                       timestamp: message.timestamp,
                       logs: agentLogsArray,
                     },
-                  ]
+                  ];
                 }
 
                 // Add to activity feed if there's a thought
-                let newActivity = prev.recentActivity
+                let newActivity = prev.recentActivity;
                 if (message.thought) {
                   newActivity = [
                     {
@@ -245,26 +253,29 @@ export function useProjectWebSocket(projectName: string | null) {
                       featureId: message.featureId,
                     },
                     ...prev.recentActivity.slice(0, MAX_ACTIVITY - 1),
-                  ]
+                  ];
                 }
 
                 // Handle celebration queue on success
-                let newCelebrationQueue = prev.celebrationQueue
-                let newCelebration = prev.celebration
+                let newCelebrationQueue = prev.celebrationQueue;
+                let newCelebration = prev.celebration;
 
-                if (message.state === 'success') {
+                if (message.state === "success") {
                   const newCelebrationItem: CelebrationTrigger = {
                     agentName: message.agentName,
                     featureName: message.featureName,
                     featureId: message.featureId,
-                  }
+                  };
 
                   // If no celebration is showing, show this one immediately
                   // Otherwise, add to queue
                   if (!prev.celebration) {
-                    newCelebration = newCelebrationItem
+                    newCelebration = newCelebrationItem;
                   } else {
-                    newCelebrationQueue = [...prev.celebrationQueue, newCelebrationItem]
+                    newCelebrationQueue = [
+                      ...prev.celebrationQueue,
+                      newCelebrationItem,
+                    ];
                   }
                 }
 
@@ -275,104 +286,128 @@ export function useProjectWebSocket(projectName: string | null) {
                   recentActivity: newActivity,
                   celebrationQueue: newCelebrationQueue,
                   celebration: newCelebration,
-                }
-              })
-              break
+                };
+              });
+              break;
 
-            case 'orchestrator_update':
-              setState(prev => {
+            case "orchestrator_update":
+              setState((prev) => {
                 const newEvent: OrchestratorEvent = {
                   eventType: message.eventType,
                   message: message.message,
                   timestamp: message.timestamp,
                   featureId: message.featureId,
                   featureName: message.featureName,
-                }
+                };
 
                 return {
                   ...prev,
                   orchestratorStatus: {
                     state: message.state,
                     message: message.message,
-                    codingAgents: message.codingAgents ?? prev.orchestratorStatus?.codingAgents ?? 0,
-                    testingAgents: message.testingAgents ?? prev.orchestratorStatus?.testingAgents ?? 0,
-                    maxConcurrency: message.maxConcurrency ?? prev.orchestratorStatus?.maxConcurrency ?? 3,
-                    readyCount: message.readyCount ?? prev.orchestratorStatus?.readyCount ?? 0,
-                    blockedCount: message.blockedCount ?? prev.orchestratorStatus?.blockedCount ?? 0,
+                    codingAgents:
+                      message.codingAgents ??
+                      prev.orchestratorStatus?.codingAgents ??
+                      0,
+                    testingAgents:
+                      message.testingAgents ??
+                      prev.orchestratorStatus?.testingAgents ??
+                      0,
+                    maxConcurrency:
+                      message.maxConcurrency ??
+                      prev.orchestratorStatus?.maxConcurrency ??
+                      3,
+                    readyCount:
+                      message.readyCount ??
+                      prev.orchestratorStatus?.readyCount ??
+                      0,
+                    blockedCount:
+                      message.blockedCount ??
+                      prev.orchestratorStatus?.blockedCount ??
+                      0,
                     timestamp: message.timestamp,
-                    recentEvents: [newEvent, ...(prev.orchestratorStatus?.recentEvents ?? []).slice(0, 4)],
+                    recentEvents: [
+                      newEvent,
+                      ...(prev.orchestratorStatus?.recentEvents ?? []).slice(
+                        0,
+                        4,
+                      ),
+                    ],
                   },
-                }
-              })
-              break
+                };
+              });
+              break;
 
-            case 'dev_log':
-              setState(prev => ({
+            case "dev_log":
+              setState((prev) => ({
                 ...prev,
                 devLogs: [
                   ...prev.devLogs.slice(-MAX_LOGS + 1),
                   { line: message.line, timestamp: message.timestamp },
                 ],
-              }))
-              break
+              }));
+              break;
 
-            case 'dev_server_status':
-              setState(prev => ({
+            case "dev_server_status":
+              setState((prev) => ({
                 ...prev,
                 devServerStatus: message.status,
                 devServerUrl: message.url,
-              }))
-              break
+              }));
+              break;
 
-            case 'pong':
+            case "pong":
               // Heartbeat response
-              break
+              break;
           }
         } catch {
-          console.error('Failed to parse WebSocket message')
+          console.error("Failed to parse WebSocket message");
         }
-      }
+      };
 
       ws.onclose = () => {
-        setState(prev => ({ ...prev, isConnected: false }))
-        wsRef.current = null
+        setState((prev) => ({ ...prev, isConnected: false }));
+        wsRef.current = null;
 
         // Exponential backoff reconnection
-        const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 30000)
-        reconnectAttempts.current++
+        const delay = Math.min(
+          1000 * Math.pow(2, reconnectAttempts.current),
+          30000,
+        );
+        reconnectAttempts.current++;
 
         reconnectTimeoutRef.current = window.setTimeout(() => {
-          connect()
-        }, delay)
-      }
+          connect();
+        }, delay);
+      };
 
       ws.onerror = () => {
-        ws.close()
-      }
+        ws.close();
+      };
     } catch {
       // Failed to connect, will retry via onclose
     }
-  }, [projectName])
+  }, [projectName]);
 
   // Send ping to keep connection alive
   const sendPing = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: 'ping' }))
+      wsRef.current.send(JSON.stringify({ type: "ping" }));
     }
-  }, [])
+  }, []);
 
   // Clear celebration and show next one from queue if available
   const clearCelebration = useCallback(() => {
-    setState(prev => {
+    setState((prev) => {
       // Pop the next celebration from the queue if available
-      const [nextCelebration, ...remainingQueue] = prev.celebrationQueue
+      const [nextCelebration, ...remainingQueue] = prev.celebrationQueue;
       return {
         ...prev,
         celebration: nextCelebration || null,
         celebrationQueue: remainingQueue,
-      }
-    })
-  }, [])
+      };
+    });
+  }, []);
 
   // Connect when project changes
   useEffect(() => {
@@ -380,10 +415,10 @@ export function useProjectWebSocket(projectName: string | null) {
     // Use 'loading' for agentStatus to show loading indicator until WebSocket provides actual status
     setState({
       progress: { passing: 0, in_progress: 0, total: 0, percentage: 0 },
-      agentStatus: 'loading',
+      agentStatus: "loading",
       logs: [],
       isConnected: false,
-      devServerStatus: 'stopped',
+      devServerStatus: "stopped",
       devServerUrl: null,
       devLogs: [],
       activeAgents: [],
@@ -392,78 +427,81 @@ export function useProjectWebSocket(projectName: string | null) {
       celebrationQueue: [],
       celebration: null,
       orchestratorStatus: null,
-    })
+    });
 
     if (!projectName) {
       // Disconnect if no project
       if (wsRef.current) {
-        wsRef.current.close()
-        wsRef.current = null
+        wsRef.current.close();
+        wsRef.current = null;
       }
-      return
+      return;
     }
 
-    connect()
+    connect();
 
     // Ping every 30 seconds
-    const pingInterval = setInterval(sendPing, 30000)
+    const pingInterval = setInterval(sendPing, 30000);
 
     return () => {
-      clearInterval(pingInterval)
+      clearInterval(pingInterval);
       if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current)
+        clearTimeout(reconnectTimeoutRef.current);
       }
       if (wsRef.current) {
-        wsRef.current.close()
-        wsRef.current = null
+        wsRef.current.close();
+        wsRef.current = null;
       }
-    }
-  }, [projectName, connect, sendPing])
+    };
+  }, [projectName, connect, sendPing]);
 
   // Defense-in-depth: cleanup stale agents for users who leave UI open for hours
   // This catches edge cases where completion messages are missed
   useEffect(() => {
-    const STALE_THRESHOLD_MS = 30 * 60 * 1000 // 30 minutes
+    const STALE_THRESHOLD_MS = 30 * 60 * 1000; // 30 minutes
 
     const cleanup = setInterval(() => {
-      setState(prev => {
-        const now = Date.now()
-        const fresh = prev.activeAgents.filter(a =>
-          now - new Date(a.timestamp).getTime() < STALE_THRESHOLD_MS
-        )
+      setState((prev) => {
+        const now = Date.now();
+        const fresh = prev.activeAgents.filter(
+          (a) => now - new Date(a.timestamp).getTime() < STALE_THRESHOLD_MS,
+        );
         if (fresh.length !== prev.activeAgents.length) {
-          return { ...prev, activeAgents: fresh }
+          return { ...prev, activeAgents: fresh };
         }
-        return prev
-      })
-    }, 60000) // Check every minute
+        return prev;
+      });
+    }, 60000); // Check every minute
 
-    return () => clearInterval(cleanup)
-  }, [])
+    return () => clearInterval(cleanup);
+  }, []);
 
   // Clear logs function
   const clearLogs = useCallback(() => {
-    setState(prev => ({ ...prev, logs: [] }))
-  }, [])
+    setState((prev) => ({ ...prev, logs: [] }));
+  }, []);
 
   // Clear dev logs function
   const clearDevLogs = useCallback(() => {
-    setState(prev => ({ ...prev, devLogs: [] }))
-  }, [])
+    setState((prev) => ({ ...prev, devLogs: [] }));
+  }, []);
 
   // Get logs for a specific agent (useful for debugging even after agent completes/fails)
-  const getAgentLogs = useCallback((agentIndex: number): AgentLogEntry[] => {
-    return state.agentLogs.get(agentIndex) || []
-  }, [state.agentLogs])
+  const getAgentLogs = useCallback(
+    (agentIndex: number): AgentLogEntry[] => {
+      return state.agentLogs.get(agentIndex) || [];
+    },
+    [state.agentLogs],
+  );
 
   // Clear logs for a specific agent
   const clearAgentLogs = useCallback((agentIndex: number) => {
-    setState(prev => {
-      const newAgentLogs = new Map(prev.agentLogs)
-      newAgentLogs.delete(agentIndex)
-      return { ...prev, agentLogs: newAgentLogs }
-    })
-  }, [])
+    setState((prev) => {
+      const newAgentLogs = new Map(prev.agentLogs);
+      newAgentLogs.delete(agentIndex);
+      return { ...prev, agentLogs: newAgentLogs };
+    });
+  }, []);
 
   return {
     ...state,
@@ -472,5 +510,5 @@ export function useProjectWebSocket(projectName: string | null) {
     clearCelebration,
     getAgentLogs,
     clearAgentLogs,
-  }
+  };
 }

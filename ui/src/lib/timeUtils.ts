@@ -16,8 +16,8 @@
  * Result of time conversion including day shift information.
  */
 export interface TimeConversionResult {
-  time: string
-  dayShift: -1 | 0 | 1 // -1 = previous day, 0 = same day, 1 = next day
+  time: string;
+  dayShift: -1 | 0 | 1; // -1 = previous day, 0 = same day, 1 = next day
 }
 
 /**
@@ -26,23 +26,23 @@ export interface TimeConversionResult {
  * @returns Object with local time string and day shift indicator
  */
 export function utcToLocalWithDayShift(utcTime: string): TimeConversionResult {
-  const [hours, minutes] = utcTime.split(':').map(Number)
+  const [hours, minutes] = utcTime.split(":").map(Number);
 
   // Use a fixed reference date to calculate the shift
-  const utcDate = new Date(Date.UTC(2000, 0, 15, hours, minutes, 0, 0)) // Jan 15, 2000
-  const localDay = utcDate.getDate()
+  const utcDate = new Date(Date.UTC(2000, 0, 15, hours, minutes, 0, 0)); // Jan 15, 2000
+  const localDay = utcDate.getDate();
 
-  let dayShift: -1 | 0 | 1 = 0
-  if (localDay === 14) dayShift = -1 // Went to previous day
-  if (localDay === 16) dayShift = 1 // Went to next day
+  let dayShift: -1 | 0 | 1 = 0;
+  if (localDay === 14) dayShift = -1; // Went to previous day
+  if (localDay === 16) dayShift = 1; // Went to next day
 
-  const localHours = utcDate.getHours()
-  const localMinutes = utcDate.getMinutes()
+  const localHours = utcDate.getHours();
+  const localMinutes = utcDate.getMinutes();
 
   return {
-    time: `${String(localHours).padStart(2, '0')}:${String(localMinutes).padStart(2, '0')}`,
+    time: `${String(localHours).padStart(2, "0")}:${String(localMinutes).padStart(2, "0")}`,
     dayShift,
-  }
+  };
 }
 
 /**
@@ -51,7 +51,7 @@ export function utcToLocalWithDayShift(utcTime: string): TimeConversionResult {
  * @returns Time string in "HH:MM" format (local)
  */
 export function utcToLocal(utcTime: string): string {
-  return utcToLocalWithDayShift(utcTime).time
+  return utcToLocalWithDayShift(utcTime).time;
 }
 
 /**
@@ -59,25 +59,27 @@ export function utcToLocal(utcTime: string): string {
  * @param localTime Time string in "HH:MM" format (local)
  * @returns Object with UTC time string and day shift indicator
  */
-export function localToUTCWithDayShift(localTime: string): TimeConversionResult {
-  const [hours, minutes] = localTime.split(':').map(Number)
+export function localToUTCWithDayShift(
+  localTime: string,
+): TimeConversionResult {
+  const [hours, minutes] = localTime.split(":").map(Number);
 
   // Use a fixed reference date to calculate the shift
   // Set local time on Jan 15, then check UTC date
-  const localDate = new Date(2000, 0, 15, hours, minutes, 0, 0) // Jan 15, 2000 local
-  const utcDay = localDate.getUTCDate()
+  const localDate = new Date(2000, 0, 15, hours, minutes, 0, 0); // Jan 15, 2000 local
+  const utcDay = localDate.getUTCDate();
 
-  let dayShift: -1 | 0 | 1 = 0
-  if (utcDay === 14) dayShift = -1 // UTC is previous day
-  if (utcDay === 16) dayShift = 1 // UTC is next day
+  let dayShift: -1 | 0 | 1 = 0;
+  if (utcDay === 14) dayShift = -1; // UTC is previous day
+  if (utcDay === 16) dayShift = 1; // UTC is next day
 
-  const utcHours = localDate.getUTCHours()
-  const utcMinutes = localDate.getUTCMinutes()
+  const utcHours = localDate.getUTCHours();
+  const utcMinutes = localDate.getUTCMinutes();
 
   return {
-    time: `${String(utcHours).padStart(2, '0')}:${String(utcMinutes).padStart(2, '0')}`,
+    time: `${String(utcHours).padStart(2, "0")}:${String(utcMinutes).padStart(2, "0")}`,
     dayShift,
-  }
+  };
 }
 
 /**
@@ -86,7 +88,7 @@ export function localToUTCWithDayShift(localTime: string): TimeConversionResult 
  * @returns Time string in "HH:MM" format (UTC)
  */
 export function localToUTC(localTime: string): string {
-  return localToUTCWithDayShift(localTime).time
+  return localToUTCWithDayShift(localTime).time;
 }
 
 /**
@@ -95,15 +97,15 @@ export function localToUTC(localTime: string): string {
  * Example: Mon(1) -> Tue(2), Sun(64) -> Mon(1)
  */
 export function shiftDaysForward(bitfield: number): number {
-  let shifted = 0
-  if (bitfield & 1) shifted |= 2 // Mon -> Tue
-  if (bitfield & 2) shifted |= 4 // Tue -> Wed
-  if (bitfield & 4) shifted |= 8 // Wed -> Thu
-  if (bitfield & 8) shifted |= 16 // Thu -> Fri
-  if (bitfield & 16) shifted |= 32 // Fri -> Sat
-  if (bitfield & 32) shifted |= 64 // Sat -> Sun
-  if (bitfield & 64) shifted |= 1 // Sun -> Mon
-  return shifted
+  let shifted = 0;
+  if (bitfield & 1) shifted |= 2; // Mon -> Tue
+  if (bitfield & 2) shifted |= 4; // Tue -> Wed
+  if (bitfield & 4) shifted |= 8; // Wed -> Thu
+  if (bitfield & 8) shifted |= 16; // Thu -> Fri
+  if (bitfield & 16) shifted |= 32; // Fri -> Sat
+  if (bitfield & 32) shifted |= 64; // Sat -> Sun
+  if (bitfield & 64) shifted |= 1; // Sun -> Mon
+  return shifted;
 }
 
 /**
@@ -112,15 +114,15 @@ export function shiftDaysForward(bitfield: number): number {
  * Example: Tue(2) -> Mon(1), Mon(1) -> Sun(64)
  */
 export function shiftDaysBackward(bitfield: number): number {
-  let shifted = 0
-  if (bitfield & 1) shifted |= 64 // Mon -> Sun
-  if (bitfield & 2) shifted |= 1 // Tue -> Mon
-  if (bitfield & 4) shifted |= 2 // Wed -> Tue
-  if (bitfield & 8) shifted |= 4 // Thu -> Wed
-  if (bitfield & 16) shifted |= 8 // Fri -> Thu
-  if (bitfield & 32) shifted |= 16 // Sat -> Fri
-  if (bitfield & 64) shifted |= 32 // Sun -> Sat
-  return shifted
+  let shifted = 0;
+  if (bitfield & 1) shifted |= 64; // Mon -> Sun
+  if (bitfield & 2) shifted |= 1; // Tue -> Mon
+  if (bitfield & 4) shifted |= 2; // Wed -> Tue
+  if (bitfield & 8) shifted |= 4; // Thu -> Wed
+  if (bitfield & 16) shifted |= 8; // Fri -> Thu
+  if (bitfield & 32) shifted |= 16; // Sat -> Fri
+  if (bitfield & 64) shifted |= 32; // Sun -> Sat
+  return shifted;
 }
 
 /**
@@ -129,10 +131,13 @@ export function shiftDaysBackward(bitfield: number): number {
  * @param dayShift Day shift from time conversion (-1, 0, or 1)
  * @returns Adjusted bitfield
  */
-export function adjustDaysForDayShift(bitfield: number, dayShift: -1 | 0 | 1): number {
-  if (dayShift === 1) return shiftDaysForward(bitfield)
-  if (dayShift === -1) return shiftDaysBackward(bitfield)
-  return bitfield
+export function adjustDaysForDayShift(
+  bitfield: number,
+  dayShift: -1 | 0 | 1,
+): number {
+  if (dayShift === 1) return shiftDaysForward(bitfield);
+  if (dayShift === -1) return shiftDaysBackward(bitfield);
+  return bitfield;
 }
 
 /**
@@ -141,12 +146,12 @@ export function adjustDaysForDayShift(bitfield: number, dayShift: -1 | 0 | 1): n
  * @returns Formatted string (e.g., "4h", "1h 30m", "30m")
  */
 export function formatDuration(minutes: number): string {
-  const hours = Math.floor(minutes / 60)
-  const mins = minutes % 60
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
 
-  if (hours === 0) return `${mins}m`
-  if (mins === 0) return `${hours}h`
-  return `${hours}h ${mins}m`
+  if (hours === 0) return `${mins}m`;
+  if (mins === 0) return `${hours}h`;
+  return `${hours}h ${mins}m`;
 }
 
 /**
@@ -156,25 +161,25 @@ export function formatDuration(minutes: number): string {
  * @returns Formatted string (e.g., "22:00", "10:00 PM", "Mon 22:00")
  */
 export function formatNextRun(isoString: string): string {
-  const date = new Date(isoString)
-  const now = new Date()
-  const diffMs = date.getTime() - now.getTime()
-  const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
+  const date = new Date(isoString);
+  const now = new Date();
+  const diffMs = date.getTime() - now.getTime();
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
 
   if (diffHours < 24) {
     // Same day or within 24 hours - just show time
     return date.toLocaleTimeString([], {
-      hour: 'numeric',
-      minute: '2-digit'
-    })
+      hour: "numeric",
+      minute: "2-digit",
+    });
   }
 
   // Further out - show day and time
   return date.toLocaleString([], {
-    weekday: 'short',
-    hour: 'numeric',
-    minute: '2-digit'
-  })
+    weekday: "short",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
 /**
@@ -184,11 +189,11 @@ export function formatNextRun(isoString: string): string {
  * @returns Formatted string (e.g., "14:00", "2:00 PM")
  */
 export function formatEndTime(isoString: string): string {
-  const date = new Date(isoString)
+  const date = new Date(isoString);
   return date.toLocaleTimeString([], {
-    hour: 'numeric',
-    minute: '2-digit'
-  })
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
 /**
@@ -202,20 +207,20 @@ export const DAY_BITS = {
   Fri: 16,
   Sat: 32,
   Sun: 64,
-} as const
+} as const;
 
 /**
  * Array of days with their labels and bit values.
  */
 export const DAYS = [
-  { label: 'Mon', bit: 1 },
-  { label: 'Tue', bit: 2 },
-  { label: 'Wed', bit: 4 },
-  { label: 'Thu', bit: 8 },
-  { label: 'Fri', bit: 16 },
-  { label: 'Sat', bit: 32 },
-  { label: 'Sun', bit: 64 },
-] as const
+  { label: "Mon", bit: 1 },
+  { label: "Tue", bit: 2 },
+  { label: "Wed", bit: 4 },
+  { label: "Thu", bit: 8 },
+  { label: "Fri", bit: 16 },
+  { label: "Sat", bit: 32 },
+  { label: "Sun", bit: 64 },
+] as const;
 
 /**
  * Check if a day is active in a bitfield.
@@ -224,7 +229,7 @@ export const DAYS = [
  * @returns True if the day is active
  */
 export function isDayActive(bitfield: number, dayBit: number): boolean {
-  return (bitfield & dayBit) !== 0
+  return (bitfield & dayBit) !== 0;
 }
 
 /**
@@ -234,7 +239,7 @@ export function isDayActive(bitfield: number, dayBit: number): boolean {
  * @returns New bitfield with the day toggled
  */
 export function toggleDay(bitfield: number, dayBit: number): number {
-  return bitfield ^ dayBit
+  return bitfield ^ dayBit;
 }
 
 /**
@@ -243,10 +248,10 @@ export function toggleDay(bitfield: number, dayBit: number): number {
  * @returns Description string (e.g., "Every day", "Weekdays", "Mon, Wed, Fri")
  */
 export function formatDaysDescription(bitfield: number): string {
-  if (bitfield === 127) return 'Every day'
-  if (bitfield === 31) return 'Weekdays'
-  if (bitfield === 96) return 'Weekends'
+  if (bitfield === 127) return "Every day";
+  if (bitfield === 31) return "Weekdays";
+  if (bitfield === 96) return "Weekends";
 
-  const activeDays = DAYS.filter(d => isDayActive(bitfield, d.bit))
-  return activeDays.map(d => d.label).join(', ')
+  const activeDays = DAYS.filter((d) => isDayActive(bitfield, d.bit));
+  return activeDays.map((d) => d.label).join(", ");
 }

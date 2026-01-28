@@ -1,49 +1,46 @@
-import { useState } from 'react'
-import { Play, Square, Loader2, GitBranch, Clock } from 'lucide-react'
-import {
-  useStartAgent,
-  useStopAgent,
-  useSettings,
-} from '../hooks/useProjects'
-import { useNextScheduledRun } from '../hooks/useSchedules'
-import { formatNextRun, formatEndTime } from '../lib/timeUtils'
-import { ScheduleModal } from './ScheduleModal'
-import type { AgentStatus } from '../lib/types'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
+import { useState } from "react";
+import { Play, Square, Loader2, GitBranch, Clock } from "lucide-react";
+import { useStartAgent, useStopAgent, useSettings } from "../hooks/useProjects";
+import { useNextScheduledRun } from "../hooks/useSchedules";
+import { formatNextRun, formatEndTime } from "../lib/timeUtils";
+import { ScheduleModal } from "./ScheduleModal";
+import type { AgentStatus } from "../lib/types";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 
 interface AgentControlProps {
-  projectName: string
-  status: AgentStatus
+  projectName: string;
+  status: AgentStatus;
 }
 
 export function AgentControl({ projectName, status }: AgentControlProps) {
-  const { data: settings } = useSettings()
-  const yoloMode = settings?.yolo_mode ?? false
+  const { data: settings } = useSettings();
+  const yoloMode = settings?.yolo_mode ?? false;
 
   // Concurrency: 1 = single agent, 2-5 = parallel
-  const [concurrency, setConcurrency] = useState(3)
+  const [concurrency, setConcurrency] = useState(3);
 
-  const startAgent = useStartAgent(projectName)
-  const stopAgent = useStopAgent(projectName)
-  const { data: nextRun } = useNextScheduledRun(projectName)
+  const startAgent = useStartAgent(projectName);
+  const stopAgent = useStopAgent(projectName);
+  const { data: nextRun } = useNextScheduledRun(projectName);
 
-  const [showScheduleModal, setShowScheduleModal] = useState(false)
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
 
-  const isLoading = startAgent.isPending || stopAgent.isPending
-  const isRunning = status === 'running' || status === 'paused'
-  const isLoadingStatus = status === 'loading'
-  const isParallel = concurrency > 1
+  const isLoading = startAgent.isPending || stopAgent.isPending;
+  const isRunning = status === "running" || status === "paused";
+  const isLoadingStatus = status === "loading";
+  const isParallel = concurrency > 1;
 
-  const handleStart = () => startAgent.mutate({
-    yoloMode,
-    parallelMode: isParallel,
-    maxConcurrency: concurrency,
-    testingAgentRatio: settings?.testing_agent_ratio,
-  })
-  const handleStop = () => stopAgent.mutate()
+  const handleStart = () =>
+    startAgent.mutate({
+      yoloMode,
+      parallelMode: isParallel,
+      maxConcurrency: concurrency,
+      testingAgentRatio: settings?.testing_agent_ratio,
+    });
+  const handleStop = () => stopAgent.mutate();
 
-  const isStopped = status === 'stopped' || status === 'crashed'
+  const isStopped = status === "stopped" || status === "crashed";
 
   return (
     <>
@@ -51,7 +48,10 @@ export function AgentControl({ projectName, status }: AgentControlProps) {
         {/* Concurrency slider - visible when stopped */}
         {isStopped && (
           <div className="flex items-center gap-2">
-            <GitBranch size={16} className={isParallel ? 'text-primary' : 'text-muted-foreground'} />
+            <GitBranch
+              size={16}
+              className={isParallel ? "text-primary" : "text-muted-foreground"}
+            />
             <input
               type="range"
               min={1}
@@ -60,7 +60,7 @@ export function AgentControl({ projectName, status }: AgentControlProps) {
               onChange={(e) => setConcurrency(Number(e.target.value))}
               disabled={isLoading}
               className="w-16 h-2 accent-primary cursor-pointer"
-              title={`${concurrency} concurrent agent${concurrency > 1 ? 's' : ''}`}
+              title={`${concurrency} concurrent agent${concurrency > 1 ? "s" : ""}`}
               aria-label="Set number of concurrent agents"
             />
             <span className="text-xs font-semibold min-w-[1.5rem] text-center">
@@ -101,9 +101,9 @@ export function AgentControl({ projectName, status }: AgentControlProps) {
           <Button
             onClick={handleStart}
             disabled={isLoading}
-            variant={yoloMode ? 'secondary' : 'default'}
+            variant={yoloMode ? "secondary" : "default"}
             size="sm"
-            title={yoloMode ? 'Start Agent (YOLO Mode)' : 'Start Agent'}
+            title={yoloMode ? "Start Agent (YOLO Mode)" : "Start Agent"}
           >
             {isLoading ? (
               <Loader2 size={18} className="animate-spin" />
@@ -117,7 +117,7 @@ export function AgentControl({ projectName, status }: AgentControlProps) {
             disabled={isLoading}
             variant="destructive"
             size="sm"
-            title={yoloMode ? 'Stop Agent (YOLO Mode)' : 'Stop Agent'}
+            title={yoloMode ? "Stop Agent (YOLO Mode)" : "Stop Agent"}
           >
             {isLoading ? (
               <Loader2 size={18} className="animate-spin" />
@@ -145,5 +145,5 @@ export function AgentControl({ projectName, status }: AgentControlProps) {
         onClose={() => setShowScheduleModal(false)}
       />
     </>
-  )
+  );
 }

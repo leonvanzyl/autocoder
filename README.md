@@ -35,6 +35,13 @@ You need one of the following:
 - **Claude Pro/Max Subscription** - Use `claude login` to authenticate (recommended)
 - **Anthropic API Key** - Pay-per-use from https://console.anthropic.com/
 
+### Optional: Gemini API (assistant chat only)
+- `GEMINI_API_KEY` (required)
+- `GEMINI_MODEL` (optional, default `gemini-1.5-flash`)
+- `GEMINI_BASE_URL` (optional, default `https://generativelanguage.googleapis.com/v1beta/openai`)
+
+Notes: Gemini is used for assistant chat when configured; coding agents still run on Claude/Anthropic (tools are not available in Gemini mode).
+
 ---
 
 ## Quick Start
@@ -334,6 +341,29 @@ This is normal. The initializer agent is generating detailed test cases, which t
 
 **"Command blocked by security hook"**
 The agent tried to run a command not in the allowlist. This is the security system working as intended. If needed, add the command to `ALLOWED_COMMANDS` in `security.py`.
+
+---
+
+## CI/CD and Deployment
+
+- PR Check workflow (`.github/workflows/pr-check.yml`) runs Python lint/security tests and UI lint/build on every PR to `main` or `master`.
+- Push CI (`.github/workflows/ci.yml`) runs the same validations on direct pushes to `main` and `master`, then builds and pushes a Docker image to GHCR (`ghcr.io/<owner>/<repo>:latest` and `:sha`).
+- Deploy to VPS (`.github/workflows/deploy.yml`) runs after Push CI succeeds, SSHes into your VPS, prunes old Docker artifacts, pulls the target branch, pulls the GHCR `:sha` image (falls back to `:latest`), restarts with `docker compose up -d`, and leaves any existing `.env` untouched. It finishes with an HTTP smoke check on `http://127.0.0.1:8888/health`.
+- Repo secrets required: `VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY`, `VPS_DEPLOY_PATH` (use an absolute path like `/home/autocoder`); optional `VPS_BRANCH` (defaults to `master`) and `VPS_PORT` (defaults to `22`). The VPS needs git, Docker + Compose plugin installed, and the repo cloned at `VPS_DEPLOY_PATH` with your `.env` present.
+- Local Docker run: `docker compose up -d --build` exposes the app on `http://localhost:8888`; data under `~/.autocoder` persists via the `autocoder-data` volume.
+
+### Branch protection
+To require the “PR Check” workflow before merging:
+- GitHub UI: Settings → Branches → Add rule for `main` (and `master` if used) → enable **Require status checks to pass before merging** → select `PR Check` → save.
+- GitHub CLI:  
+  ```bash
+  gh api -X PUT repos/<owner>/<repo>/branches/main/protection \
+    -F required_status_checks.strict=true \
+    -F required_status_checks.contexts[]="PR Check" \
+    -F enforce_admins=true \
+    -F required_pull_request_reviews.dismiss_stale_reviews=true \
+    -F restrictions=
+  ```
 
 ---
 

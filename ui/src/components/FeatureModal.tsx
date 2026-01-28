@@ -1,92 +1,115 @@
-import { useState } from 'react'
-import { X, CheckCircle2, Circle, SkipForward, Trash2, Loader2, AlertCircle, Pencil, Link2, AlertTriangle } from 'lucide-react'
-import { useSkipFeature, useDeleteFeature, useFeatures } from '../hooks/useProjects'
-import { EditFeatureForm } from './EditFeatureForm'
-import type { Feature } from '../lib/types'
+import { useState } from "react";
+import {
+  X,
+  CheckCircle2,
+  Circle,
+  SkipForward,
+  Trash2,
+  Loader2,
+  AlertCircle,
+  Pencil,
+  Link2,
+  AlertTriangle,
+} from "lucide-react";
+import {
+  useSkipFeature,
+  useDeleteFeature,
+  useFeatures,
+} from "../hooks/useProjects";
+import { EditFeatureForm } from "./EditFeatureForm";
+import type { Feature } from "../lib/types";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogFooter,
-} from '@/components/ui/dialog'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Separator } from '@/components/ui/separator'
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Separator } from "@/components/ui/separator";
 
 // Generate consistent color for category
 function getCategoryColor(category: string): string {
   const colors = [
-    'bg-pink-500',
-    'bg-cyan-500',
-    'bg-green-500',
-    'bg-yellow-500',
-    'bg-orange-500',
-    'bg-purple-500',
-    'bg-blue-500',
-  ]
+    "bg-pink-500",
+    "bg-cyan-500",
+    "bg-green-500",
+    "bg-yellow-500",
+    "bg-orange-500",
+    "bg-purple-500",
+    "bg-blue-500",
+  ];
 
-  let hash = 0
+  let hash = 0;
   for (let i = 0; i < category.length; i++) {
-    hash = category.charCodeAt(i) + ((hash << 5) - hash)
+    hash = category.charCodeAt(i) + ((hash << 5) - hash);
   }
 
-  return colors[Math.abs(hash) % colors.length]
+  return colors[Math.abs(hash) % colors.length];
 }
 
 interface FeatureModalProps {
-  feature: Feature
-  projectName: string
-  onClose: () => void
+  feature: Feature;
+  projectName: string;
+  onClose: () => void;
 }
 
-export function FeatureModal({ feature, projectName, onClose }: FeatureModalProps) {
-  const [error, setError] = useState<string | null>(null)
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-  const [showEdit, setShowEdit] = useState(false)
+export function FeatureModal({
+  feature,
+  projectName,
+  onClose,
+}: FeatureModalProps) {
+  const [error, setError] = useState<string | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showEdit, setShowEdit] = useState(false);
 
-  const skipFeature = useSkipFeature(projectName)
-  const deleteFeature = useDeleteFeature(projectName)
-  const { data: allFeatures } = useFeatures(projectName)
+  const skipFeature = useSkipFeature(projectName);
+  const deleteFeature = useDeleteFeature(projectName);
+  const { data: allFeatures } = useFeatures(projectName);
 
   // Build a map of feature ID to feature for looking up dependency names
-  const featureMap = new Map<number, Feature>()
+  const featureMap = new Map<number, Feature>();
   if (allFeatures) {
-    ;[...allFeatures.pending, ...allFeatures.in_progress, ...allFeatures.done].forEach(f => {
-      featureMap.set(f.id, f)
-    })
+    [
+      ...allFeatures.pending,
+      ...allFeatures.in_progress,
+      ...allFeatures.done,
+    ].forEach((f) => {
+      featureMap.set(f.id, f);
+    });
   }
 
   // Get dependency features
   const dependencies = (feature.dependencies || [])
-    .map(id => featureMap.get(id))
-    .filter((f): f is Feature => f !== undefined)
+    .map((id) => featureMap.get(id))
+    .filter((f): f is Feature => f !== undefined);
 
   // Get blocking dependencies (unmet dependencies)
   const blockingDeps = (feature.blocking_dependencies || [])
-    .map(id => featureMap.get(id))
-    .filter((f): f is Feature => f !== undefined)
+    .map((id) => featureMap.get(id))
+    .filter((f): f is Feature => f !== undefined);
 
   const handleSkip = async () => {
-    setError(null)
+    setError(null);
     try {
-      await skipFeature.mutateAsync(feature.id)
-      onClose()
+      await skipFeature.mutateAsync(feature.id);
+      onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to skip feature')
+      setError(err instanceof Error ? err.message : "Failed to skip feature");
     }
-  }
+  };
 
   const handleDelete = async () => {
-    setError(null)
+    setError(null);
     try {
-      await deleteFeature.mutateAsync(feature.id)
-      onClose()
+      await deleteFeature.mutateAsync(feature.id);
+      onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete feature')
+      setError(err instanceof Error ? err.message : "Failed to delete feature");
     }
-  }
+  };
 
   // Show edit form when in edit mode
   if (showEdit) {
@@ -97,7 +120,7 @@ export function FeatureModal({ feature, projectName, onClose }: FeatureModalProp
         onClose={() => setShowEdit(false)}
         onSaved={onClose}
       />
-    )
+    );
   }
 
   return (
@@ -106,7 +129,9 @@ export function FeatureModal({ feature, projectName, onClose }: FeatureModalProp
         {/* Header */}
         <DialogHeader className="p-6 pb-4">
           <div className="flex items-start gap-3">
-            <Badge className={`${getCategoryColor(feature.category)} text-white`}>
+            <Badge
+              className={`${getCategoryColor(feature.category)} text-white`}
+            >
               {feature.category}
             </Badge>
           </div>
@@ -144,7 +169,9 @@ export function FeatureModal({ feature, projectName, onClose }: FeatureModalProp
             ) : (
               <>
                 <Circle size={24} className="text-muted-foreground" />
-                <span className="font-semibold text-muted-foreground">PENDING</span>
+                <span className="font-semibold text-muted-foreground">
+                  PENDING
+                </span>
               </>
             )}
             <span className="ml-auto font-mono text-sm text-muted-foreground">
@@ -162,16 +189,25 @@ export function FeatureModal({ feature, projectName, onClose }: FeatureModalProp
 
           {/* Blocked By Warning */}
           {blockingDeps.length > 0 && (
-            <Alert variant="destructive" className="border-orange-500 bg-orange-50 dark:bg-orange-950/20">
+            <Alert
+              variant="destructive"
+              className="border-orange-500 bg-orange-50 dark:bg-orange-950/20"
+            >
               <AlertTriangle className="h-4 w-4 text-orange-600" />
               <AlertDescription>
-                <h4 className="font-semibold mb-1 text-orange-700 dark:text-orange-400">Blocked By</h4>
+                <h4 className="font-semibold mb-1 text-orange-700 dark:text-orange-400">
+                  Blocked By
+                </h4>
                 <p className="text-sm text-orange-600 dark:text-orange-300 mb-2">
-                  This feature cannot start until the following dependencies are complete:
+                  This feature cannot start until the following dependencies are
+                  complete:
                 </p>
                 <ul className="space-y-1">
-                  {blockingDeps.map(dep => (
-                    <li key={dep.id} className="flex items-center gap-2 text-sm text-orange-600 dark:text-orange-300">
+                  {blockingDeps.map((dep) => (
+                    <li
+                      key={dep.id}
+                      className="flex items-center gap-2 text-sm text-orange-600 dark:text-orange-300"
+                    >
                       <Circle size={14} />
                       <span className="font-mono text-xs">#{dep.id}</span>
                       <span>{dep.name}</span>
@@ -190,7 +226,7 @@ export function FeatureModal({ feature, projectName, onClose }: FeatureModalProp
                 Depends On
               </h3>
               <ul className="space-y-1">
-                {dependencies.map(dep => (
+                {dependencies.map((dep) => (
                   <li
                     key={dep.id}
                     className="flex items-center gap-2 p-2 bg-muted rounded-md text-sm"
@@ -200,8 +236,12 @@ export function FeatureModal({ feature, projectName, onClose }: FeatureModalProp
                     ) : (
                       <Circle size={16} className="text-muted-foreground" />
                     )}
-                    <span className="font-mono text-xs text-muted-foreground">#{dep.id}</span>
-                    <span className={dep.passes ? 'text-primary' : ''}>{dep.name}</span>
+                    <span className="font-mono text-xs text-muted-foreground">
+                      #{dep.id}
+                    </span>
+                    <span className={dep.passes ? "text-primary" : ""}>
+                      {dep.name}
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -216,10 +256,7 @@ export function FeatureModal({ feature, projectName, onClose }: FeatureModalProp
               </h3>
               <ol className="list-decimal list-inside space-y-2">
                 {feature.steps.map((step, index) => (
-                  <li
-                    key={index}
-                    className="p-3 bg-muted rounded-md text-sm"
-                  >
+                  <li key={index} className="p-3 bg-muted rounded-md text-sm">
                     {step}
                   </li>
                 ))}
@@ -248,7 +285,7 @@ export function FeatureModal({ feature, projectName, onClose }: FeatureModalProp
                       {deleteFeature.isPending ? (
                         <Loader2 size={18} className="animate-spin" />
                       ) : (
-                        'Yes, Delete'
+                        "Yes, Delete"
                       )}
                     </Button>
                     <Button
@@ -301,5 +338,5 @@ export function FeatureModal({ feature, projectName, onClose }: FeatureModalProp
         )}
       </DialogContent>
     </Dialog>
-  )
+  );
 }

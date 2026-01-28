@@ -1,12 +1,12 @@
-import { Wifi, WifiOff } from 'lucide-react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
+import { Wifi, WifiOff } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 
 interface ProgressDashboardProps {
-  passing: number
-  total: number
-  percentage: number
-  isConnected: boolean
+  passing: number;
+  total: number;
+  percentage: number;
+  isConnected: boolean;
 }
 
 export function ProgressDashboard({
@@ -21,7 +21,10 @@ export function ProgressDashboard({
         <CardTitle className="text-xl uppercase tracking-wide">
           Progress
         </CardTitle>
-        <Badge variant={isConnected ? 'default' : 'destructive'} className="gap-1">
+        <Badge
+          variant={isConnected ? "default" : "destructive"}
+          className="gap-1"
+        >
           {isConnected ? (
             <>
               <Wifi size={14} />
@@ -69,9 +72,7 @@ export function ProgressDashboard({
           </div>
           <div className="text-4xl text-muted-foreground">/</div>
           <div>
-            <span className="font-mono text-3xl font-bold">
-              {total}
-            </span>
+            <span className="font-mono text-3xl font-bold">{total}</span>
             <span className="block text-sm text-muted-foreground uppercase">
               Total
             </span>
@@ -79,5 +80,5 @@ export function ProgressDashboard({
         </div>
       </CardContent>
     </Card>
-  )
+  );
 }

@@ -1,90 +1,107 @@
-import { useState, useRef, useEffect } from 'react'
-import { Palette, Check } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import type { ThemeId, ThemeOption } from '../hooks/useTheme'
+import { useState, useRef, useEffect } from "react";
+import { Palette, Check } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import type { ThemeId, ThemeOption } from "../hooks/useTheme";
 
 interface ThemeSelectorProps {
-  themes: ThemeOption[]
-  currentTheme: ThemeId
-  onThemeChange: (theme: ThemeId) => void
+  themes: ThemeOption[];
+  currentTheme: ThemeId;
+  onThemeChange: (theme: ThemeId) => void;
 }
 
-export function ThemeSelector({ themes, currentTheme, onThemeChange }: ThemeSelectorProps) {
-  const [isOpen, setIsOpen] = useState(false)
-  const [previewTheme, setPreviewTheme] = useState<ThemeId | null>(null)
-  const containerRef = useRef<HTMLDivElement>(null)
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null)
+export function ThemeSelector({
+  themes,
+  currentTheme,
+  onThemeChange,
+}: ThemeSelectorProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [previewTheme, setPreviewTheme] = useState<ThemeId | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
-        setIsOpen(false)
-        setPreviewTheme(null)
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(event.target as Node)
+      ) {
+        setIsOpen(false);
+        setPreviewTheme(null);
       }
-    }
+    };
 
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   // Apply preview theme temporarily
   useEffect(() => {
     if (previewTheme) {
-      const root = document.documentElement
-      root.classList.remove('theme-claude', 'theme-neo-brutalism', 'theme-retro-arcade', 'theme-aurora')
-      if (previewTheme === 'claude') {
-        root.classList.add('theme-claude')
-      } else if (previewTheme === 'neo-brutalism') {
-        root.classList.add('theme-neo-brutalism')
-      } else if (previewTheme === 'retro-arcade') {
-        root.classList.add('theme-retro-arcade')
-      } else if (previewTheme === 'aurora') {
-        root.classList.add('theme-aurora')
+      const root = document.documentElement;
+      root.classList.remove(
+        "theme-claude",
+        "theme-neo-brutalism",
+        "theme-retro-arcade",
+        "theme-aurora",
+      );
+      if (previewTheme === "claude") {
+        root.classList.add("theme-claude");
+      } else if (previewTheme === "neo-brutalism") {
+        root.classList.add("theme-neo-brutalism");
+      } else if (previewTheme === "retro-arcade") {
+        root.classList.add("theme-retro-arcade");
+      } else if (previewTheme === "aurora") {
+        root.classList.add("theme-aurora");
       }
     }
 
     // Cleanup: restore current theme when preview ends
     return () => {
       if (previewTheme) {
-        const root = document.documentElement
-        root.classList.remove('theme-claude', 'theme-neo-brutalism', 'theme-retro-arcade', 'theme-aurora')
-        if (currentTheme === 'claude') {
-          root.classList.add('theme-claude')
-        } else if (currentTheme === 'neo-brutalism') {
-          root.classList.add('theme-neo-brutalism')
-        } else if (currentTheme === 'retro-arcade') {
-          root.classList.add('theme-retro-arcade')
-        } else if (currentTheme === 'aurora') {
-          root.classList.add('theme-aurora')
+        const root = document.documentElement;
+        root.classList.remove(
+          "theme-claude",
+          "theme-neo-brutalism",
+          "theme-retro-arcade",
+          "theme-aurora",
+        );
+        if (currentTheme === "claude") {
+          root.classList.add("theme-claude");
+        } else if (currentTheme === "neo-brutalism") {
+          root.classList.add("theme-neo-brutalism");
+        } else if (currentTheme === "retro-arcade") {
+          root.classList.add("theme-retro-arcade");
+        } else if (currentTheme === "aurora") {
+          root.classList.add("theme-aurora");
         }
       }
-    }
-  }, [previewTheme, currentTheme])
+    };
+  }, [previewTheme, currentTheme]);
 
   const handleMouseEnter = () => {
     if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current)
+      clearTimeout(timeoutRef.current);
     }
-    setIsOpen(true)
-  }
+    setIsOpen(true);
+  };
 
   const handleMouseLeave = () => {
     timeoutRef.current = setTimeout(() => {
-      setIsOpen(false)
-      setPreviewTheme(null)
-    }, 150)
-  }
+      setIsOpen(false);
+      setPreviewTheme(null);
+    }, 150);
+  };
 
   const handleThemeHover = (themeId: ThemeId) => {
-    setPreviewTheme(themeId)
-  }
+    setPreviewTheme(themeId);
+  };
 
   const handleThemeClick = (themeId: ThemeId) => {
-    onThemeChange(themeId)
-    setPreviewTheme(null)
-    setIsOpen(false)
-  }
+    onThemeChange(themeId);
+    setPreviewTheme(null);
+    setIsOpen(false);
+  };
 
   return (
     <div
@@ -120,8 +137,8 @@ export function ThemeSelector({ themes, currentTheme, onThemeChange }: ThemeSele
                 onMouseLeave={() => setPreviewTheme(null)}
                 className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-left transition-colors ${
                   currentTheme === theme.id
-                    ? 'bg-primary/10 text-foreground'
-                    : 'hover:bg-muted text-foreground'
+                    ? "bg-primary/10 text-foreground"
+                    : "hover:bg-muted text-foreground"
                 }`}
                 role="menuitem"
               >
@@ -159,5 +176,5 @@ export function ThemeSelector({ themes, currentTheme, onThemeChange }: ThemeSele
         </div>
       )}
     </div>
-  )
+  );
 }

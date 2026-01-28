@@ -6,23 +6,23 @@
  * Supports conversation history with resume functionality.
  */
 
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
-import { Send, Loader2, Wifi, WifiOff, Plus, History } from 'lucide-react'
-import { useAssistantChat } from '../hooks/useAssistantChat'
-import { ChatMessage as ChatMessageComponent } from './ChatMessage'
-import { ConversationHistory } from './ConversationHistory'
-import type { ChatMessage } from '../lib/types'
-import { Button } from '@/components/ui/button'
-import { Textarea } from '@/components/ui/textarea'
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { Send, Loader2, Wifi, WifiOff, Plus, History } from "lucide-react";
+import { useAssistantChat } from "../hooks/useAssistantChat";
+import { ChatMessage as ChatMessageComponent } from "./ChatMessage";
+import { ConversationHistory } from "./ConversationHistory";
+import type { ChatMessage } from "../lib/types";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 
 interface AssistantChatProps {
-  projectName: string
-  conversationId?: number | null
-  initialMessages?: ChatMessage[]
-  isLoadingConversation?: boolean
-  onNewChat?: () => void
-  onSelectConversation?: (id: number) => void
-  onConversationCreated?: (id: number) => void
+  projectName: string;
+  conversationId?: number | null;
+  initialMessages?: ChatMessage[];
+  isLoadingConversation?: boolean;
+  onNewChat?: () => void;
+  onSelectConversation?: (id: number) => void;
+  onConversationCreated?: (id: number) => void;
 }
 
 export function AssistantChat({
@@ -34,17 +34,17 @@ export function AssistantChat({
   onSelectConversation,
   onConversationCreated,
 }: AssistantChatProps) {
-  const [inputValue, setInputValue] = useState('')
-  const [showHistory, setShowHistory] = useState(false)
-  const messagesEndRef = useRef<HTMLDivElement>(null)
-  const inputRef = useRef<HTMLTextAreaElement>(null)
-  const hasStartedRef = useRef(false)
-  const lastConversationIdRef = useRef<number | null | undefined>(undefined)
+  const [inputValue, setInputValue] = useState("");
+  const [showHistory, setShowHistory] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const hasStartedRef = useRef(false);
+  const lastConversationIdRef = useRef<number | null | undefined>(undefined);
 
   // Memoize the error handler to prevent infinite re-renders
   const handleError = useCallback((error: string) => {
-    console.error('Assistant error:', error)
-  }, [])
+    console.error("Assistant error:", error);
+  }, []);
 
   const {
     messages,
@@ -57,114 +57,125 @@ export function AssistantChat({
   } = useAssistantChat({
     projectName,
     onError: handleError,
-  })
+  });
 
   // Notify parent when a NEW conversation is created (not when switching to existing)
   // Track activeConversationId to fire callback only once when it transitions from null to a value
-  const previousActiveConversationIdRef = useRef<number | null>(activeConversationId)
+  const previousActiveConversationIdRef = useRef<number | null>(
+    activeConversationId,
+  );
   useEffect(() => {
-    const hadNoConversation = previousActiveConversationIdRef.current === null
-    const nowHasConversation = activeConversationId !== null
+    const hadNoConversation = previousActiveConversationIdRef.current === null;
+    const nowHasConversation = activeConversationId !== null;
 
     if (hadNoConversation && nowHasConversation && onConversationCreated) {
-      onConversationCreated(activeConversationId)
+      onConversationCreated(activeConversationId);
     }
 
-    previousActiveConversationIdRef.current = activeConversationId
-  }, [activeConversationId, onConversationCreated])
+    previousActiveConversationIdRef.current = activeConversationId;
+  }, [activeConversationId, onConversationCreated]);
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
   // Start or resume the chat session when component mounts or conversationId changes
   useEffect(() => {
     // Skip if we're loading conversation details
     if (isLoadingConversation) {
-      return
+      return;
     }
 
     // Only start if conversationId has actually changed
-    if (lastConversationIdRef.current === conversationId && hasStartedRef.current) {
-      return
+    if (
+      lastConversationIdRef.current === conversationId &&
+      hasStartedRef.current
+    ) {
+      return;
     }
 
     // Check if we're switching to a different conversation (not initial mount)
-    const isSwitching = lastConversationIdRef.current !== undefined &&
-                        lastConversationIdRef.current !== conversationId
+    const isSwitching =
+      lastConversationIdRef.current !== undefined &&
+      lastConversationIdRef.current !== conversationId;
 
-    lastConversationIdRef.current = conversationId
-    hasStartedRef.current = true
+    lastConversationIdRef.current = conversationId;
+    hasStartedRef.current = true;
 
     // Clear existing messages when switching conversations
     if (isSwitching) {
-      clearMessages()
+      clearMessages();
     }
 
     // Start the session with the conversation ID (or null for new)
-    start(conversationId)
-  }, [conversationId, isLoadingConversation, start, clearMessages])
+    start(conversationId);
+  }, [conversationId, isLoadingConversation, start, clearMessages]);
 
   // Handle starting a new chat
   const handleNewChat = useCallback(() => {
-    clearMessages()
-    onNewChat?.()
-  }, [clearMessages, onNewChat])
+    clearMessages();
+    onNewChat?.();
+  }, [clearMessages, onNewChat]);
 
   // Handle selecting a conversation from history
-  const handleSelectConversation = useCallback((id: number) => {
-    setShowHistory(false)
-    onSelectConversation?.(id)
-  }, [onSelectConversation])
+  const handleSelectConversation = useCallback(
+    (id: number) => {
+      setShowHistory(false);
+      onSelectConversation?.(id);
+    },
+    [onSelectConversation],
+  );
 
   // Focus input when not loading
   useEffect(() => {
     if (!isLoading) {
-      inputRef.current?.focus()
+      inputRef.current?.focus();
     }
-  }, [isLoading])
+  }, [isLoading]);
 
   const handleSend = () => {
-    const content = inputValue.trim()
-    if (!content || isLoading || isLoadingConversation) return
+    const content = inputValue.trim();
+    if (!content || isLoading || isLoadingConversation) return;
 
-    sendMessage(content)
-    setInputValue('')
-  }
+    sendMessage(content);
+    setInputValue("");
+  };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      handleSend()
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
     }
-  }
+  };
 
   // Combine initial messages (from resumed conversation) with live messages
   // Merge both arrays with deduplication by message ID to prevent history loss
   const displayMessages = useMemo(() => {
-    const isConversationSynced = lastConversationIdRef.current === conversationId && !isLoadingConversation
+    const isConversationSynced =
+      lastConversationIdRef.current === conversationId &&
+      !isLoadingConversation;
 
     // If not synced yet, show only initialMessages (or empty)
     if (!isConversationSynced) {
-      return initialMessages ?? []
+      return initialMessages ?? [];
     }
 
     // If no initial messages, just show live messages
     if (!initialMessages || initialMessages.length === 0) {
-      return messages
+      return messages;
     }
 
     // Merge both arrays, deduplicating by ID (live messages take precedence)
-    const messageMap = new Map<string, ChatMessage>()
+    const messageMap = new Map<string, ChatMessage>();
     for (const msg of initialMessages) {
-      messageMap.set(msg.id, msg)
+      messageMap.set(msg.id, msg);
     }
     for (const msg of messages) {
-      messageMap.set(msg.id, msg)
+      messageMap.set(msg.id, msg);
     }
-    return Array.from(messageMap.values())
-  }, [initialMessages, messages, conversationId, isLoadingConversation])
+    return Array.from(messageMap.values());
+  }, [initialMessages, messages, conversationId, isLoadingConversation]);
 
   return (
     <div className="flex flex-col h-full">
@@ -183,7 +194,7 @@ export function AssistantChat({
             <Plus size={16} />
           </Button>
           <Button
-            variant={showHistory ? 'secondary' : 'ghost'}
+            variant={showHistory ? "secondary" : "ghost"}
             size="icon"
             onClick={() => setShowHistory(!showHistory)}
             className="h-8 w-8"
@@ -204,20 +215,24 @@ export function AssistantChat({
 
         {/* Connection status */}
         <div className="flex items-center gap-2">
-          {connectionStatus === 'connected' ? (
+          {connectionStatus === "connected" ? (
             <>
               <Wifi size={14} className="text-green-500" />
               <span className="text-xs text-muted-foreground">Connected</span>
             </>
-          ) : connectionStatus === 'connecting' ? (
+          ) : connectionStatus === "connecting" ? (
             <>
               <Loader2 size={14} className="text-primary animate-spin" />
-              <span className="text-xs text-muted-foreground">Connecting...</span>
+              <span className="text-xs text-muted-foreground">
+                Connecting...
+              </span>
             </>
           ) : (
             <>
               <WifiOff size={14} className="text-destructive" />
-              <span className="text-xs text-muted-foreground">Disconnected</span>
+              <span className="text-xs text-muted-foreground">
+                Disconnected
+              </span>
             </>
           )}
         </div>
@@ -258,9 +273,18 @@ export function AssistantChat({
         <div className="px-4 py-2 border-t border-border bg-background">
           <div className="flex items-center gap-2 text-muted-foreground text-sm">
             <div className="flex gap-1">
-              <span className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-              <span className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-              <span className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+              <span
+                className="w-2 h-2 bg-primary rounded-full animate-bounce"
+                style={{ animationDelay: "0ms" }}
+              />
+              <span
+                className="w-2 h-2 bg-primary rounded-full animate-bounce"
+                style={{ animationDelay: "150ms" }}
+              />
+              <span
+                className="w-2 h-2 bg-primary rounded-full animate-bounce"
+                style={{ animationDelay: "300ms" }}
+              />
             </div>
             <span>Thinking...</span>
           </div>
@@ -276,13 +300,22 @@ export function AssistantChat({
             onChange={(e) => setInputValue(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Ask about the codebase..."
-            disabled={isLoading || isLoadingConversation || connectionStatus !== 'connected'}
+            disabled={
+              isLoading ||
+              isLoadingConversation ||
+              connectionStatus !== "connected"
+            }
             className="flex-1 resize-none min-h-[44px] max-h-[120px]"
             rows={1}
           />
           <Button
             onClick={handleSend}
-            disabled={!inputValue.trim() || isLoading || isLoadingConversation || connectionStatus !== 'connected'}
+            disabled={
+              !inputValue.trim() ||
+              isLoading ||
+              isLoadingConversation ||
+              connectionStatus !== "connected"
+            }
             title="Send message"
           >
             {isLoading ? (
@@ -297,5 +330,5 @@ export function AssistantChat({
         </p>
       </div>
     </div>
-  )
+  );
 }

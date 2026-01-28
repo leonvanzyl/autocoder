@@ -1,11 +1,11 @@
-import { AlertTriangle, GitBranch, Check } from 'lucide-react'
-import type { Feature } from '../lib/types'
-import { Badge } from '@/components/ui/badge'
+import { AlertTriangle, GitBranch, Check } from "lucide-react";
+import type { Feature } from "../lib/types";
+import { Badge } from "@/components/ui/badge";
 
 interface DependencyBadgeProps {
-  feature: Feature
-  allFeatures?: Feature[]
-  compact?: boolean
+  feature: Feature;
+  allFeatures?: Feature[];
+  compact?: boolean;
 }
 
 /**
@@ -15,25 +15,33 @@ interface DependencyBadgeProps {
  * - Dependency count for features with satisfied dependencies
  * - Nothing if feature has no dependencies
  */
-export function DependencyBadge({ feature, allFeatures = [], compact = false }: DependencyBadgeProps) {
-  const dependencies = feature.dependencies || []
+export function DependencyBadge({
+  feature,
+  allFeatures = [],
+  compact = false,
+}: DependencyBadgeProps) {
+  const dependencies = feature.dependencies || [];
 
   if (dependencies.length === 0) {
-    return null
+    return null;
   }
 
   // Use API-computed blocked status if available, otherwise compute locally
-  const isBlocked = feature.blocked ??
-    (feature.blocking_dependencies && feature.blocking_dependencies.length > 0) ??
-    false
+  const isBlocked =
+    feature.blocked ??
+    (feature.blocking_dependencies &&
+      feature.blocking_dependencies.length > 0) ??
+    false;
 
-  const blockingCount = feature.blocking_dependencies?.length ?? 0
+  const blockingCount = feature.blocking_dependencies?.length ?? 0;
 
   // Compute satisfied count from allFeatures if available
-  let satisfiedCount = dependencies.length - blockingCount
+  let satisfiedCount = dependencies.length - blockingCount;
   if (allFeatures.length > 0 && !feature.blocking_dependencies) {
-    const passingIds = new Set(allFeatures.filter(f => f.passes).map(f => f.id))
-    satisfiedCount = dependencies.filter(d => passingIds.has(d)).length
+    const passingIds = new Set(
+      allFeatures.filter((f) => f.passes).map((f) => f.id),
+    );
+    satisfiedCount = dependencies.filter((d) => passingIds.has(d)).length;
   }
 
   if (compact) {
@@ -43,12 +51,13 @@ export function DependencyBadge({ feature, allFeatures = [], compact = false }: 
         variant="outline"
         className={`gap-1 font-mono text-xs ${
           isBlocked
-            ? 'bg-destructive/10 text-destructive border-destructive/30'
-            : 'bg-muted text-muted-foreground'
+            ? "bg-destructive/10 text-destructive border-destructive/30"
+            : "bg-muted text-muted-foreground"
         }`}
-        title={isBlocked
-          ? `Blocked by ${blockingCount} ${blockingCount === 1 ? 'dependency' : 'dependencies'}`
-          : `${satisfiedCount}/${dependencies.length} dependencies satisfied`
+        title={
+          isBlocked
+            ? `Blocked by ${blockingCount} ${blockingCount === 1 ? "dependency" : "dependencies"}`
+            : `${satisfiedCount}/${dependencies.length} dependencies satisfied`
         }
       >
         {isBlocked ? (
@@ -59,11 +68,13 @@ export function DependencyBadge({ feature, allFeatures = [], compact = false }: 
         ) : (
           <>
             <GitBranch size={12} />
-            <span>{satisfiedCount}/{dependencies.length}</span>
+            <span>
+              {satisfiedCount}/{dependencies.length}
+            </span>
           </>
         )}
       </Badge>
-    )
+    );
   }
 
   // Full view with more details
@@ -73,30 +84,35 @@ export function DependencyBadge({ feature, allFeatures = [], compact = false }: 
         <div className="flex items-center gap-1.5 text-sm text-destructive">
           <AlertTriangle size={14} />
           <span className="font-medium">
-            Blocked by {blockingCount} {blockingCount === 1 ? 'dependency' : 'dependencies'}
+            Blocked by {blockingCount}{" "}
+            {blockingCount === 1 ? "dependency" : "dependencies"}
           </span>
         </div>
       ) : (
         <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
           <Check size={14} className="text-primary" />
           <span>
-            All {dependencies.length} {dependencies.length === 1 ? 'dependency' : 'dependencies'} satisfied
+            All {dependencies.length}{" "}
+            {dependencies.length === 1 ? "dependency" : "dependencies"}{" "}
+            satisfied
           </span>
         </div>
       )}
     </div>
-  )
+  );
 }
 
 /**
  * Small inline indicator for dependency status
  */
 export function DependencyIndicator({ feature }: { feature: Feature }) {
-  const dependencies = feature.dependencies || []
-  const isBlocked = feature.blocked || (feature.blocking_dependencies && feature.blocking_dependencies.length > 0)
+  const dependencies = feature.dependencies || [];
+  const isBlocked =
+    feature.blocked ||
+    (feature.blocking_dependencies && feature.blocking_dependencies.length > 0);
 
   if (dependencies.length === 0) {
-    return null
+    return null;
   }
 
   if (isBlocked) {
@@ -107,7 +123,7 @@ export function DependencyIndicator({ feature }: { feature: Feature }) {
       >
         <AlertTriangle size={12} />
       </span>
-    )
+    );
   }
 
   return (
@@ -117,5 +133,5 @@ export function DependencyIndicator({ feature }: { feature: Feature }) {
     >
       <GitBranch size={12} />
     </span>
-  )
+  );
 }

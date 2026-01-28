@@ -14,9 +14,6 @@ from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query
 
-# Module logger
-logger = logging.getLogger(__name__)
-
 from ..schemas import (
     CreateDirectoryRequest,
     DirectoryEntry,
@@ -24,6 +21,11 @@ from ..schemas import (
     DriveInfo,
     PathValidationResponse,
 )
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+# Module logger
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/filesystem", tags=["filesystem"])
 
@@ -128,6 +130,10 @@ def is_path_blocked(path: Path) -> bool:
         resolved = path.resolve()
     except (OSError, ValueError):
         return True  # Can't resolve = blocked
+
+    # Allow paths under the workspace root even if parent is blocked (/opt/etc)
+    if resolved == REPO_ROOT or REPO_ROOT in resolved.parents:
+        return False
 
     blocked_paths = get_blocked_paths()
 

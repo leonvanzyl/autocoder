@@ -1,25 +1,26 @@
-import { useState } from 'react'
-import { ChevronDown, Plus, FolderOpen, Loader2, Trash2 } from 'lucide-react'
-import type { ProjectSummary } from '../lib/types'
-import { NewProjectModal } from './NewProjectModal'
-import { ConfirmDialog } from './ConfirmDialog'
-import { useDeleteProject } from '../hooks/useProjects'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
+import { useState } from "react";
+import { ChevronDown, Plus, FolderOpen, Loader2, Trash2, GitBranch } from "lucide-react";
+import type { ProjectSummary } from "../lib/types";
+import { NewProjectModal } from "./NewProjectModal";
+import { CloneRepoModal } from "./CloneRepoModal";
+import { ConfirmDialog } from "./ConfirmDialog";
+import { useDeleteProject } from "../hooks/useProjects";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
+} from "@/components/ui/dropdown-menu";
 
 interface ProjectSelectorProps {
-  projects: ProjectSummary[]
-  selectedProject: string | null
-  onSelectProject: (name: string | null) => void
-  isLoading: boolean
-  onSpecCreatingChange?: (isCreating: boolean) => void
+  projects: ProjectSummary[];
+  selectedProject: string | null;
+  onSelectProject: (name: string | null) => void;
+  isLoading: boolean;
+  onSpecCreatingChange?: (isCreating: boolean) => void;
 }
 
 export function ProjectSelector({
@@ -29,43 +30,44 @@ export function ProjectSelector({
   isLoading,
   onSpecCreatingChange,
 }: ProjectSelectorProps) {
-  const [isOpen, setIsOpen] = useState(false)
-  const [showNewProjectModal, setShowNewProjectModal] = useState(false)
-  const [projectToDelete, setProjectToDelete] = useState<string | null>(null)
+  const [isOpen, setIsOpen] = useState(false);
+  const [showNewProjectModal, setShowNewProjectModal] = useState(false);
+  const [showCloneRepoModal, setShowCloneRepoModal] = useState(false);
+  const [projectToDelete, setProjectToDelete] = useState<string | null>(null);
 
-  const deleteProject = useDeleteProject()
+  const deleteProject = useDeleteProject();
 
   const handleProjectCreated = (projectName: string) => {
-    onSelectProject(projectName)
-    setIsOpen(false)
-  }
+    onSelectProject(projectName);
+    setIsOpen(false);
+  };
 
   const handleDeleteClick = (e: React.MouseEvent, projectName: string) => {
-    e.stopPropagation()
-    e.preventDefault()
-    setProjectToDelete(projectName)
-  }
+    e.stopPropagation();
+    e.preventDefault();
+    setProjectToDelete(projectName);
+  };
 
   const handleConfirmDelete = async () => {
-    if (!projectToDelete) return
+    if (!projectToDelete) return;
 
     try {
-      await deleteProject.mutateAsync(projectToDelete)
+      await deleteProject.mutateAsync(projectToDelete);
       if (selectedProject === projectToDelete) {
-        onSelectProject(null)
+        onSelectProject(null);
       }
-      setProjectToDelete(null)
+      setProjectToDelete(null);
     } catch (error) {
-      console.error('Failed to delete project:', error)
-      setProjectToDelete(null)
+      console.error("Failed to delete project:", error);
+      setProjectToDelete(null);
     }
-  }
+  };
 
   const handleCancelDelete = () => {
-    setProjectToDelete(null)
-  }
+    setProjectToDelete(null);
+  };
 
-  const selectedProjectData = projects.find(p => p.name === selectedProject)
+  const selectedProjectData = projects.find((p) => p.name === selectedProject);
 
   return (
     <div className="relative">
@@ -85,27 +87,35 @@ export function ProjectSelector({
                   {selectedProject}
                 </span>
                 {selectedProjectData && selectedProjectData.stats.total > 0 && (
-                  <Badge className="ml-2">{selectedProjectData.stats.percentage}%</Badge>
+                  <Badge className="ml-2">
+                    {selectedProjectData.stats.percentage}%
+                  </Badge>
                 )}
               </>
             ) : (
               <span className="text-muted-foreground">Select Project</span>
             )}
-            <ChevronDown size={18} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+            <ChevronDown
+              size={18}
+              className={`transition-transform ${isOpen ? "rotate-180" : ""}`}
+            />
           </Button>
         </DropdownMenuTrigger>
 
-        <DropdownMenuContent align="start" className="w-[280px] p-0 flex flex-col">
+        <DropdownMenuContent
+          align="start"
+          className="w-[280px] p-0 flex flex-col"
+        >
           {projects.length > 0 ? (
             <div className="max-h-[300px] overflow-y-auto p-1">
-              {projects.map(project => (
+              {projects.map((project) => (
                 <DropdownMenuItem
                   key={project.name}
                   className={`flex items-center justify-between cursor-pointer ${
-                    project.name === selectedProject ? 'bg-primary/10' : ''
+                    project.name === selectedProject ? "bg-primary/10" : ""
                   }`}
                   onSelect={() => {
-                    onSelectProject(project.name)
+                    onSelectProject(project.name);
                   }}
                 >
                   <span className="flex items-center gap-2 flex-1">
@@ -139,7 +149,17 @@ export function ProjectSelector({
           <div className="p-1">
             <DropdownMenuItem
               onSelect={() => {
-                setShowNewProjectModal(true)
+                setShowCloneRepoModal(true);
+              }}
+              className="cursor-pointer font-semibold"
+              disabled={!selectedProject}
+            >
+              <GitBranch size={16} />
+              Clone Repository
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={() => {
+                setShowNewProjectModal(true);
               }}
               className="cursor-pointer font-semibold"
             >
@@ -155,7 +175,13 @@ export function ProjectSelector({
         isOpen={showNewProjectModal}
         onClose={() => setShowNewProjectModal(false)}
         onProjectCreated={handleProjectCreated}
-        onStepChange={(step) => onSpecCreatingChange?.(step === 'chat')}
+        onStepChange={(step) => onSpecCreatingChange?.(step === "chat")}
+      />
+
+      <CloneRepoModal
+        isOpen={showCloneRepoModal}
+        onClose={() => setShowCloneRepoModal(false)}
+        projectName={selectedProject}
       />
 
       {/* Delete Confirmation Dialog */}
@@ -171,5 +197,5 @@ export function ProjectSelector({
         onCancel={handleCancelDelete}
       />
     </div>
-  )
+  );
 }

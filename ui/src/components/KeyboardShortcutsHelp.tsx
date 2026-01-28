@@ -1,53 +1,60 @@
-import { useEffect, useCallback } from 'react'
-import { Keyboard } from 'lucide-react'
+import { useEffect, useCallback } from "react";
+import { Keyboard } from "lucide-react";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog'
-import { Badge } from '@/components/ui/badge'
+} from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
 
 interface Shortcut {
-  key: string
-  description: string
-  context?: string
+  key: string;
+  description: string;
+  context?: string;
 }
 
 const shortcuts: Shortcut[] = [
-  { key: '?', description: 'Show keyboard shortcuts' },
-  { key: 'D', description: 'Toggle debug panel' },
-  { key: 'T', description: 'Toggle terminal tab' },
-  { key: 'N', description: 'Add new feature', context: 'with project' },
-  { key: 'E', description: 'Expand project with AI', context: 'with features' },
-  { key: 'A', description: 'Toggle AI assistant', context: 'with project' },
-  { key: 'G', description: 'Toggle Kanban/Graph view', context: 'with project' },
-  { key: ',', description: 'Open settings' },
-  { key: 'Esc', description: 'Close modal/panel' },
-]
+  { key: "?", description: "Show keyboard shortcuts" },
+  { key: "D", description: "Toggle debug panel" },
+  { key: "T", description: "Toggle terminal tab" },
+  { key: "N", description: "Add new feature", context: "with project" },
+  { key: "E", description: "Expand project with AI", context: "with features" },
+  { key: "A", description: "Toggle AI assistant", context: "with project" },
+  {
+    key: "G",
+    description: "Toggle Kanban/Graph view",
+    context: "with project",
+  },
+  { key: ",", description: "Open settings" },
+  { key: "Esc", description: "Close modal/panel" },
+];
 
 interface KeyboardShortcutsHelpProps {
-  isOpen: boolean
-  onClose: () => void
+  isOpen: boolean;
+  onClose: () => void;
 }
 
-export function KeyboardShortcutsHelp({ isOpen, onClose }: KeyboardShortcutsHelpProps) {
+export function KeyboardShortcutsHelp({
+  isOpen,
+  onClose,
+}: KeyboardShortcutsHelpProps) {
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
-      if (e.key === 'Escape' || e.key === '?') {
-        e.preventDefault()
-        onClose()
+      if (e.key === "Escape" || e.key === "?") {
+        e.preventDefault();
+        onClose();
       }
     },
-    [onClose]
-  )
+    [onClose],
+  );
 
   useEffect(() => {
     if (isOpen) {
-      window.addEventListener('keydown', handleKeyDown)
-      return () => window.removeEventListener('keydown', handleKeyDown)
+      window.addEventListener("keydown", handleKeyDown);
+      return () => window.removeEventListener("keydown", handleKeyDown);
     }
-  }, [isOpen, handleKeyDown])
+  }, [isOpen, handleKeyDown]);
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -87,5 +94,5 @@ export function KeyboardShortcutsHelp({ isOpen, onClose }: KeyboardShortcutsHelp
         </p>
       </DialogContent>
     </Dialog>
-  )
+  );
 }

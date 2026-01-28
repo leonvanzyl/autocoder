@@ -5,13 +5,13 @@
  * Allows users to add multiple features to an existing project via AI.
  */
 
-import { ExpandProjectChat } from './ExpandProjectChat'
+import { ExpandProjectChat } from "./ExpandProjectChat";
 
 interface ExpandProjectModalProps {
-  isOpen: boolean
-  projectName: string
-  onClose: () => void
-  onFeaturesAdded: () => void  // Called to refresh feature list
+  isOpen: boolean;
+  projectName: string;
+  onClose: () => void;
+  onFeaturesAdded: () => void; // Called to refresh feature list
 }
 
 export function ExpandProjectModal({
@@ -20,14 +20,14 @@ export function ExpandProjectModal({
   onClose,
   onFeaturesAdded,
 }: ExpandProjectModalProps) {
-  if (!isOpen) return null
+  if (!isOpen) return null;
 
   const handleComplete = (featuresAdded: number) => {
     if (featuresAdded > 0) {
-      onFeaturesAdded()
+      onFeaturesAdded();
     }
-    onClose()
-  }
+    onClose();
+  };
 
   return (
     <div className="fixed inset-0 z-50 bg-background">
@@ -37,5 +37,5 @@ export function ExpandProjectModal({
         onCancel={onClose}
       />
     </div>
-  )
+  );
 }

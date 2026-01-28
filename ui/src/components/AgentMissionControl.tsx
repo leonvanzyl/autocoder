@@ -1,26 +1,30 @@
-import { Rocket, ChevronDown, ChevronUp, Activity } from 'lucide-react'
-import { useState } from 'react'
-import { AgentCard, AgentLogModal } from './AgentCard'
-import { ActivityFeed } from './ActivityFeed'
-import { OrchestratorStatusCard } from './OrchestratorStatusCard'
-import type { ActiveAgent, AgentLogEntry, OrchestratorStatus } from '../lib/types'
-import { Card, CardContent } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { Rocket, ChevronDown, ChevronUp, Activity } from "lucide-react";
+import { useState } from "react";
+import { AgentCard, AgentLogModal } from "./AgentCard";
+import { ActivityFeed } from "./ActivityFeed";
+import { OrchestratorStatusCard } from "./OrchestratorStatusCard";
+import type {
+  ActiveAgent,
+  AgentLogEntry,
+  OrchestratorStatus,
+} from "../lib/types";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 
-const ACTIVITY_COLLAPSED_KEY = 'autocoder-activity-collapsed'
+const ACTIVITY_COLLAPSED_KEY = "autocoder-activity-collapsed";
 
 interface AgentMissionControlProps {
-  agents: ActiveAgent[]
-  orchestratorStatus: OrchestratorStatus | null
+  agents: ActiveAgent[];
+  orchestratorStatus: OrchestratorStatus | null;
   recentActivity: Array<{
-    agentName: string
-    thought: string
-    timestamp: string
-    featureId: number
-  }>
-  isExpanded?: boolean
-  getAgentLogs?: (agentIndex: number) => AgentLogEntry[]
+    agentName: string;
+    thought: string;
+    timestamp: string;
+    featureId: number;
+  }>;
+  isExpanded?: boolean;
+  getAgentLogs?: (agentIndex: number) => AgentLogEntry[];
 }
 
 export function AgentMissionControl({
@@ -30,29 +34,30 @@ export function AgentMissionControl({
   isExpanded: defaultExpanded = true,
   getAgentLogs,
 }: AgentMissionControlProps) {
-  const [isExpanded, setIsExpanded] = useState(defaultExpanded)
+  const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const [activityCollapsed, setActivityCollapsed] = useState(() => {
     try {
-      return localStorage.getItem(ACTIVITY_COLLAPSED_KEY) === 'true'
+      return localStorage.getItem(ACTIVITY_COLLAPSED_KEY) === "true";
     } catch {
-      return false
+      return false;
     }
-  })
-  const [selectedAgentForLogs, setSelectedAgentForLogs] = useState<ActiveAgent | null>(null)
+  });
+  const [selectedAgentForLogs, setSelectedAgentForLogs] =
+    useState<ActiveAgent | null>(null);
 
   const toggleActivityCollapsed = () => {
-    const newValue = !activityCollapsed
-    setActivityCollapsed(newValue)
+    const newValue = !activityCollapsed;
+    setActivityCollapsed(newValue);
     try {
-      localStorage.setItem(ACTIVITY_COLLAPSED_KEY, String(newValue))
+      localStorage.setItem(ACTIVITY_COLLAPSED_KEY, String(newValue));
     } catch {
       // localStorage not available
     }
-  }
+  };
 
   // Don't render if no orchestrator status and no agents
   if (!orchestratorStatus && agents.length === 0) {
-    return null
+    return null;
   }
 
   return (
@@ -69,13 +74,12 @@ export function AgentMissionControl({
           </span>
           <Badge variant="secondary" className="ml-2">
             {agents.length > 0
-              ? `${agents.length} ${agents.length === 1 ? 'agent' : 'agents'} active`
-              : orchestratorStatus?.state === 'initializing'
-                ? 'Initializing'
-                : orchestratorStatus?.state === 'complete'
-                  ? 'Complete'
-                  : 'Orchestrating'
-            }
+              ? `${agents.length} ${agents.length === 1 ? "agent" : "agents"} active`
+              : orchestratorStatus?.state === "initializing"
+                ? "Initializing"
+                : orchestratorStatus?.state === "complete"
+                  ? "Complete"
+                  : "Orchestrating"}
           </Badge>
         </div>
         {isExpanded ? (
@@ -89,7 +93,7 @@ export function AgentMissionControl({
       <div
         className={`
           transition-all duration-300 ease-out overflow-hidden
-          ${isExpanded ? 'max-h-[600px] opacity-100' : 'max-h-0 opacity-0'}
+          ${isExpanded ? "max-h-[600px] opacity-100" : "max-h-0 opacity-0"}
         `}
       >
         <CardContent className="p-4">
@@ -106,9 +110,11 @@ export function AgentMissionControl({
                   key={`agent-${agent.agentIndex}`}
                   agent={agent}
                   onShowLogs={(agentIndex) => {
-                    const agentToShow = agents.find(a => a.agentIndex === agentIndex)
+                    const agentToShow = agents.find(
+                      (a) => a.agentIndex === agentIndex,
+                    );
                     if (agentToShow) {
-                      setSelectedAgentForLogs(agentToShow)
+                      setSelectedAgentForLogs(agentToShow);
                     }
                   }}
                 />
@@ -141,10 +147,14 @@ export function AgentMissionControl({
               <div
                 className={`
                   transition-all duration-200 ease-out overflow-hidden
-                  ${activityCollapsed ? 'max-h-0 opacity-0' : 'max-h-[300px] opacity-100'}
+                  ${activityCollapsed ? "max-h-0 opacity-0" : "max-h-[300px] opacity-100"}
                 `}
               >
-                <ActivityFeed activities={recentActivity} maxItems={5} showHeader={false} />
+                <ActivityFeed
+                  activities={recentActivity}
+                  maxItems={5}
+                  showHeader={false}
+                />
               </div>
             </div>
           )}
@@ -160,5 +170,5 @@ export function AgentMissionControl({
         />
       )}
     </Card>
-  )
+  );
 }

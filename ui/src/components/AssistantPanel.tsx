@@ -6,87 +6,93 @@
  * Manages conversation state with localStorage persistence.
  */
 
-import { useState, useEffect, useCallback } from 'react'
-import { X, Bot } from 'lucide-react'
-import { AssistantChat } from './AssistantChat'
-import { useConversation } from '../hooks/useConversations'
-import type { ChatMessage } from '../lib/types'
-import { Button } from '@/components/ui/button'
+import { useState, useEffect, useCallback } from "react";
+import { X, Bot } from "lucide-react";
+import { AssistantChat } from "./AssistantChat";
+import { useConversation } from "../hooks/useConversations";
+import type { ChatMessage } from "../lib/types";
+import { Button } from "@/components/ui/button";
 
 interface AssistantPanelProps {
-  projectName: string
-  isOpen: boolean
-  onClose: () => void
+  projectName: string;
+  isOpen: boolean;
+  onClose: () => void;
 }
 
-const STORAGE_KEY_PREFIX = 'assistant-conversation-'
+const STORAGE_KEY_PREFIX = "assistant-conversation-";
 
 function getStoredConversationId(projectName: string): number | null {
   try {
-    const stored = localStorage.getItem(`${STORAGE_KEY_PREFIX}${projectName}`)
+    const stored = localStorage.getItem(`${STORAGE_KEY_PREFIX}${projectName}`);
     if (stored) {
-      const data = JSON.parse(stored)
-      return data.conversationId || null
+      const data = JSON.parse(stored);
+      return data.conversationId || null;
     }
   } catch {
     // Invalid stored data, ignore
   }
-  return null
+  return null;
 }
 
-function setStoredConversationId(projectName: string, conversationId: number | null) {
-  const key = `${STORAGE_KEY_PREFIX}${projectName}`
+function setStoredConversationId(
+  projectName: string,
+  conversationId: number | null,
+) {
+  const key = `${STORAGE_KEY_PREFIX}${projectName}`;
   if (conversationId) {
-    localStorage.setItem(key, JSON.stringify({ conversationId }))
+    localStorage.setItem(key, JSON.stringify({ conversationId }));
   } else {
-    localStorage.removeItem(key)
+    localStorage.removeItem(key);
   }
 }
 
-export function AssistantPanel({ projectName, isOpen, onClose }: AssistantPanelProps) {
+export function AssistantPanel({
+  projectName,
+  isOpen,
+  onClose,
+}: AssistantPanelProps) {
   // Load initial conversation ID from localStorage
   const [conversationId, setConversationId] = useState<number | null>(() =>
-    getStoredConversationId(projectName)
-  )
+    getStoredConversationId(projectName),
+  );
 
   // Fetch conversation details when we have an ID
-  const { data: conversationDetail, isLoading: isLoadingConversation } = useConversation(
-    projectName,
-    conversationId
-  )
+  const { data: conversationDetail, isLoading: isLoadingConversation } =
+    useConversation(projectName, conversationId);
 
   // Convert API messages to ChatMessage format for the chat component
-  const initialMessages: ChatMessage[] | undefined = conversationDetail?.messages.map((msg) => ({
-    id: `db-${msg.id}`,
-    role: msg.role,
-    content: msg.content,
-    timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date(),
-  }))
+  const initialMessages: ChatMessage[] | undefined =
+    conversationDetail?.messages.map((msg) => ({
+      id: `db-${msg.id}`,
+      role: msg.role,
+      content: msg.content,
+      timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date(),
+    }));
 
   // Persist conversation ID changes to localStorage
   useEffect(() => {
-    setStoredConversationId(projectName, conversationId)
-  }, [projectName, conversationId])
+    setStoredConversationId(projectName, conversationId);
+  }, [projectName, conversationId]);
 
   // Reset conversation ID when project changes
   useEffect(() => {
-    setConversationId(getStoredConversationId(projectName))
-  }, [projectName])
+    setConversationId(getStoredConversationId(projectName));
+  }, [projectName]);
 
   // Handle starting a new chat
   const handleNewChat = useCallback(() => {
-    setConversationId(null)
-  }, [])
+    setConversationId(null);
+  }, []);
 
   // Handle selecting a conversation from history
   const handleSelectConversation = useCallback((id: number) => {
-    setConversationId(id)
-  }, [])
+    setConversationId(id);
+  }, []);
 
   // Handle when a new conversation is created (from WebSocket)
   const handleConversationCreated = useCallback((id: number) => {
-    setConversationId(id)
-  }, [])
+    setConversationId(id);
+  }, []);
 
   return (
     <>
@@ -108,7 +114,7 @@ export function AssistantPanel({ projectName, isOpen, onClose }: AssistantPanelP
           border-l border-border
           transform transition-transform duration-300 ease-out
           flex flex-col shadow-xl
-          ${isOpen ? 'translate-x-0' : 'translate-x-full'}
+          ${isOpen ? "translate-x-0" : "translate-x-full"}
         `}
         role="dialog"
         aria-label="Project Assistant"
@@ -153,5 +159,5 @@ export function AssistantPanel({ projectName, isOpen, onClose }: AssistantPanelP
         </div>
       </div>
     </>
-  )
+  );
 }

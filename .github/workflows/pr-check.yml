@@ -1,0 +1,75 @@
+name: PR Check
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-check-${{ github.event.pull_request?.head.repo.full_name || github.repository }}-${{ github.event.pull_request?.number || github.run_number }}
+  cancel-in-progress: true
+
+jobs:
+  repo-guards:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ensure .code/ and .env are not tracked
+        shell: bash
+        run: |
+          tracked_code="$(git ls-files -- .code)"
+          tracked_env="$(git ls-files -- .env)"
+
+          if [ -n "$tracked_code" ] || [ -n "$tracked_env" ]; then
+            echo "Local-only policy and secrets files must not be tracked."
+            if [ -n "$tracked_code" ]; then
+              echo "Tracked .code/ entries:"
+              echo "$tracked_code"
+            fi
+            if [ -n "$tracked_env" ]; then
+              echo "Tracked .env entries:"
+              echo "$tracked_env"
+            fi
+            exit 1
+          fi
+
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: requirements.txt
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Lint with ruff
+        run: ruff check .
+      - name: Run security tests
+        run: python test_security.py
+
+  ui:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ui
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: ui/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Type check & Build
+        run: npm run build
+      - name: UI smoke tests
+        run: npm run test:smoke

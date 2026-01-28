@@ -5,21 +5,35 @@
  * Handles the 7-phase conversation flow for creating app specifications.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { Send, X, CheckCircle2, AlertCircle, Wifi, WifiOff, RotateCcw, Loader2, ArrowRight, Zap, Paperclip, ExternalLink, FileText } from 'lucide-react'
-import { useSpecChat } from '../hooks/useSpecChat'
-import { ChatMessage } from './ChatMessage'
-import { QuestionOptions } from './QuestionOptions'
-import { TypingIndicator } from './TypingIndicator'
-import type { ImageAttachment } from '../lib/types'
-import { Button } from '@/components/ui/button'
-import { Textarea } from '@/components/ui/textarea'
-import { Card, CardContent } from '@/components/ui/card'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  Send,
+  X,
+  CheckCircle2,
+  AlertCircle,
+  Wifi,
+  WifiOff,
+  RotateCcw,
+  Loader2,
+  ArrowRight,
+  Zap,
+  Paperclip,
+  ExternalLink,
+  FileText,
+} from "lucide-react";
+import { useSpecChat } from "../hooks/useSpecChat";
+import { ChatMessage } from "./ChatMessage";
+import { QuestionOptions } from "./QuestionOptions";
+import { TypingIndicator } from "./TypingIndicator";
+import type { ImageAttachment } from "../lib/types";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Card, CardContent } from "@/components/ui/card";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 // Image upload validation constants
-const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5 MB
-const ALLOWED_TYPES = ['image/jpeg', 'image/png']
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
+const ALLOWED_TYPES = ["image/jpeg", "image/png"];
 
 // Sample prompt for quick testing
 const SAMPLE_PROMPT = `Let's call it Simple Todo. This is a really simple web app that I can use to track my to-do items using a Kanban board. I should be able to add to-dos and then drag and drop them through the Kanban board. The different columns in the Kanban board are:
@@ -37,18 +51,18 @@ There is no need for user authentication either. All the to-dos will be stored i
 
 Users should have the ability to easily clear out all the completed To-Dos. They should also be able to filter and search for To-Dos as well.
 
-You choose the rest. Keep it simple. Should be 25 features.`
+You choose the rest. Keep it simple. Should be 25 features.`;
 
-type InitializerStatus = 'idle' | 'starting' | 'error'
+type InitializerStatus = "idle" | "starting" | "error";
 
 interface SpecCreationChatProps {
-  projectName: string
-  onComplete: (specPath: string, yoloMode?: boolean) => void
-  onCancel: () => void
-  onExitToProject: () => void  // Exit to project without starting agent
-  initializerStatus?: InitializerStatus
-  initializerError?: string | null
-  onRetryInitializer?: () => void
+  projectName: string;
+  onComplete: (specPath: string, yoloMode?: boolean) => void;
+  onCancel: () => void;
+  onExitToProject: () => void; // Exit to project without starting agent
+  initializerStatus?: InitializerStatus;
+  initializerError?: string | null;
+  onRetryInitializer?: () => void;
 }
 
 export function SpecCreationChat({
@@ -56,17 +70,19 @@ export function SpecCreationChat({
   onComplete,
   onCancel,
   onExitToProject,
-  initializerStatus = 'idle',
+  initializerStatus = "idle",
   initializerError = null,
   onRetryInitializer,
 }: SpecCreationChatProps) {
-  const [input, setInput] = useState('')
-  const [error, setError] = useState<string | null>(null)
-  const [yoloEnabled, setYoloEnabled] = useState(false)
-  const [pendingAttachments, setPendingAttachments] = useState<ImageAttachment[]>([])
-  const messagesEndRef = useRef<HTMLDivElement>(null)
-  const inputRef = useRef<HTMLTextAreaElement>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [input, setInput] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [yoloEnabled, setYoloEnabled] = useState(false);
+  const [pendingAttachments, setPendingAttachments] = useState<
+    ImageAttachment[]
+  >([]);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const {
     messages,
@@ -82,149 +98,154 @@ export function SpecCreationChat({
     projectName,
     onComplete,
     onError: (err) => setError(err),
-  })
+  });
 
   // Start the chat session when component mounts
   useEffect(() => {
-    start()
+    start();
 
     return () => {
-      disconnect()
-    }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+      disconnect();
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Scroll to bottom when messages change
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, currentQuestions, isLoading])
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, currentQuestions, isLoading]);
 
   // Focus input when not loading and no questions
   useEffect(() => {
     if (!isLoading && !currentQuestions && inputRef.current) {
-      inputRef.current.focus()
+      inputRef.current.focus();
     }
-  }, [isLoading, currentQuestions])
+  }, [isLoading, currentQuestions]);
 
   const handleSendMessage = () => {
-    const trimmed = input.trim()
+    const trimmed = input.trim();
     // Allow sending if there's text OR attachments
-    if ((!trimmed && pendingAttachments.length === 0) || isLoading) return
+    if ((!trimmed && pendingAttachments.length === 0) || isLoading) return;
 
     // Detect /exit command - exit to project without sending to Claude
     if (/^\s*\/exit\s*$/i.test(trimmed)) {
-      setInput('')
-      onExitToProject()
-      return
+      setInput("");
+      onExitToProject();
+      return;
     }
 
-    sendMessage(trimmed, pendingAttachments.length > 0 ? pendingAttachments : undefined)
-    setInput('')
-    setPendingAttachments([]) // Clear attachments after sending
+    sendMessage(
+      trimmed,
+      pendingAttachments.length > 0 ? pendingAttachments : undefined,
+    );
+    setInput("");
+    setPendingAttachments([]); // Clear attachments after sending
     // Reset textarea height after sending
     if (inputRef.current) {
-      inputRef.current.style.height = 'auto'
+      inputRef.current.style.height = "auto";
     }
-  }
+  };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      handleSendMessage()
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
     }
-  }
+  };
 
   const handleAnswerSubmit = (answers: Record<string, string | string[]>) => {
-    sendAnswer(answers)
-  }
+    sendAnswer(answers);
+  };
 
   // File handling for image attachments
   const handleFileSelect = useCallback((files: FileList | null) => {
-    if (!files) return
+    if (!files) return;
 
     Array.from(files).forEach((file) => {
       // Validate file type
       if (!ALLOWED_TYPES.includes(file.type)) {
-        setError(`Invalid file type: ${file.name}. Only JPEG and PNG are supported.`)
-        return
+        setError(
+          `Invalid file type: ${file.name}. Only JPEG and PNG are supported.`,
+        );
+        return;
       }
 
       // Validate file size
       if (file.size > MAX_FILE_SIZE) {
-        setError(`File too large: ${file.name}. Maximum size is 5 MB.`)
-        return
+        setError(`File too large: ${file.name}. Maximum size is 5 MB.`);
+        return;
       }
 
       // Read and convert to base64
-      const reader = new FileReader()
+      const reader = new FileReader();
       reader.onload = (e) => {
-        const dataUrl = e.target?.result as string
+        const dataUrl = e.target?.result as string;
         // dataUrl is "data:image/png;base64,XXXXXX"
-        const base64Data = dataUrl.split(',')[1]
+        const base64Data = dataUrl.split(",")[1];
 
         const attachment: ImageAttachment = {
           id: `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
           filename: file.name,
-          mimeType: file.type as 'image/jpeg' | 'image/png',
+          mimeType: file.type as "image/jpeg" | "image/png",
           base64Data,
           previewUrl: dataUrl,
           size: file.size,
-        }
+        };
 
-        setPendingAttachments((prev) => [...prev, attachment])
-      }
-      reader.readAsDataURL(file)
-    })
-  }, [])
+        setPendingAttachments((prev) => [...prev, attachment]);
+      };
+      reader.readAsDataURL(file);
+    });
+  }, []);
 
   const handleRemoveAttachment = useCallback((id: string) => {
-    setPendingAttachments((prev) => prev.filter((a) => a.id !== id))
-  }, [])
+    setPendingAttachments((prev) => prev.filter((a) => a.id !== id));
+  }, []);
 
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
-      e.preventDefault()
-      handleFileSelect(e.dataTransfer.files)
+      e.preventDefault();
+      handleFileSelect(e.dataTransfer.files);
     },
-    [handleFileSelect]
-  )
+    [handleFileSelect],
+  );
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault()
-  }, [])
+    e.preventDefault();
+  }, []);
 
   // Connection status indicator
   const ConnectionIndicator = () => {
     switch (connectionStatus) {
-      case 'connected':
+      case "connected":
         return (
           <span className="flex items-center gap-1 text-xs text-green-500">
             <Wifi size={12} />
             Connected
           </span>
-        )
-      case 'connecting':
+        );
+      case "connecting":
         return (
           <span className="flex items-center gap-1 text-xs text-yellow-500">
             <Wifi size={12} className="animate-pulse" />
             Connecting...
           </span>
-        )
-      case 'error':
+        );
+      case "error":
         return (
           <span className="flex items-center gap-1 text-xs text-destructive">
             <WifiOff size={12} />
             Error
           </span>
-        )
+        );
       default:
         return (
           <span className="flex items-center gap-1 text-xs text-muted-foreground">
             <WifiOff size={12} />
             Disconnected
           </span>
-        )
+        );
     }
-  }
+  };
 
   return (
     <div className="flex flex-col h-full bg-background">
@@ -248,11 +269,11 @@ export function SpecCreationChat({
           {/* Load Sample Prompt */}
           <Button
             onClick={() => {
-              setInput(SAMPLE_PROMPT)
+              setInput(SAMPLE_PROMPT);
               // Also resize the textarea to fit content
               if (inputRef.current) {
-                inputRef.current.style.height = 'auto'
-                inputRef.current.style.height = `${Math.min(inputRef.current.scrollHeight, 200)}px`
+                inputRef.current.style.height = "auto";
+                inputRef.current.style.height = `${Math.min(inputRef.current.scrollHeight, 200)}px`;
               }
             }}
             variant="ghost"
@@ -274,12 +295,7 @@ export function SpecCreationChat({
             Exit to Project
           </Button>
 
-          <Button
-            onClick={onCancel}
-            variant="ghost"
-            size="icon"
-            title="Cancel"
-          >
+          <Button onClick={onCancel} variant="ghost" size="icon" title="Cancel">
             <X size={20} />
           </Button>
         </div>
@@ -287,7 +303,10 @@ export function SpecCreationChat({
 
       {/* Error banner */}
       {error && (
-        <Alert variant="destructive" className="rounded-none border-x-0 border-t-0">
+        <Alert
+          variant="destructive"
+          className="rounded-none border-x-0 border-t-0"
+        >
           <AlertCircle size={16} />
           <AlertDescription className="flex-1">{error}</AlertDescription>
           <Button
@@ -311,14 +330,11 @@ export function SpecCreationChat({
                   Starting Spec Creation
                 </h3>
                 <p className="text-sm text-muted-foreground">
-                  Connecting to Claude to help you create your app specification...
+                  Connecting to Claude to help you create your app
+                  specification...
                 </p>
-                {connectionStatus === 'error' && (
-                  <Button
-                    onClick={start}
-                    className="mt-4"
-                    size="sm"
-                  >
+                {connectionStatus === "error" && (
+                  <Button onClick={start} className="mt-4" size="sm">
                     <RotateCcw size={14} />
                     Retry Connection
                   </Button>
@@ -399,7 +415,7 @@ export function SpecCreationChat({
             {/* Attach button */}
             <Button
               onClick={() => fileInputRef.current?.click()}
-              disabled={connectionStatus !== 'connected'}
+              disabled={connectionStatus !== "connected"}
               variant="ghost"
               size="icon"
               title="Attach image (JPEG, PNG - max 5MB)"
@@ -411,21 +427,24 @@ export function SpecCreationChat({
               ref={inputRef}
               value={input}
               onChange={(e) => {
-                setInput(e.target.value)
+                setInput(e.target.value);
                 // Auto-resize the textarea
-                e.target.style.height = 'auto'
-                e.target.style.height = `${Math.min(e.target.scrollHeight, 200)}px`
+                e.target.style.height = "auto";
+                e.target.style.height = `${Math.min(e.target.scrollHeight, 200)}px`;
               }}
               onKeyDown={handleKeyDown}
               placeholder={
                 currentQuestions
-                  ? 'Or type a custom response...'
+                  ? "Or type a custom response..."
                   : pendingAttachments.length > 0
-                    ? 'Add a message with your image(s)...'
-                    : 'Type your response... (or /exit to go to project)'
+                    ? "Add a message with your image(s)..."
+                    : "Type your response... (or /exit to go to project)"
               }
               className="flex-1 resize-none min-h-[46px] max-h-[200px] overflow-y-auto"
-              disabled={(isLoading && !currentQuestions) || connectionStatus !== 'connected'}
+              disabled={
+                (isLoading && !currentQuestions) ||
+                connectionStatus !== "connected"
+              }
               rows={1}
             />
             <Button
@@ -433,7 +452,7 @@ export function SpecCreationChat({
               disabled={
                 (!input.trim() && pendingAttachments.length === 0) ||
                 (isLoading && !currentQuestions) ||
-                connectionStatus !== 'connected'
+                connectionStatus !== "connected"
               }
               className="px-6"
             >
@@ -443,67 +462,70 @@ export function SpecCreationChat({
 
           {/* Help text */}
           <p className="text-xs text-muted-foreground mt-2">
-            Press Enter to send, Shift+Enter for new line. Drag & drop or click <Paperclip size={12} className="inline" /> to attach images (JPEG/PNG, max 5MB).
+            Press Enter to send, Shift+Enter for new line. Drag & drop or click{" "}
+            <Paperclip size={12} className="inline" /> to attach images
+            (JPEG/PNG, max 5MB).
           </p>
         </div>
       )}
 
       {/* Completion footer */}
       {isComplete && (
-        <div className={`p-4 border-t-2 border-border ${
-          initializerStatus === 'error' ? 'bg-destructive' : 'bg-green-500'
-        }`}>
+        <div
+          className={`p-4 border-t-2 border-border ${
+            initializerStatus === "error" ? "bg-destructive" : "bg-green-500"
+          }`}
+        >
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              {initializerStatus === 'starting' ? (
+              {initializerStatus === "starting" ? (
                 <>
                   <Loader2 size={20} className="animate-spin text-white" />
                   <span className="font-bold text-white">
-                    Starting agent{yoloEnabled ? ' (YOLO mode)' : ''}...
+                    Starting agent{yoloEnabled ? " (YOLO mode)" : ""}...
                   </span>
                 </>
-              ) : initializerStatus === 'error' ? (
+              ) : initializerStatus === "error" ? (
                 <>
                   <AlertCircle size={20} className="text-white" />
                   <span className="font-bold text-white">
-                    {initializerError || 'Failed to start agent'}
+                    {initializerError || "Failed to start agent"}
                   </span>
                 </>
               ) : (
                 <>
                   <CheckCircle2 size={20} className="text-white" />
-                  <span className="font-bold text-white">Specification created successfully!</span>
+                  <span className="font-bold text-white">
+                    Specification created successfully!
+                  </span>
                 </>
               )}
             </div>
             <div className="flex items-center gap-2">
-              {initializerStatus === 'error' && onRetryInitializer && (
-                <Button
-                  onClick={onRetryInitializer}
-                  variant="secondary"
-                >
+              {initializerStatus === "error" && onRetryInitializer && (
+                <Button onClick={onRetryInitializer} variant="secondary">
                   <RotateCcw size={14} />
                   Retry
                 </Button>
               )}
-              {initializerStatus === 'idle' && (
+              {initializerStatus === "idle" && (
                 <>
                   {/* YOLO Mode Toggle */}
                   <Button
                     onClick={() => setYoloEnabled(!yoloEnabled)}
                     variant={yoloEnabled ? "default" : "secondary"}
                     size="sm"
-                    className={yoloEnabled ? 'bg-yellow-500 hover:bg-yellow-600 text-yellow-900' : ''}
+                    className={
+                      yoloEnabled
+                        ? "bg-yellow-500 hover:bg-yellow-600 text-yellow-900"
+                        : ""
+                    }
                     title="YOLO Mode: Skip testing for rapid prototyping"
                   >
                     <Zap size={16} />
-                    <span className={yoloEnabled ? 'font-bold' : ''}>
-                      YOLO
-                    </span>
+                    <span className={yoloEnabled ? "font-bold" : ""}>YOLO</span>
                   </Button>
-                  <Button
-                    onClick={() => onComplete('', yoloEnabled)}
-                  >
+                  <Button onClick={() => onComplete("", yoloEnabled)}>
                     Continue to Project
                     <ArrowRight size={16} />
                   </Button>
@@ -514,5 +536,5 @@ export function SpecCreationChat({
         </div>
       )}
     </div>
-  )
+  );
 }

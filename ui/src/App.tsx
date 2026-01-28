@@ -1,242 +1,294 @@
-import { useState, useEffect, useCallback } from 'react'
-import { useQueryClient, useQuery } from '@tanstack/react-query'
-import { useProjects, useFeatures, useAgentStatus, useSettings } from './hooks/useProjects'
-import { useProjectWebSocket } from './hooks/useWebSocket'
-import { useFeatureSound } from './hooks/useFeatureSound'
-import { useCelebration } from './hooks/useCelebration'
-import { useTheme } from './hooks/useTheme'
-import { ProjectSelector } from './components/ProjectSelector'
-import { KanbanBoard } from './components/KanbanBoard'
-import { AgentControl } from './components/AgentControl'
-import { ProgressDashboard } from './components/ProgressDashboard'
-import { SetupWizard } from './components/SetupWizard'
-import { AddFeatureForm } from './components/AddFeatureForm'
-import { FeatureModal } from './components/FeatureModal'
-import { DebugLogViewer, type TabType } from './components/DebugLogViewer'
-import { AgentThought } from './components/AgentThought'
-import { AgentMissionControl } from './components/AgentMissionControl'
-import { CelebrationOverlay } from './components/CelebrationOverlay'
-import { AssistantFAB } from './components/AssistantFAB'
-import { AssistantPanel } from './components/AssistantPanel'
-import { ExpandProjectModal } from './components/ExpandProjectModal'
-import { SpecCreationChat } from './components/SpecCreationChat'
-import { SettingsModal } from './components/SettingsModal'
-import { DevServerControl } from './components/DevServerControl'
-import { ViewToggle, type ViewMode } from './components/ViewToggle'
-import { DependencyGraph } from './components/DependencyGraph'
-import { KeyboardShortcutsHelp } from './components/KeyboardShortcutsHelp'
-import { ThemeSelector } from './components/ThemeSelector'
-import { getDependencyGraph } from './lib/api'
-import { Loader2, Settings, Moon, Sun } from 'lucide-react'
-import type { Feature } from './lib/types'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
+import { useState, useEffect, useCallback } from "react";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
+import {
+  useProjects,
+  useFeatures,
+  useAgentStatus,
+  useSettings,
+} from "./hooks/useProjects";
+import { useProjectWebSocket } from "./hooks/useWebSocket";
+import { useFeatureSound } from "./hooks/useFeatureSound";
+import { useCelebration } from "./hooks/useCelebration";
+import { useTheme } from "./hooks/useTheme";
+import { ProjectSelector } from "./components/ProjectSelector";
+import { KanbanBoard } from "./components/KanbanBoard";
+import { AgentControl } from "./components/AgentControl";
+import { ProgressDashboard } from "./components/ProgressDashboard";
+import { SetupWizard } from "./components/SetupWizard";
+import { AddFeatureForm } from "./components/AddFeatureForm";
+import { FeatureModal } from "./components/FeatureModal";
+import { DebugLogViewer, type TabType } from "./components/DebugLogViewer";
+import { AgentThought } from "./components/AgentThought";
+import { AgentMissionControl } from "./components/AgentMissionControl";
+import { CelebrationOverlay } from "./components/CelebrationOverlay";
+import { AssistantFAB } from "./components/AssistantFAB";
+import { AssistantPanel } from "./components/AssistantPanel";
+import { ExpandProjectModal } from "./components/ExpandProjectModal";
+import { SpecCreationChat } from "./components/SpecCreationChat";
+import { SettingsModal } from "./components/SettingsModal";
+import { DevServerControl } from "./components/DevServerControl";
+import { ViewToggle, type ViewMode } from "./components/ViewToggle";
+import { DependencyGraph } from "./components/DependencyGraph";
+import { KeyboardShortcutsHelp } from "./components/KeyboardShortcutsHelp";
+import { ThemeSelector } from "./components/ThemeSelector";
+import { getDependencyGraph } from "./lib/api";
+import { Loader2, Settings, Moon, Sun } from "lucide-react";
+import type { Feature } from "./lib/types";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { setSentryProject } from "./lib/sentry";
 
-const STORAGE_KEY = 'autocoder-selected-project'
-const VIEW_MODE_KEY = 'autocoder-view-mode'
+const STORAGE_KEY = "autocoder-selected-project";
+const VIEW_MODE_KEY = "autocoder-view-mode";
 
 function App() {
   // Initialize selected project from localStorage
   const [selectedProject, setSelectedProject] = useState<string | null>(() => {
     try {
-      return localStorage.getItem(STORAGE_KEY)
+      return localStorage.getItem(STORAGE_KEY);
     } catch {
-      return null
+      return null;
     }
-  })
-  const [showAddFeature, setShowAddFeature] = useState(false)
-  const [showExpandProject, setShowExpandProject] = useState(false)
-  const [selectedFeature, setSelectedFeature] = useState<Feature | null>(null)
-  const [setupComplete, setSetupComplete] = useState(true) // Start optimistic
-  const [debugOpen, setDebugOpen] = useState(false)
-  const [debugPanelHeight, setDebugPanelHeight] = useState(288) // Default height
-  const [debugActiveTab, setDebugActiveTab] = useState<TabType>('agent')
-  const [assistantOpen, setAssistantOpen] = useState(false)
-  const [showSettings, setShowSettings] = useState(false)
-  const [showKeyboardHelp, setShowKeyboardHelp] = useState(false)
-  const [isSpecCreating, setIsSpecCreating] = useState(false)
-  const [showSpecChat, setShowSpecChat] = useState(false)  // For "Create Spec" button in empty kanban
+  });
+  const [showAddFeature, setShowAddFeature] = useState(false);
+  const [showExpandProject, setShowExpandProject] = useState(false);
+  const [selectedFeature, setSelectedFeature] = useState<Feature | null>(null);
+  const [setupComplete, setSetupComplete] = useState(true); // Start optimistic
+  const [debugOpen, setDebugOpen] = useState(false);
+  const [debugPanelHeight, setDebugPanelHeight] = useState(288); // Default height
+  const [debugActiveTab, setDebugActiveTab] = useState<TabType>("agent");
+  const [assistantOpen, setAssistantOpen] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [showKeyboardHelp, setShowKeyboardHelp] = useState(false);
+  const [isSpecCreating, setIsSpecCreating] = useState(false);
+  const [showSpecChat, setShowSpecChat] = useState(false); // For "Create Spec" button in empty kanban
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
     try {
-      const stored = localStorage.getItem(VIEW_MODE_KEY)
-      return (stored === 'graph' ? 'graph' : 'kanban') as ViewMode
+      const stored = localStorage.getItem(VIEW_MODE_KEY);
+      return (stored === "graph" ? "graph" : "kanban") as ViewMode;
     } catch {
-      return 'kanban'
+      return "kanban";
     }
-  })
+  });
 
-  const queryClient = useQueryClient()
-  const { data: projects, isLoading: projectsLoading } = useProjects()
-  const { data: features } = useFeatures(selectedProject)
-  const { data: settings } = useSettings()
-  useAgentStatus(selectedProject) // Keep polling for status updates
-  const wsState = useProjectWebSocket(selectedProject)
-  const { theme, setTheme, darkMode, toggleDarkMode, themes } = useTheme()
+  const queryClient = useQueryClient();
+  const { data: projects, isLoading: projectsLoading } = useProjects();
+  const { data: features } = useFeatures(selectedProject);
+  const { data: settings } = useSettings();
+  useAgentStatus(selectedProject); // Keep polling for status updates
+  const wsState = useProjectWebSocket(selectedProject);
+  const { theme, setTheme, darkMode, toggleDarkMode, themes } = useTheme();
 
   // Get has_spec from the selected project
-  const selectedProjectData = projects?.find(p => p.name === selectedProject)
-  const hasSpec = selectedProjectData?.has_spec ?? true
+  const selectedProjectData = projects?.find((p) => p.name === selectedProject);
+  const hasSpec = selectedProjectData?.has_spec ?? true;
 
   // Fetch graph data when in graph view
   const { data: graphData } = useQuery({
-    queryKey: ['dependencyGraph', selectedProject],
+    queryKey: ["dependencyGraph", selectedProject],
     queryFn: () => getDependencyGraph(selectedProject!),
-    enabled: !!selectedProject && viewMode === 'graph',
+    enabled: !!selectedProject && viewMode === "graph",
     refetchInterval: 5000, // Refresh every 5 seconds
-  })
+  });
 
   // Persist view mode to localStorage
   useEffect(() => {
     try {
-      localStorage.setItem(VIEW_MODE_KEY, viewMode)
+      localStorage.setItem(VIEW_MODE_KEY, viewMode);
     } catch {
       // localStorage not available
     }
-  }, [viewMode])
+  }, [viewMode]);
 
   // Play sounds when features move between columns
-  useFeatureSound(features)
+  useFeatureSound(features);
 
   // Celebrate when all features are complete
-  useCelebration(features, selectedProject)
+  useCelebration(features, selectedProject);
 
   // Persist selected project to localStorage
   const handleSelectProject = useCallback((project: string | null) => {
-    setSelectedProject(project)
+    setSelectedProject(project);
     try {
       if (project) {
-        localStorage.setItem(STORAGE_KEY, project)
+        localStorage.setItem(STORAGE_KEY, project);
       } else {
-        localStorage.removeItem(STORAGE_KEY)
+        localStorage.removeItem(STORAGE_KEY);
       }
     } catch {
       // localStorage not available
     }
-  }, [])
+  }, []);
+
+  // Update Sentry tag when project changes
+  useEffect(() => {
+    setSentryProject(selectedProject);
+  }, [selectedProject]);
 
   // Handle graph node click - memoized to prevent DependencyGraph re-renders
-  const handleGraphNodeClick = useCallback((nodeId: number) => {
-    const allFeatures = [
-      ...(features?.pending ?? []),
-      ...(features?.in_progress ?? []),
-      ...(features?.done ?? [])
-    ]
-    const feature = allFeatures.find(f => f.id === nodeId)
-    if (feature) setSelectedFeature(feature)
-  }, [features])
+  const handleGraphNodeClick = useCallback(
+    (nodeId: number) => {
+      const allFeatures = [
+        ...(features?.pending ?? []),
+        ...(features?.in_progress ?? []),
+        ...(features?.done ?? []),
+      ];
+      const feature = allFeatures.find((f) => f.id === nodeId);
+      if (feature) setSelectedFeature(feature);
+    },
+    [features],
+  );
 
   // Validate stored project exists (clear if project was deleted)
   useEffect(() => {
-    if (selectedProject && projects && !projects.some(p => p.name === selectedProject)) {
-      handleSelectProject(null)
+    if (
+      selectedProject &&
+      projects &&
+      !projects.some((p) => p.name === selectedProject)
+    ) {
+      handleSelectProject(null);
     }
-  }, [selectedProject, projects, handleSelectProject])
+  }, [selectedProject, projects, handleSelectProject]);
 
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Ignore if user is typing in an input
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
-        return
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement
+      ) {
+        return;
       }
 
       // D : Toggle debug window
-      if (e.key === 'd' || e.key === 'D') {
-        e.preventDefault()
-        setDebugOpen(prev => !prev)
+      if (e.key === "d" || e.key === "D") {
+        e.preventDefault();
+        setDebugOpen((prev) => !prev);
       }
 
       // T : Toggle terminal tab in debug panel
-      if (e.key === 't' || e.key === 'T') {
-        e.preventDefault()
+      if (e.key === "t" || e.key === "T") {
+        e.preventDefault();
         if (!debugOpen) {
           // If panel is closed, open it and switch to terminal tab
-          setDebugOpen(true)
-          setDebugActiveTab('terminal')
-        } else if (debugActiveTab === 'terminal') {
+          setDebugOpen(true);
+          setDebugActiveTab("terminal");
+        } else if (debugActiveTab === "terminal") {
           // If already on terminal tab, close the panel
-          setDebugOpen(false)
+          setDebugOpen(false);
         } else {
           // If open but on different tab, switch to terminal
-          setDebugActiveTab('terminal')
+          setDebugActiveTab("terminal");
         }
       }
 
       // N : Add new feature (when project selected)
-      if ((e.key === 'n' || e.key === 'N') && selectedProject) {
-        e.preventDefault()
-        setShowAddFeature(true)
+      if ((e.key === "n" || e.key === "N") && selectedProject) {
+        e.preventDefault();
+        setShowAddFeature(true);
       }
 
       // E : Expand project with AI (when project selected and has features)
-      if ((e.key === 'e' || e.key === 'E') && selectedProject && features &&
-          (features.pending.length + features.in_progress.length + features.done.length) > 0) {
-        e.preventDefault()
-        setShowExpandProject(true)
+      if (
+        (e.key === "e" || e.key === "E") &&
+        selectedProject &&
+        features &&
+        features.pending.length +
+          features.in_progress.length +
+          features.done.length >
+          0
+      ) {
+        e.preventDefault();
+        setShowExpandProject(true);
       }
 
       // A : Toggle assistant panel (when project selected and not in spec creation)
-      if ((e.key === 'a' || e.key === 'A') && selectedProject && !isSpecCreating) {
-        e.preventDefault()
-        setAssistantOpen(prev => !prev)
+      if (
+        (e.key === "a" || e.key === "A") &&
+        selectedProject &&
+        !isSpecCreating
+      ) {
+        e.preventDefault();
+        setAssistantOpen((prev) => !prev);
       }
 
       // , : Open settings
-      if (e.key === ',') {
-        e.preventDefault()
-        setShowSettings(true)
+      if (e.key === ",") {
+        e.preventDefault();
+        setShowSettings(true);
       }
 
       // G : Toggle between Kanban and Graph view (when project selected)
-      if ((e.key === 'g' || e.key === 'G') && selectedProject) {
-        e.preventDefault()
-        setViewMode(prev => prev === 'kanban' ? 'graph' : 'kanban')
+      if ((e.key === "g" || e.key === "G") && selectedProject) {
+        e.preventDefault();
+        setViewMode((prev) => (prev === "kanban" ? "graph" : "kanban"));
       }
 
       // ? : Show keyboard shortcuts help
-      if (e.key === '?') {
-        e.preventDefault()
-        setShowKeyboardHelp(true)
+      if (e.key === "?") {
+        e.preventDefault();
+        setShowKeyboardHelp(true);
       }
 
       // Escape : Close modals
-      if (e.key === 'Escape') {
+      if (e.key === "Escape") {
         if (showKeyboardHelp) {
-          setShowKeyboardHelp(false)
+          setShowKeyboardHelp(false);
         } else if (showExpandProject) {
-          setShowExpandProject(false)
+          setShowExpandProject(false);
         } else if (showSettings) {
-          setShowSettings(false)
+          setShowSettings(false);
         } else if (assistantOpen) {
-          setAssistantOpen(false)
+          setAssistantOpen(false);
         } else if (showAddFeature) {
-          setShowAddFeature(false)
+          setShowAddFeature(false);
         } else if (selectedFeature) {
-          setSelectedFeature(null)
+          setSelectedFeature(null);
         } else if (debugOpen) {
-          setDebugOpen(false)
+          setDebugOpen(false);
         }
       }
-    }
+    };
 
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [selectedProject, showAddFeature, showExpandProject, selectedFeature, debugOpen, debugActiveTab, assistantOpen, features, showSettings, showKeyboardHelp, isSpecCreating, viewMode])
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [
+    selectedProject,
+    showAddFeature,
+    showExpandProject,
+    selectedFeature,
+    debugOpen,
+    debugActiveTab,
+    assistantOpen,
+    features,
+    showSettings,
+    showKeyboardHelp,
+    isSpecCreating,
+    viewMode,
+  ]);
 
   // Combine WebSocket progress with feature data
-  const progress = wsState.progress.total > 0 ? wsState.progress : {
-    passing: features?.done.length ?? 0,
-    total: (features?.pending.length ?? 0) + (features?.in_progress.length ?? 0) + (features?.done.length ?? 0),
-    percentage: 0,
-  }
+  const progress =
+    wsState.progress.total > 0
+      ? wsState.progress
+      : {
+          passing: features?.done.length ?? 0,
+          total:
+            (features?.pending.length ?? 0) +
+            (features?.in_progress.length ?? 0) +
+            (features?.done.length ?? 0),
+          percentage: 0,
+        };
 
   if (progress.total > 0 && progress.percentage === 0) {
-    progress.percentage = Math.round((progress.passing / progress.total) * 100 * 10) / 10
+    progress.percentage =
+      Math.round((progress.passing / progress.total) * 100 * 10) / 10;
   }
 
   if (!setupComplete) {
-    return <SetupWizard onComplete={() => setSetupComplete(true)} />
+    return <SetupWizard onComplete={() => setSetupComplete(true)} />;
   }
 
   return (
@@ -290,7 +342,9 @@ function App() {
                       title="Using Ollama local models (configured via .env)"
                     >
                       <img src="/ollama.png" alt="Ollama" className="w-5 h-5" />
-                      <span className="text-xs font-bold text-foreground">Ollama</span>
+                      <span className="text-xs font-bold text-foreground">
+                        Ollama
+                      </span>
                     </div>
                   )}
 
@@ -339,7 +393,8 @@ function App() {
               Welcome to AutoCoder
             </h2>
             <p className="text-muted-foreground mb-4">
-              Select a project from the dropdown above or create a new one to get started.
+              Select a project from the dropdown above or create a new one to
+              get started.
             </p>
           </div>
         ) : (
@@ -370,32 +425,43 @@ function App() {
 
             {/* Initializing Features State - show when agent is running but no features yet */}
             {features &&
-             features.pending.length === 0 &&
-             features.in_progress.length === 0 &&
-             features.done.length === 0 &&
-             wsState.agentStatus === 'running' && (
-              <Card className="p-8 text-center">
-                <CardContent className="p-0">
-                  <Loader2 size={32} className="animate-spin mx-auto mb-4 text-primary" />
-                  <h3 className="font-display font-bold text-xl mb-2">
-                    Initializing Features...
-                  </h3>
-                  <p className="text-muted-foreground">
-                    The agent is reading your spec and creating features. This may take a moment.
-                  </p>
-                </CardContent>
-              </Card>
-            )}
+              features.pending.length === 0 &&
+              features.in_progress.length === 0 &&
+              features.done.length === 0 &&
+              wsState.agentStatus === "running" && (
+                <Card className="p-8 text-center">
+                  <CardContent className="p-0">
+                    <Loader2
+                      size={32}
+                      className="animate-spin mx-auto mb-4 text-primary"
+                    />
+                    <h3 className="font-display font-bold text-xl mb-2">
+                      Initializing Features...
+                    </h3>
+                    <p className="text-muted-foreground">
+                      The agent is reading your spec and creating features. This
+                      may take a moment.
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
 
             {/* View Toggle - only show when there are features */}
-            {features && (features.pending.length + features.in_progress.length + features.done.length) > 0 && (
-              <div className="flex justify-center">
-                <ViewToggle viewMode={viewMode} onViewModeChange={setViewMode} />
-              </div>
-            )}
+            {features &&
+              features.pending.length +
+                features.in_progress.length +
+                features.done.length >
+                0 && (
+                <div className="flex justify-center">
+                  <ViewToggle
+                    viewMode={viewMode}
+                    onViewModeChange={setViewMode}
+                  />
+                </div>
+              )}
 
             {/* Kanban Board or Dependency Graph based on view mode */}
-            {viewMode === 'kanban' ? (
+            {viewMode === "kanban" ? (
               <KanbanBoard
                 features={features}
                 onFeatureClick={setSelectedFeature}
@@ -406,7 +472,7 @@ function App() {
                 hasSpec={hasSpec}
               />
             ) : (
-              <Card className="overflow-hidden" style={{ height: '600px' }}>
+              <Card className="overflow-hidden" style={{ height: "600px" }}>
                 {graphData ? (
                   <DependencyGraph
                     graphData={graphData}
@@ -449,7 +515,9 @@ function App() {
           onClose={() => setShowExpandProject(false)}
           onFeaturesAdded={() => {
             // Invalidate features query to refresh the kanban board
-            queryClient.invalidateQueries({ queryKey: ['features', selectedProject] })
+            queryClient.invalidateQueries({
+              queryKey: ["features", selectedProject],
+            });
           }}
         />
       )}
@@ -460,10 +528,12 @@ function App() {
           <SpecCreationChat
             projectName={selectedProject}
             onComplete={() => {
-              setShowSpecChat(false)
+              setShowSpecChat(false);
               // Refresh projects to update has_spec
-              queryClient.invalidateQueries({ queryKey: ['projects'] })
-              queryClient.invalidateQueries({ queryKey: ['features', selectedProject] })
+              queryClient.invalidateQueries({ queryKey: ["projects"] });
+              queryClient.invalidateQueries({
+                queryKey: ["features", selectedProject],
+              });
             }}
             onCancel={() => setShowSpecChat(false)}
             onExitToProject={() => setShowSpecChat(false)}
@@ -488,25 +558,34 @@ function App() {
       )}
 
       {/* Assistant FAB and Panel - hide when expand modal or spec creation is open */}
-      {selectedProject && !showExpandProject && !isSpecCreating && !showSpecChat && (
-        <>
-          <AssistantFAB
-            onClick={() => setAssistantOpen(!assistantOpen)}
-            isOpen={assistantOpen}
-          />
-          <AssistantPanel
-            projectName={selectedProject}
-            isOpen={assistantOpen}
-            onClose={() => setAssistantOpen(false)}
-          />
-        </>
-      )}
+      {selectedProject &&
+        !showExpandProject &&
+        !isSpecCreating &&
+        !showSpecChat && (
+          <>
+            <AssistantFAB
+              onClick={() => setAssistantOpen(!assistantOpen)}
+              isOpen={assistantOpen}
+            />
+            <AssistantPanel
+              projectName={selectedProject}
+              isOpen={assistantOpen}
+              onClose={() => setAssistantOpen(false)}
+            />
+          </>
+        )}
 
       {/* Settings Modal */}
-      <SettingsModal isOpen={showSettings} onClose={() => setShowSettings(false)} />
+      <SettingsModal
+        isOpen={showSettings}
+        onClose={() => setShowSettings(false)}
+      />
 
       {/* Keyboard Shortcuts Help */}
-      <KeyboardShortcutsHelp isOpen={showKeyboardHelp} onClose={() => setShowKeyboardHelp(false)} />
+      <KeyboardShortcutsHelp
+        isOpen={showKeyboardHelp}
+        onClose={() => setShowKeyboardHelp(false)}
+      />
 
       {/* Celebration Overlay - shows when a feature is completed by an agent */}
       {wsState.celebration && (
@@ -517,7 +596,7 @@ function App() {
         />
       )}
     </div>
-  )
+  );
 }
 
-export default App
+export default App;

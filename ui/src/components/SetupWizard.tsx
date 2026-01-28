@@ -1,32 +1,37 @@
-import { useEffect, useCallback } from 'react'
-import { CheckCircle2, XCircle, Loader2, ExternalLink } from 'lucide-react'
-import { useSetupStatus, useHealthCheck } from '../hooks/useProjects'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { useEffect, useCallback } from "react";
+import { CheckCircle2, XCircle, Loader2, ExternalLink } from "lucide-react";
+import { useSetupStatus, useHealthCheck } from "../hooks/useProjects";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 interface SetupWizardProps {
-  onComplete: () => void
+  onComplete: () => void;
 }
 
 export function SetupWizard({ onComplete }: SetupWizardProps) {
-  const { data: setupStatus, isLoading: setupLoading, error: setupError } = useSetupStatus()
-  const { data: health, error: healthError } = useHealthCheck()
+  const {
+    data: setupStatus,
+    isLoading: setupLoading,
+    error: setupError,
+  } = useSetupStatus();
+  const { data: health, error: healthError } = useHealthCheck();
 
-  const isApiHealthy = health?.status === 'healthy' && !healthError
-  const isReady = isApiHealthy && setupStatus?.claude_cli && setupStatus?.credentials
+  const isApiHealthy = health?.status === "healthy" && !healthError;
+  const isReady =
+    isApiHealthy && setupStatus?.claude_cli && setupStatus?.credentials;
 
   // Memoize the completion check to avoid infinite loops
   const checkAndComplete = useCallback(() => {
     if (isReady) {
-      onComplete()
+      onComplete();
     }
-  }, [isReady, onComplete])
+  }, [isReady, onComplete]);
 
   // Auto-complete if everything is ready
   useEffect(() => {
-    checkAndComplete()
-  }, [checkAndComplete])
+    checkAndComplete();
+  }, [checkAndComplete]);
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
@@ -44,7 +49,9 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
             <SetupItem
               label="Backend Server"
               description="FastAPI server is running"
-              status={healthError ? 'error' : isApiHealthy ? 'success' : 'loading'}
+              status={
+                healthError ? "error" : isApiHealthy ? "success" : "loading"
+              }
             />
 
             {/* Claude CLI */}
@@ -53,12 +60,12 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
               description="Claude Code CLI is installed"
               status={
                 setupLoading
-                  ? 'loading'
+                  ? "loading"
                   : setupError
-                  ? 'error'
-                  : setupStatus?.claude_cli
-                  ? 'success'
-                  : 'error'
+                    ? "error"
+                    : setupStatus?.claude_cli
+                      ? "success"
+                      : "error"
               }
               helpLink="https://docs.anthropic.com/claude/claude-code"
               helpText="Install Claude Code"
@@ -70,12 +77,12 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
               description="API credentials are configured"
               status={
                 setupLoading
-                  ? 'loading'
+                  ? "loading"
                   : setupError
-                  ? 'error'
-                  : setupStatus?.credentials
-                  ? 'success'
-                  : 'error'
+                    ? "error"
+                    : setupStatus?.credentials
+                      ? "success"
+                      : "error"
               }
               helpLink="https://console.anthropic.com/account/keys"
               helpText="Get API Key"
@@ -87,15 +94,33 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
               description="Node.js is installed (for UI dev)"
               status={
                 setupLoading
-                  ? 'loading'
+                  ? "loading"
                   : setupError
-                  ? 'error'
-                  : setupStatus?.node
-                  ? 'success'
-                  : 'warning'
+                    ? "error"
+                    : setupStatus?.node
+                      ? "success"
+                      : "warning"
               }
               helpLink="https://nodejs.org"
               helpText="Install Node.js"
+              optional
+            />
+
+            {/* Gemini (chat-only) */}
+            <SetupItem
+              label="Gemini (assistant chat only)"
+              description="Optional: set GEMINI_API_KEY to use Gemini for the read-only assistant. Coding agents still use Claude/Anthropic."
+              status={
+                setupLoading
+                  ? "loading"
+                  : setupError
+                    ? "warning"
+                    : setupStatus?.gemini
+                      ? "success"
+                      : "warning"
+              }
+              helpLink="https://ai.google.dev/gemini-api/docs/openai-compatibility"
+              helpText="Configure Gemini"
               optional
             />
           </div>
@@ -116,24 +141,24 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
               <AlertTitle>Setup Error</AlertTitle>
               <AlertDescription>
                 {healthError
-                  ? 'Cannot connect to the backend server. Make sure to run start_ui.py first.'
-                  : 'Failed to check setup status.'}
+                  ? "Cannot connect to the backend server. Make sure to run start_ui.py first."
+                  : "Failed to check setup status."}
               </AlertDescription>
             </Alert>
           )}
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }
 
 interface SetupItemProps {
-  label: string
-  description: string
-  status: 'success' | 'error' | 'warning' | 'loading'
-  helpLink?: string
-  helpText?: string
-  optional?: boolean
+  label: string;
+  description: string;
+  status: "success" | "error" | "warning" | "loading";
+  helpLink?: string;
+  helpText?: string;
+  optional?: boolean;
 }
 
 function SetupItem({
@@ -148,11 +173,11 @@ function SetupItem({
     <div className="flex items-start gap-4 p-4 bg-background border-2 border-border rounded-lg">
       {/* Status Icon */}
       <div className="flex-shrink-0 mt-1">
-        {status === 'success' ? (
+        {status === "success" ? (
           <CheckCircle2 size={24} className="text-green-500" />
-        ) : status === 'error' ? (
+        ) : status === "error" ? (
           <XCircle size={24} className="text-destructive" />
-        ) : status === 'warning' ? (
+        ) : status === "warning" ? (
           <XCircle size={24} className="text-yellow-500" />
         ) : (
           <Loader2 size={24} className="animate-spin text-primary" />
@@ -162,17 +187,15 @@ function SetupItem({
       {/* Content */}
       <div className="flex-1">
         <div className="flex items-center gap-2">
-          <span className="font-display font-bold text-foreground">{label}</span>
+          <span className="font-display font-bold text-foreground">
+            {label}
+          </span>
           {optional && (
-            <span className="text-xs text-muted-foreground">
-              (optional)
-            </span>
+            <span className="text-xs text-muted-foreground">(optional)</span>
           )}
         </div>
-        <p className="text-sm text-muted-foreground">
-          {description}
-        </p>
-        {(status === 'error' || status === 'warning') && helpLink && (
+        <p className="text-sm text-muted-foreground">{description}</p>
+        {(status === "error" || status === "warning") && helpLink && (
           <a
             href={helpLink}
             target="_blank"
@@ -184,5 +207,5 @@ function SetupItem({
         )}
       </div>
     </div>
-  )
+  );
 }
