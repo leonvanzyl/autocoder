@@ -143,16 +143,34 @@ fi
 ensure_packages() {
   echo
   echo "==> Installing Docker & prerequisites..."
+
+  # Detect OS type
+  if [[ -f /etc/os-release ]]; then
+    . /etc/os-release
+    OS_ID="$ID"
+    OS_LIKE="${ID_LIKE:-}"
+  else
+    echo "ERROR: Cannot detect OS type." >&2
+    exit 1
+  fi
+
+  # Determine Docker distribution
+  if [[ "$OS_ID" == "debian" || "$OS_LIKE" == *"debian"* ]]; then
+    DOCKER_DIST="debian"
+  else
+    DOCKER_DIST="ubuntu"
+  fi
+
   apt-get update -y
   apt-get install -y ca-certificates curl git gnupg
 
   install -m 0755 -d /etc/apt/keyrings
   if [[ ! -f /etc/apt/keyrings/docker.gpg ]]; then
-    curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+    curl -fsSL "https://download.docker.com/linux/${DOCKER_DIST}/gpg" \
       | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
     chmod a+r /etc/apt/keyrings/docker.gpg
     echo \
-      "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+      "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/${DOCKER_DIST} \
       $(. /etc/os-release && echo "${VERSION_CODENAME}") stable" \
       > /etc/apt/sources.list.d/docker.list
     apt-get update -y
