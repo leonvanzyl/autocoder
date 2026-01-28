@@ -153,7 +153,6 @@ def migrate_add_testing_columns(engine) -> None:
                 logger.info("Successfully migrated testing columns to nullable")
             except Exception as e:
                 logger.error(f"Failed to migrate testing columns: {e}")
-                conn.rollback()
                 raise
 
 
