@@ -66,7 +66,8 @@ def _run_command(cmd: list[str], cwd: Path, timeout: int = 60) -> tuple[int, str
         duration_ms = int((time.time() - start) * 1000)
         return 124, f"Command timed out after {timeout}s", duration_ms
     except FileNotFoundError:
-        return 127, f"Command not found: {cmd[0]}", 0
+        cmd_name = cmd[0] if cmd else "<empty command>"
+        return 127, f"Command not found: {cmd_name}", 0
     except Exception as e:
         return 1, str(e), 0
 
@@ -253,7 +254,19 @@ def run_custom_script(
     if script_path is None:
         script_path = ".autocoder/quality-checks.sh"
 
-    script_full_path = project_dir / script_path
+    script_full_path = (project_dir / script_path).resolve()
+    project_dir_resolved = project_dir.resolve()
+
+    # Validate script path is inside project directory to prevent path traversal
+    try:
+        script_full_path.relative_to(project_dir_resolved)
+    except ValueError:
+        return {
+            "name": "custom_script",
+            "passed": False,
+            "output": f"Security error: script path '{script_path}' is outside project directory",
+            "duration_ms": 0,
+        }
 
     if not script_full_path.exists():
         if user_configured:

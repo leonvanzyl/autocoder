@@ -144,9 +144,14 @@ class StructuredLogHandler(logging.Handler):
         try:
             # Extract structured data from record
             # Normalize level: Python's logging uses 'warning' but our LogLevel type uses 'warn'
+            # Also map 'critical' to 'error' since LogLevel doesn't include 'critical'
             level = record.levelname.lower()
             if level == "warning":
                 level = "warn"
+            elif level == "critical":
+                level = "error"
+            elif level not in ("debug", "info", "warn", "error"):
+                level = "error"  # Fallback for any unexpected level
             
             entry = StructuredLogEntry(
                 timestamp=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),

@@ -495,8 +495,8 @@ class TerminalSession:
                         except (psutil.NoSuchProcess, psutil.AccessDenied):
                             pass
 
-                    # Wait briefly for graceful termination
-                    psutil.wait_procs(children, timeout=2)
+                    # Wait briefly for graceful termination (run in thread to avoid blocking)
+                    await asyncio.to_thread(psutil.wait_procs, children, timeout=2)
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
                     pass  # Parent already gone
 
@@ -511,7 +511,8 @@ class TerminalSession:
             # that psutil may have missed (e.g., conhost.exe, deeply nested shells)
             if pid:
                 try:
-                    result = subprocess.run(
+                    result = await asyncio.to_thread(
+                        subprocess.run,
                         ["taskkill", "/F", "/T", "/PID", str(pid)],
                         capture_output=True,
                         timeout=5,

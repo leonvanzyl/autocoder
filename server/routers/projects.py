@@ -724,6 +724,10 @@ async def upload_knowledge_file(name: str, file: KnowledgeFileUpload):
     if not project_dir.exists():
         raise HTTPException(status_code=404, detail="Project directory not found")
 
+    # Validate filename (prevent path traversal)
+    if not re.match(r'^[a-zA-Z0-9_\-\.]+\.md$', file.filename):
+        raise HTTPException(status_code=400, detail="Invalid filename")
+
     knowledge_dir = get_knowledge_dir(project_dir)
     knowledge_dir.mkdir(parents=True, exist_ok=True)
 

@@ -21,7 +21,7 @@ git log --oneline -10
 
 Then use MCP tools:
 
-```
+```text
 # 4. Get progress statistics
 Use the feature_get_stats tool
 ```

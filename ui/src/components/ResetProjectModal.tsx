@@ -25,7 +25,7 @@ export function ResetProjectModal({ projectName, onClose, onReset }: ResetProjec
   }
 
   return (
-    <div className="neo-modal-backdrop" onClick={onClose}>
+    <div className="neo-modal-backdrop" onClick={() => !resetProject.isPending && onClose()}>
       <div
         className="neo-modal w-full max-w-lg"
         onClick={(e) => e.stopPropagation()}
@@ -37,7 +37,9 @@ export function ResetProjectModal({ projectName, onClose, onReset }: ResetProjec
             Reset Project
           </h2>
           <button
-            onClick={onClose}
+            onClick={() => !resetProject.isPending && onClose()}
+            disabled={resetProject.isPending}
+            aria-disabled={resetProject.isPending}
             className="neo-btn neo-btn-ghost p-2"
           >
             <X size={24} />

@@ -468,9 +468,8 @@ class SettingsUpdate(BaseModel):
     @field_validator('preferred_ide')
     @classmethod
     def validate_preferred_ide(cls, v: str | None) -> str | None:
-        valid_ides = ['vscode', 'cursor', 'antigravity']
-        if v is not None and v not in valid_ides:
-            raise ValueError(f"Invalid IDE. Must be one of: {valid_ides}")
+        if v is not None and v not in VALID_IDES:
+            raise ValueError(f"Invalid IDE. Must be one of: {VALID_IDES}")
         return v
 
 

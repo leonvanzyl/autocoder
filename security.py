@@ -73,7 +73,7 @@ def record_denied_command(command: str, reason: str, project_dir: Optional[Path]
     # Create redacted preview (first 20 + last 20 chars with mask in between)
     def redact_string(s: str, max_preview: int = 20) -> str:
         if len(s) <= max_preview * 2:
-            return s[:max_preview] + "..." if len(s) > max_preview else s
+            return s
         return f"{s[:max_preview]}...{s[-max_preview:]}"
     
     command_preview = redact_string(command, 20)

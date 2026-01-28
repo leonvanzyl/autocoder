@@ -271,7 +271,12 @@ function App() {
     }
     
     setShowIDESelection(false)
-    handleOpenInIDE(ide)
+    setIsOpeningIDE(true)
+    try {
+      await handleOpenInIDE(ide)
+    } finally {
+      setIsOpeningIDE(false)
+    }
   }, [handleOpenInIDE, updateSettings])
 
   if (!setupComplete) {
@@ -560,6 +565,7 @@ function App() {
         isOpen={showIDESelection}
         onClose={() => setShowIDESelection(false)}
         onSelect={handleIDESelect}
+        isLoading={updateSettings.isPending || isOpeningIDE}
       />
 
       {/* Keyboard Shortcuts Help */}

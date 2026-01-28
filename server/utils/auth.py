@@ -17,14 +17,28 @@ Example:
 For WebSocket connections:
     - Clients that support custom headers can use Authorization header
     - Browser WebSockets can pass token via query param: ?token=base64(user:pass)
+
+SECURITY WARNING:
+    Query parameter authentication (AUTH_ALLOW_QUERY_TOKEN=true) exposes credentials
+    in URLs, which may be logged by proxies, browsers, and web servers. Only enable
+    this mode in trusted environments where header-based auth is not possible.
+    Set AUTH_ALLOW_QUERY_TOKEN=true to enable query-param authentication.
 """
 
 import base64
 import binascii
+import logging
 import os
 import secrets
 
 from fastapi import WebSocket
+
+logger = logging.getLogger(__name__)
+
+
+def is_query_token_auth_enabled() -> bool:
+    """Check if query parameter token auth is enabled via environment variable."""
+    return os.environ.get("AUTH_ALLOW_QUERY_TOKEN", "").lower() in ("true", "1", "yes")
 
 
 def is_basic_auth_enabled() -> bool:
@@ -93,15 +107,21 @@ def check_websocket_auth(websocket: WebSocket) -> bool:
 
     # Try query parameter (for browser WebSockets)
     # URL would be: ws://host/ws/projects/name?token=base64(user:pass)
-    token = websocket.query_params.get("token", "")
-    if token:
-        try:
-            decoded = base64.b64decode(token).decode("utf-8")
-            user, passwd = decoded.split(":", 1)
-            if verify_basic_auth(user, passwd):
-                return True
-        except (ValueError, UnicodeDecodeError, binascii.Error):
-            pass
+    # Only enabled if AUTH_ALLOW_QUERY_TOKEN=true due to security risk
+    if is_query_token_auth_enabled():
+        token = websocket.query_params.get("token", "")
+        if token:
+            logger.warning(
+                "Query parameter authentication is being used. This exposes credentials "
+                "in URLs which may be logged. Consider using header-based auth instead."
+            )
+            try:
+                decoded = base64.b64decode(token).decode("utf-8")
+                user, passwd = decoded.split(":", 1)
+                if verify_basic_auth(user, passwd):
+                    return True
+            except (ValueError, UnicodeDecodeError, binascii.Error):
+                pass
 
     return False
 

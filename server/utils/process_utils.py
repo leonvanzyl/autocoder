@@ -132,6 +132,20 @@ def kill_process_tree(proc: subprocess.Popen, timeout: float = 5.0) -> KillResul
         if result.children_killed > 0:
             result.status = "partial"
 
+        # On Windows, check for any remaining children BEFORE terminating parent
+        # (after proc.wait() the PID is gone, so psutil.Process(proc.pid) fails)
+        if IS_WINDOWS:
+            try:
+                remaining = psutil.Process(proc.pid).children(recursive=True)
+                if remaining:
+                    logger.warning(
+                        "Found %d remaining children before parent termination, using taskkill",
+                        len(remaining)
+                    )
+                    _kill_windows_process_tree_taskkill(proc.pid)
+            except psutil.NoSuchProcess:
+                pass  # Parent already dead
+
         # Now terminate the parent
         logger.debug("Terminating parent PID %d", proc.pid)
         proc.terminate()
@@ -144,20 +158,6 @@ def kill_process_tree(proc: subprocess.Popen, timeout: float = 5.0) -> KillResul
             proc.wait()
             result.parent_forcekilled = True
             result.status = "partial"
-
-        # On Windows, use taskkill as a final cleanup to catch any orphans
-        # that psutil may have missed (e.g., conhost.exe, deeply nested processes)
-        if IS_WINDOWS:
-            try:
-                remaining = psutil.Process(proc.pid).children(recursive=True)
-                if remaining:
-                    logger.warning(
-                        "Found %d remaining children after psutil cleanup, using taskkill",
-                        len(remaining)
-                    )
-                    _kill_windows_process_tree_taskkill(proc.pid)
-            except psutil.NoSuchProcess:
-                pass  # Parent already dead, good
 
         logger.debug(
             "Process tree kill complete: status=%s, children=%d (terminated=%d, killed=%d)",

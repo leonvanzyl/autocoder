@@ -249,12 +249,27 @@ async def apply_template(request: ApplyRequest):
         if not template:
             raise HTTPException(status_code=404, detail=f"Template not found: {request.template_id}")
 
-        # Validate project_dir to prevent path traversal
-        if ".." in request.project_dir:
+        # Validate project_dir to prevent path traversal and absolute paths
+        raw_path = request.project_dir
+        if ".." in raw_path:
             raise HTTPException(status_code=400, detail="Invalid project directory: path traversal not allowed")
+        
+        # Reject absolute paths - require relative paths or user must provide full validated path
+        raw_path_obj = Path(raw_path)
+        if raw_path_obj.is_absolute():
+            raise HTTPException(status_code=400, detail="Invalid project directory: absolute paths not allowed")
+        
+        # Resolve relative to current working directory and verify it stays within bounds
+        cwd = Path.cwd().resolve()
+        project_dir = (cwd / raw_path).resolve()
+        
+        # Ensure resolved path is inside the working directory (no escape via symlinks etc.)
+        try:
+            project_dir.relative_to(cwd)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid project directory: path escapes working directory")
 
         # Create project directory
-        project_dir = Path(request.project_dir).resolve()
         prompts_dir = project_dir / "prompts"
         prompts_dir.mkdir(parents=True, exist_ok=True)
 

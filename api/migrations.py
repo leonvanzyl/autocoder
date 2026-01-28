@@ -132,9 +132,10 @@ def migrate_add_testing_columns(engine) -> None:
                 """
                 conn.execute(text(insert_sql))
 
-                # Step 3: Drop old table and rename
-                conn.execute(text("DROP TABLE features"))
+                # Step 3: Atomic table swap - rename old, rename new, drop old
+                conn.execute(text("ALTER TABLE features RENAME TO features_old"))
                 conn.execute(text("ALTER TABLE features_new RENAME TO features"))
+                conn.execute(text("DROP TABLE features_old"))
 
                 # Step 4: Recreate indexes
                 conn.execute(text("CREATE INDEX IF NOT EXISTS ix_features_id ON features (id)"))
