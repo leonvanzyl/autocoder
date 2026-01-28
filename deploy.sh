@@ -71,6 +71,13 @@ derive_duckdns_subdomain() {
   else
     DUCKDNS_SUBDOMAIN="${DOMAIN}"
   fi
+
+  # Validate subdomain contains only allowed characters (alphanumeric and hyphens)
+  if ! [[ "${DUCKDNS_SUBDOMAIN}" =~ ^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?$ ]]; then
+    echo "Invalid DuckDNS subdomain '${DUCKDNS_SUBDOMAIN}'. Must be alphanumeric with optional hyphens." >&2
+    exit 1
+  fi
+
   export DUCKDNS_SUBDOMAIN
 }
 

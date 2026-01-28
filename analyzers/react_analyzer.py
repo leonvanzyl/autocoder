@@ -362,8 +362,11 @@ class ReactAnalyzer(BaseAnalyzer):
         methods = []
         if content:
             for method in ["GET", "POST", "PUT", "PATCH", "DELETE"]:
-                if f"export async function {method}" in content or \
-                   f"export function {method}" in content:
+                # Match: export function METHOD, export async function METHOD
+                # Match: export const METHOD = (async )?(
+                if (f"export async function {method}" in content or
+                    f"export function {method}" in content or
+                    f"export const {method}" in content):
                     methods.append(method)
 
         if not methods:

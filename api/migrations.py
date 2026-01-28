@@ -93,15 +93,19 @@ def migrate_add_testing_columns(engine) -> None:
                 optional_columns = []
                 for col_name, col_info in columns.items():
                     if col_name not in core_columns:
-                        # Preserve the column with its type
-                        col_type = col_info["type"]
-                        optional_columns.append((col_name, col_type))
+                        # Preserve full column definition
+                        optional_columns.append((col_name, col_info))
 
                 # Build dynamic column definitions for optional columns
                 optional_col_defs = ""
                 optional_col_names = ""
-                for col_name, col_type in optional_columns:
-                    optional_col_defs += f",\n                        {col_name} {col_type}"
+                for col_name, col_info in optional_columns:
+                    col_def = f"{col_name} {col_info['type']}"
+                    if col_info["notnull"]:
+                        col_def += " NOT NULL"
+                    if col_info.get("dflt_value") is not None:
+                        col_def += f" DEFAULT {col_info['dflt_value']}"
+                    optional_col_defs += f",\n                        {col_def}"
                     optional_col_names += f", {col_name}"
 
                 # Step 1: Create new table without NOT NULL on testing columns

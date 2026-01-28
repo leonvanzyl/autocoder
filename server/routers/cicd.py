@@ -241,6 +241,9 @@ async def get_workflow_content(project_name: str, filename: str):
     if not project_dir:
         raise HTTPException(status_code=404, detail="Project not found")
 
+    if not project_dir.exists():
+        raise HTTPException(status_code=404, detail="Project directory not found")
+
     # Security: validate filename
     if ".." in filename or "/" in filename or "\\" in filename:
         raise HTTPException(status_code=400, detail="Invalid filename")

@@ -35,7 +35,7 @@ import { useCreateProject, useDeleteProject, useProjects } from '../hooks/usePro
 import { FolderBrowser } from './FolderBrowser'
 import { ConfirmDialog } from './ConfirmDialog'
 
-type Step = 'folder' | 'analyzing' | 'detected' | 'features' | 'register' | 'complete'
+type Step = 'folder' | 'analyzing' | 'detected' | 'features' | 'register' | 'complete' | 'error'
 
 interface ImportProjectModalProps {
   isOpen: boolean

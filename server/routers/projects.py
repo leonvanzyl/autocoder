@@ -6,6 +6,7 @@ API endpoints for project management.
 Uses project registry for path lookups instead of fixed generations/ directory.
 """
 
+import logging
 import os
 import re
 import shutil
@@ -14,6 +15,8 @@ import sys
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
+
+logger = logging.getLogger(__name__)
 
 from ..schemas import (
     DatabaseHealth,
@@ -370,8 +373,8 @@ async def delete_project(name: str, delete_files: bool = False):
         logger.warning(f"Error disconnecting WebSocket connections for project '{name}': {e}")
 
     # Step 2: Stop agent process manager for this project
-    from .services.process_manager import cleanup_manager as cleanup_process_manager
     from .services.dev_server_manager import get_devserver_manager
+    from .services.process_manager import cleanup_manager as cleanup_process_manager
     try:
         await cleanup_process_manager(name, project_dir)
         logger.info(f"Stopped agent process manager for project '{name}'")
