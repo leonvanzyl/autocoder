@@ -126,6 +126,10 @@ if [[ -z "${APP_PORT:-}" ]]; then
   fi
 fi
 APP_PORT=${APP_PORT:-8888}
+if ! [[ "${APP_PORT}" =~ ^[0-9]+$ ]] || (( APP_PORT < 1 || APP_PORT > 65535 )); then
+  echo "Invalid APP_PORT '${APP_PORT}'. Must be an integer between 1 and 65535." >&2
+  exit 1
+fi
 
 echo
 echo "Domain:          ${DOMAIN}"
