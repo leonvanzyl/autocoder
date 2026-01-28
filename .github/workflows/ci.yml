@@ -2,7 +2,7 @@ name: Push CI
 
 on:
   push:
-    branches: [main]
+    branches: [master]
 
 jobs:
   repo-guards:

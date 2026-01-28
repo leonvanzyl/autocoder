@@ -169,7 +169,7 @@ configure_duckdns() {
   cat > "${cron_file}" <<EOF
 */5 * * * * root curl -fsS "https://www.duckdns.org/update?domains=${DUCKDNS_SUBDOMAIN}&token=${DUCKDNS_TOKEN}&ip=" >/var/log/duckdns.log 2>&1
 EOF
-  chmod 644 "${cron_file}"
+  chmod 600 "${cron_file}"
 
   # Run once immediately.
   curl -fsS "https://www.duckdns.org/update?domains=${DUCKDNS_SUBDOMAIN}&token=${DUCKDNS_TOKEN}&ip=" \

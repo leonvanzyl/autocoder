@@ -73,8 +73,12 @@ async def stream_chat(
         for choice in chunk.choices:
             delta = choice.delta
             if delta and delta.content:
-                # delta.content is a list of content parts
-                for part in delta.content:
-                    text = getattr(part, "text", None) or part.get("text") if isinstance(part, dict) else None
-                    if text:
-                        yield text
+                # OpenAI SDK 1.52+ returns delta.content as a string
+                if isinstance(delta.content, str):
+                    yield delta.content
+                else:
+                    # Fallback for list-based content parts (older versions)
+                    for part in delta.content:
+                        text = getattr(part, "text", None) or (part.get("text") if isinstance(part, dict) else None)
+                        if text:
+                            yield text

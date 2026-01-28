@@ -30,6 +30,13 @@ prompt_required DOMAIN "Enter your DuckDNS domain (e.g., myapp.duckdns.org)"
 prompt_required DUCKDNS_TOKEN "Enter your DuckDNS token"
 prompt_required LETSENCRYPT_EMAIL "Enter email for Let's Encrypt notifications"
 
+# Extract subdomain for DuckDNS API (it expects just the subdomain, not full domain)
+if [[ "${DOMAIN}" == *.duckdns.org ]]; then
+  DUCKDNS_SUBDOMAIN="${DOMAIN%.duckdns.org}"
+else
+  DUCKDNS_SUBDOMAIN="${DOMAIN}"
+fi
+
 read -r -p "Git repo URL [https://github.com/heidi-dang/autocoder.git]: " REPO_URL
 REPO_URL=${REPO_URL:-https://github.com/heidi-dang/autocoder.git}
 
@@ -75,11 +82,11 @@ configure_duckdns() {
   echo "Configuring DuckDNS..."
   local cron_file="/etc/cron.d/duckdns"
   cat > "$cron_file" <<EOF
-*/5 * * * * root curl -fsS "https://www.duckdns.org/update?domains=$DOMAIN&token=$DUCKDNS_TOKEN&ip=" >/var/log/duckdns.log 2>&1
+*/5 * * * * root curl -fsS "https://www.duckdns.org/update?domains=$DUCKDNS_SUBDOMAIN&token=$DUCKDNS_TOKEN&ip=" >/var/log/duckdns.log 2>&1
 EOF
-  chmod 644 "$cron_file"
+  chmod 600 "$cron_file"
   # Run once immediately
-  curl -fsS "https://www.duckdns.org/update?domains=$DOMAIN&token=$DUCKDNS_TOKEN&ip=" >/var/log/duckdns.log 2>&1 || true
+  curl -fsS "https://www.duckdns.org/update?domains=$DUCKDNS_SUBDOMAIN&token=$DUCKDNS_TOKEN&ip=" >/var/log/duckdns.log 2>&1 || true
 }
 
 clone_repo() {
