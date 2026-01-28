@@ -17,7 +17,7 @@ prompt_required() {
     read -r -p "$prompt_msg: " value
     if [[ -n "$value" ]]; then
       printf -v "$var_name" '%s' "$value"
-      export "$var_name"
+      export "${var_name?}"
       return
     fi
     echo "Value cannot be empty."
