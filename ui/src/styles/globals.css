@@ -591,6 +591,139 @@
 }
 
 /* ============================================================================
+   Theme: Business
+   Professional deep navy (#000e4e) and gray palette for corporate use
+   Designed for trust, readability, and modern depth with card shadows
+   ============================================================================ */
+
+.theme-business {
+  --radius: 0.5rem;
+  /* Concrete-like blue-gray background */
+  --background: oklch(0.9500 0.0080 265);
+  /* Deep navy foreground #000e4e */
+  --foreground: oklch(0.1700 0.0900 265);
+  /* White cards with shadow depth */
+  --card: oklch(1.0000 0 0);
+  --card-foreground: oklch(0.1700 0.0900 265);
+  --popover: oklch(1.0000 0 0);
+  --popover-foreground: oklch(0.1700 0.0900 265);
+  /* Primary: Deep navy #000e4e */
+  --primary: oklch(0.1700 0.0900 265);
+  --primary-foreground: oklch(1.0000 0 0);
+  /* Secondary: Light gray */
+  --secondary: oklch(0.9500 0.0020 265);
+  --secondary-foreground: oklch(0.1700 0.0900 265);
+  /* Muted: Soft gray */
+  --muted: oklch(0.9300 0.0020 265);
+  --muted-foreground: oklch(0.4500 0.0100 265);
+  /* Accent: Medium gray (no teal) */
+  --accent: oklch(0.5500 0.0100 265);
+  --accent-foreground: oklch(1.0000 0 0);
+  --destructive: oklch(0.5800 0.2000 25);
+  --destructive-foreground: oklch(1.0000 0 0);
+  /* Border: Subtle gray */
+  --border: oklch(0.8800 0.0030 265);
+  --input: oklch(0.9300 0.0020 265);
+  --ring: oklch(0.1700 0.0900 265);
+  /* Chart colors: Navy-gray monochrome scale */
+  --chart-1: oklch(0.1700 0.0900 265);
+  --chart-2: oklch(0.3500 0.0600 265);
+  --chart-3: oklch(0.5000 0.0400 265);
+  --chart-4: oklch(0.6500 0.0200 265);
+  --chart-5: oklch(0.8000 0.0100 265);
+  --sidebar: oklch(0.9300 0.0100 265);
+  --sidebar-foreground: oklch(0.1700 0.0900 265);
+  --sidebar-primary: oklch(0.1700 0.0900 265);
+  --sidebar-primary-foreground: oklch(1.0000 0 0);
+  --sidebar-accent: oklch(0.5500 0.0100 265);
+  --sidebar-accent-foreground: oklch(1.0000 0 0);
+  --sidebar-border: oklch(0.8800 0.0030 265);
+  --sidebar-ring: oklch(0.1700 0.0900 265);
+
+  /* Shadow variables - pronounced for card depth (2026 trend) */
+  --shadow-sm: 0 1px 3px 0 rgb(0 14 78 / 0.06), 0 1px 2px -1px rgb(0 14 78 / 0.04);
+  --shadow: 0 2px 8px 0 rgb(0 14 78 / 0.08), 0 1px 3px -1px rgb(0 14 78 / 0.06);
+  --shadow-md: 0 6px 16px -2px rgb(0 14 78 / 0.10), 0 3px 6px -3px rgb(0 14 78 / 0.08);
+  --shadow-lg: 0 12px 32px -4px rgb(0 14 78 / 0.12), 0 6px 12px -6px rgb(0 14 78 / 0.10);
+
+  /* Log level colors - professional muted tones */
+  --color-log-error: #dc2626;
+  --color-log-warning: #d97706;
+  --color-log-info: #000e4e;
+  --color-log-debug: #6b7280;
+  --color-log-success: #059669;
+
+  /* Status colors for Kanban - gray-navy scale */
+  --color-status-pending: oklch(0.9300 0.0030 265);
+  --color-status-progress: oklch(0.8500 0.0200 265);
+  --color-status-done: oklch(0.7500 0.0400 265);
+
+  /* Font stacks - system fonts for professional feel */
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: 'SF Mono', SFMono-Regular, ui-monospace, Consolas, 'Liberation Mono', monospace;
+}
+
+.theme-business.dark {
+  /* Very dark navy background */
+  --background: oklch(0.1200 0.0400 265);
+  --foreground: oklch(0.9400 0.0050 265);
+  /* Dark navy cards with elevation */
+  --card: oklch(0.1600 0.0500 265);
+  --card-foreground: oklch(0.9400 0.0050 265);
+  --popover: oklch(0.1400 0.0450 265);
+  --popover-foreground: oklch(0.9400 0.0050 265);
+  /* Primary: Lighter navy for dark mode */
+  --primary: oklch(0.5500 0.1200 265);
+  --primary-foreground: oklch(0.9800 0 0);
+  /* Secondary: Dark gray */
+  --secondary: oklch(0.2200 0.0200 265);
+  --secondary-foreground: oklch(0.9400 0.0050 265);
+  /* Muted: Medium-dark gray */
+  --muted: oklch(0.2500 0.0150 265);
+  --muted-foreground: oklch(0.6000 0.0100 265);
+  /* Accent: Light gray */
+  --accent: oklch(0.6500 0.0100 265);
+  --accent-foreground: oklch(0.1200 0.0400 265);
+  --destructive: oklch(0.6500 0.2000 25);
+  --destructive-foreground: oklch(1.0000 0 0);
+  --border: oklch(0.2800 0.0200 265);
+  --input: oklch(0.2200 0.0200 265);
+  --ring: oklch(0.5500 0.1200 265);
+  /* Chart colors: Navy-gray scale for dark mode */
+  --chart-1: oklch(0.5500 0.1200 265);
+  --chart-2: oklch(0.6500 0.0800 265);
+  --chart-3: oklch(0.7500 0.0400 265);
+  --chart-4: oklch(0.5000 0.0600 265);
+  --chart-5: oklch(0.4000 0.0400 265);
+  --sidebar: oklch(0.1000 0.0350 265);
+  --sidebar-foreground: oklch(0.9400 0.0050 265);
+  --sidebar-primary: oklch(0.5500 0.1200 265);
+  --sidebar-primary-foreground: oklch(0.9800 0 0);
+  --sidebar-accent: oklch(0.6500 0.0100 265);
+  --sidebar-accent-foreground: oklch(0.1200 0.0400 265);
+  --sidebar-border: oklch(0.2600 0.0180 265);
+  --sidebar-ring: oklch(0.5500 0.1200 265);
+
+  /* Shadow variables - dark mode with stronger depth */
+  --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.4), 0 1px 2px -1px rgb(0 0 0 / 0.3);
+  --shadow: 0 2px 8px 0 rgb(0 0 0 / 0.5), 0 1px 3px -1px rgb(0 0 0 / 0.4);
+  --shadow-md: 0 6px 16px -2px rgb(0 0 0 / 0.6), 0 3px 6px -3px rgb(0 0 0 / 0.5);
+  --shadow-lg: 0 12px 32px -4px rgb(0 0 0 / 0.7), 0 6px 12px -6px rgb(0 0 0 / 0.6);
+
+  /* Log level colors - dark mode */
+  --color-log-error: #f87171;
+  --color-log-warning: #fbbf24;
+  --color-log-info: #93c5fd;
+  --color-log-debug: #9ca3af;
+  --color-log-success: #34d399;
+
+  /* Status colors for Kanban - dark mode */
+  --color-status-pending: oklch(0.2500 0.0200 265);
+  --color-status-progress: oklch(0.3500 0.0400 265);
+  --color-status-done: oklch(0.4500 0.0600 265);
+}
+
+/* ============================================================================
    ShadCN Tailwind v4 Theme Integration
    ============================================================================ */
 
