@@ -525,17 +525,33 @@ set up and run the development environment. The script should:
 
 Base the script on the technology stack specified in `app_spec.txt`.
 
-### THIRD TASK: Initialize Git
+### THIRD TASK: Initialize Git & Create Feature Branch
 
-Create a git repository and make your first commit with:
+Create a git repository with a feature branch for development:
 
+```bash
+# 1. Initialize git repository
+git init
+
+# 2. Create initial commit on main branch
+git add .
+git commit -m "Initial setup: init.sh, project structure, and features created via API"
+
+# 3. Create and switch to a feature branch for development
+#    All coding work should happen on this branch, not main
+git checkout -b feature/autocoder-dev
+```
+
+Include in the initial commit:
 - init.sh (environment setup script)
 - README.md (project overview and setup instructions)
 - Any initial project structure files
 
 Note: Features are stored in the SQLite database (features.db), not in a JSON file.
 
-Commit message: "Initial setup: init.sh, project structure, and features created via API"
+**IMPORTANT:** All subsequent development sessions will work on the `feature/autocoder-dev` branch.
+The `main` branch should only receive merged, verified code. This follows standard
+version control best practices and makes it easy to track what was generated vs. manually added.
 
 ### FOURTH TASK: Create Project Structure
 

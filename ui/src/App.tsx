@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useProjects, useFeatures, useAgentStatus } from './hooks/useProjects'
+import { useProjects, useFeatures, useAgentStatus, useGitStatus } from './hooks/useProjects'
 import { useProjectWebSocket } from './hooks/useWebSocket'
 import { useFeatureSound } from './hooks/useFeatureSound'
 import { useCelebration } from './hooks/useCelebration'
@@ -15,6 +15,7 @@ import { DebugLogViewer } from './components/DebugLogViewer'
 import { AgentThought } from './components/AgentThought'
 import { AssistantFAB } from './components/AssistantFAB'
 import { AssistantPanel } from './components/AssistantPanel'
+import { GitStatusBar } from './components/GitStatusBar'
 import {
   Plus,
   Loader2,
@@ -49,6 +50,7 @@ function App() {
   const { data: projects, isLoading: projectsLoading } = useProjects()
   const { data: features } = useFeatures(selectedProject)
   const { data: agentStatusData } = useAgentStatus(selectedProject)
+  const { data: gitStatusData, isLoading: gitStatusLoading } = useGitStatus(selectedProject)
   const wsState = useProjectWebSocket(selectedProject)
 
   useFeatureSound(features)
@@ -292,6 +294,9 @@ function App() {
                 </div>
               </div>
             </div>
+
+            {/* Git Status Bar */}
+            <GitStatusBar gitStatus={gitStatusData} isLoading={gitStatusLoading} />
 
             {/* Progress Bar */}
             <div className="neo-card p-4">

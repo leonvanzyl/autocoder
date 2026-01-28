@@ -82,6 +82,9 @@ class AgentProcessManager:
         self._status_callbacks: Set[Callable[[str], Awaitable[None]]] = set()
         self._callbacks_lock = threading.Lock()
 
+        # Model configuration for per-agent-type model selection
+        self.model_config: dict[str, str] | None = None
+
         # Lock file to prevent multiple instances (stored in project directory)
         self.lock_file = self.project_dir / ".agent.lock"
 
@@ -216,12 +219,19 @@ class AgentProcessManager:
                     self.status = "stopped"
                 self._remove_lock()
 
-    async def start(self, yolo_mode: bool = False) -> tuple[bool, str]:
+    async def start(
+        self,
+        yolo_mode: bool = False,
+        yolo_review: bool = False,
+        model_config: dict[str, str] | None = None,
+    ) -> tuple[bool, str]:
         """
         Start the agent as a subprocess.
 
         Args:
             yolo_mode: If True, run in YOLO mode (no browser testing)
+            yolo_review: If True, run in YOLO+Review mode
+            model_config: Per-agent-type model configuration dict
 
         Returns:
             Tuple of (success, message)
@@ -232,8 +242,9 @@ class AgentProcessManager:
         if not self._check_lock():
             return False, "Another agent instance is already running for this project"
 
-        # Store YOLO mode for status queries
-        self.yolo_mode = yolo_mode
+        # Store mode and config for status queries
+        self.yolo_mode = yolo_mode or yolo_review
+        self.model_config = model_config
 
         # Build command - pass absolute path to project directory
         cmd = [
@@ -243,9 +254,24 @@ class AgentProcessManager:
             str(self.project_dir.resolve()),
         ]
 
-        # Add --yolo flag if YOLO mode is enabled
-        if yolo_mode:
+        # Add YOLO mode flags
+        if yolo_review:
+            cmd.append("--yolo-review")
+        elif yolo_mode:
             cmd.append("--yolo")
+
+        # Add per-agent-type model args if configured
+        if model_config:
+            model_arg_map = {
+                "architect": "--architect-model",
+                "initializer": "--initializer-model",
+                "coding": "--coding-model",
+                "reviewer": "--reviewer-model",
+                "testing": "--testing-model",
+            }
+            for agent_type, arg_flag in model_arg_map.items():
+                if agent_type in model_config:
+                    cmd.extend([arg_flag, model_config[agent_type]])
 
         try:
             # Start subprocess with piped stdout/stderr
@@ -321,6 +347,7 @@ class AgentProcessManager:
             self.process = None
             self.started_at = None
             self.yolo_mode = False  # Reset YOLO mode
+            self.model_config = None  # Reset model config
 
             return True, "Agent stopped"
         except Exception as e:
@@ -402,6 +429,7 @@ class AgentProcessManager:
             "pid": self.pid,
             "started_at": self.started_at.isoformat() if self.started_at else None,
             "yolo_mode": self.yolo_mode,
+            "model_config": self.model_config,
         }
 
 

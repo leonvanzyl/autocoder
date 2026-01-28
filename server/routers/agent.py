@@ -2,16 +2,23 @@
 Agent Router
 ============
 
-API endpoints for agent control (start/stop/pause/resume).
+API endpoints for agent control (start/stop/pause/resume) and git status.
 Uses project registry for path lookups.
 """
 
 import re
+import subprocess
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 
-from ..schemas import AgentActionResponse, AgentStartRequest, AgentStatus
+from ..schemas import (
+    AgentActionResponse,
+    AgentStartRequest,
+    AgentStatus,
+    GitStatusResponse,
+    ModelConfigSchema,
+)
 from ..services.process_manager import get_manager
 
 
@@ -64,11 +71,17 @@ async def get_agent_status(project_name: str):
     # Run healthcheck to detect crashed processes
     await manager.healthcheck()
 
+    # Build model config schema if available
+    model_config_schema = None
+    if manager.model_config:
+        model_config_schema = ModelConfigSchema(**manager.model_config)
+
     return AgentStatus(
         status=manager.status,
         pid=manager.pid,
         started_at=manager.started_at,
         yolo_mode=manager.yolo_mode,
+        model_config=model_config_schema,
     )
 
 
@@ -80,7 +93,16 @@ async def start_agent(
     """Start the agent for a project."""
     manager = get_project_manager(project_name)
 
-    success, message = await manager.start(yolo_mode=request.yolo_mode)
+    # Convert model config schema to dict for process manager
+    model_config_dict = None
+    if request.model_config:
+        model_config_dict = request.model_config.model_dump()
+
+    success, message = await manager.start(
+        yolo_mode=request.yolo_mode,
+        yolo_review=request.yolo_review,
+        model_config=model_config_dict,
+    )
 
     return AgentActionResponse(
         success=success,
@@ -128,4 +150,65 @@ async def resume_agent(project_name: str):
         success=success,
         status=manager.status,
         message=message,
+    )
+
+
+@router.get("/git", response_model=GitStatusResponse)
+async def get_git_status(project_name: str):
+    """Get the git status for a project directory."""
+    project_name = validate_project_name(project_name)
+    project_dir = _get_project_path(project_name)
+
+    if not project_dir:
+        raise HTTPException(status_code=404, detail=f"Project '{project_name}' not found")
+
+    if not project_dir.exists():
+        raise HTTPException(status_code=404, detail=f"Project directory not found: {project_dir}")
+
+    git_dir = project_dir / ".git"
+    if not git_dir.exists():
+        return GitStatusResponse(has_git=False)
+
+    def _run_git(args: list[str]) -> str | None:
+        """Run a git command in the project directory and return stdout."""
+        try:
+            result = subprocess.run(
+                ["git"] + args,
+                cwd=str(project_dir),
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if result.returncode == 0:
+                return result.stdout.strip()
+            return None
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            return None
+
+    # Get current branch
+    branch = _run_git(["branch", "--show-current"])
+
+    # Get last commit info
+    last_commit_hash = _run_git(["log", "-1", "--format=%h"])
+    last_commit_message = _run_git(["log", "-1", "--format=%s"])
+    last_commit_time = _run_git(["log", "-1", "--format=%ci"])
+
+    # Check for uncommitted changes
+    status_output = _run_git(["status", "--porcelain"])
+    is_dirty = bool(status_output)
+    uncommitted_count = len(status_output.splitlines()) if status_output else 0
+
+    # Total commit count
+    commit_count_str = _run_git(["rev-list", "--count", "HEAD"])
+    total_commits = int(commit_count_str) if commit_count_str else 0
+
+    return GitStatusResponse(
+        has_git=True,
+        branch=branch,
+        last_commit_hash=last_commit_hash,
+        last_commit_message=last_commit_message,
+        last_commit_time=last_commit_time,
+        is_dirty=is_dirty,
+        uncommitted_count=uncommitted_count,
+        total_commits=total_commits,
     )

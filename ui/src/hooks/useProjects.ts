@@ -111,9 +111,14 @@ export function useStartAgent(projectName: string) {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (yoloMode: boolean = false) => api.startAgent(projectName, yoloMode),
+    mutationFn: (options: {
+      yoloMode?: boolean
+      yoloReview?: boolean
+      modelConfig?: import('../lib/types').ModelConfig
+    } = {}) => api.startAgent(projectName, options),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['agent-status', projectName] })
+      queryClient.invalidateQueries({ queryKey: ['git-status', projectName] })
     },
   })
 }
@@ -198,5 +203,18 @@ export function useCreateDirectory() {
 export function useValidatePath() {
   return useMutation({
     mutationFn: (path: string) => api.validatePath(path),
+  })
+}
+
+// ============================================================================
+// Git Status
+// ============================================================================
+
+export function useGitStatus(projectName: string | null) {
+  return useQuery({
+    queryKey: ['git-status', projectName],
+    queryFn: () => api.getGitStatus(projectName!),
+    enabled: !!projectName,
+    refetchInterval: 10000, // Poll every 10 seconds
   })
 }

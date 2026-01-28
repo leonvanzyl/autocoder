@@ -28,7 +28,7 @@ export function AgentControl({ projectName, status, yoloMode = false }: AgentCon
     pauseAgent.isPending ||
     resumeAgent.isPending
 
-  const handleStart = () => startAgent.mutate(yoloEnabled)
+  const handleStart = () => startAgent.mutate({ yoloMode: yoloEnabled })
   const handleStop = () => stopAgent.mutate()
   const handlePause = () => pauseAgent.mutate()
   const handleResume = () => resumeAgent.mutate()

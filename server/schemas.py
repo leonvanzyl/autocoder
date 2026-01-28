@@ -100,9 +100,20 @@ class FeatureListResponse(BaseModel):
 # Agent Schemas
 # ============================================================================
 
+class ModelConfigSchema(BaseModel):
+    """Per-agent-type model configuration for cost optimization."""
+    architect: str = "claude-opus-4-5-20251101"
+    initializer: str = "claude-opus-4-5-20251101"
+    coding: str = "claude-sonnet-4-5-20250929"
+    reviewer: str = "claude-sonnet-4-5-20250929"
+    testing: str = "claude-3-5-haiku-20241022"
+
+
 class AgentStartRequest(BaseModel):
     """Request schema for starting the agent."""
     yolo_mode: bool = False
+    yolo_review: bool = False
+    model_config: ModelConfigSchema | None = None
 
 
 class AgentStatus(BaseModel):
@@ -111,6 +122,7 @@ class AgentStatus(BaseModel):
     pid: int | None = None
     started_at: datetime | None = None
     yolo_mode: bool = False
+    model_config: ModelConfigSchema | None = None
 
 
 class AgentActionResponse(BaseModel):
@@ -118,6 +130,18 @@ class AgentActionResponse(BaseModel):
     success: bool
     status: str
     message: str = ""
+
+
+class GitStatusResponse(BaseModel):
+    """Git repository status for a project."""
+    has_git: bool = False
+    branch: str | None = None
+    last_commit_hash: str | None = None
+    last_commit_message: str | None = None
+    last_commit_time: str | None = None
+    is_dirty: bool = False
+    uncommitted_count: int = 0
+    total_commits: int = 0
 
 
 # ============================================================================

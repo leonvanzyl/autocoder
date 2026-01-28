@@ -19,13 +19,24 @@ if sys.platform == "win32":
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
+from agent_types import (
+    AgentOrchestrator,
+    AgentType,
+    ModelConfig,
+    determine_agent_type,
+    get_agent_description,
+)
 from client import create_client
 from progress import has_features, print_progress_summary, print_session_header
 from prompts import (
     copy_spec_to_project,
     get_coding_prompt,
     get_coding_prompt_yolo,
+    get_coding_prompt_yolo_review,
     get_initializer_prompt,
+    get_architect_prompt,
+    get_reviewer_prompt,
+    get_testing_prompt,
 )
 from resource_cleanup import ResourceCleanupManager
 
@@ -109,25 +120,42 @@ async def run_agent_session(
 
 async def run_autonomous_agent(
     project_dir: Path,
-    model: str,
+    model: str = "",
+    model_config: Optional[ModelConfig] = None,
     max_iterations: Optional[int] = None,
     yolo_mode: bool = False,
+    yolo_review: bool = False,
 ) -> None:
     """
-    Run the autonomous agent loop.
+    Run the autonomous agent loop with multi-model support.
 
     Args:
         project_dir: Directory for the project
-        model: Claude model to use
+        model: Single model override for all agent types (legacy, optional)
+        model_config: Per-agent-type model configuration (preferred)
         max_iterations: Maximum number of iterations (None for unlimited)
         yolo_mode: If True, skip browser testing and use YOLO prompt
+        yolo_review: If True, use YOLO+Review mode (YOLO with periodic code reviews)
     """
+    # Build model config: explicit config > single model override > defaults
+    if model_config is None:
+        if model:
+            model_config = ModelConfig.from_single_model(model)
+        else:
+            model_config = ModelConfig()
+
+    # Initialize orchestrator for agent type selection
+    orchestrator = AgentOrchestrator(project_dir)
+
     print("\n" + "=" * 70)
     print("  AUTONOMOUS CODING AGENT DEMO")
     print("=" * 70)
     print(f"\nProject directory: {project_dir}")
-    print(f"Model: {model}")
-    if yolo_mode:
+    print(f"\nModel configuration (per agent type):")
+    print(model_config.describe())
+    if yolo_review:
+        print("Mode: YOLO+Review (testing disabled, periodic code reviews)")
+    elif yolo_mode:
         print("Mode: YOLO (testing disabled)")
     else:
         print("Mode: Standard (full testing)")
@@ -176,24 +204,40 @@ async def run_autonomous_agent(
             print("To continue, run the script again without --max-iterations")
             break
 
+        # Determine agent type for this iteration
+        agent_type = orchestrator.get_next_agent()
+        agent_model = model_config.get_model(agent_type)
+        agent_desc = get_agent_description(agent_type)
+
         # Print session header
         print_session_header(iteration, is_first_run)
+        model_short = agent_model.split("-20")[0] if "-20" in agent_model else agent_model
+        print(f"  Agent: {agent_desc}")
+        print(f"  Model: {model_short}")
+        print()
 
         # Snapshot running processes before the session starts
         # so we can identify what was spawned during the session
         cleanup_manager.snapshot_processes()
 
-        # Create client (fresh context)
-        client = create_client(project_dir, model, yolo_mode=yolo_mode)
+        # Create client with the model for this agent type
+        client = create_client(project_dir, agent_model, yolo_mode=yolo_mode)
 
-        # Choose prompt based on session type
-        # Pass project_dir to enable project-specific prompts
-        if is_first_run:
+        # Choose prompt based on agent type
+        if agent_type == AgentType.ARCHITECT:
+            prompt = get_architect_prompt(project_dir)
+        elif agent_type == AgentType.INITIALIZER:
             prompt = get_initializer_prompt(project_dir)
             is_first_run = False  # Only use initializer once
+        elif agent_type == AgentType.REVIEWER:
+            prompt = get_reviewer_prompt(project_dir)
+        elif agent_type == AgentType.TESTING:
+            prompt = get_testing_prompt(project_dir)
         else:
-            # Use YOLO prompt if in YOLO mode
-            if yolo_mode:
+            # Coding agent - check YOLO mode variants
+            if yolo_review:
+                prompt = get_coding_prompt_yolo_review(project_dir)
+            elif yolo_mode:
                 prompt = get_coding_prompt_yolo(project_dir)
             else:
                 prompt = get_coding_prompt(project_dir)
@@ -201,6 +245,9 @@ async def run_autonomous_agent(
         # Run session with async context manager
         async with client:
             status, response = await run_agent_session(client, prompt, project_dir)
+
+        # Record session for orchestrator tracking
+        orchestrator.record_session(agent_type)
 
         # Clean up resources between sessions (browsers, dev servers, temp files)
         # This catches anything the agent didn't close on its own

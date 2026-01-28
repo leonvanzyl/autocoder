@@ -33,15 +33,22 @@ cat claude-progress.txt
 
 # 5. Check recent git history
 git log --oneline -20
+
+# 6. Ensure you're on the feature branch (not main/master)
+git branch --show-current
+# If on main or master, switch to the development branch:
+git checkout feature/autocoder-dev 2>/dev/null || git checkout -b feature/autocoder-dev
 ```
+
+**IMPORTANT:** Always work on the `feature/autocoder-dev` branch, never commit directly to main/master.
 
 Then use MCP tools to check feature status:
 
 ```
-# 6. Get progress statistics (passing/total counts)
+# 7. Get progress statistics (passing/total counts)
 Use the feature_get_stats tool
 
-# 7. Get the next feature to work on
+# 8. Get the next feature to work on
 Use the feature_get_next tool
 ```
 

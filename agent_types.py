@@ -13,7 +13,7 @@ Agent Types:
 - testing: Runs tests and verifies functionality
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import Optional
@@ -31,6 +31,87 @@ class AgentType(Enum):
     CODING = "coding"
     REVIEWER = "reviewer"
     TESTING = "testing"
+
+
+# Default model IDs for each agent type
+# Opus for planning-intensive work, Sonnet for implementation, Haiku for lightweight tasks
+DEFAULT_AGENT_MODELS = {
+    AgentType.ARCHITECT: "claude-opus-4-5-20251101",
+    AgentType.INITIALIZER: "claude-opus-4-5-20251101",
+    AgentType.CODING: "claude-sonnet-4-5-20250929",
+    AgentType.REVIEWER: "claude-sonnet-4-5-20250929",
+    AgentType.TESTING: "claude-3-5-haiku-20241022",
+}
+
+
+@dataclass
+class ModelConfig:
+    """
+    Per-agent-type model configuration.
+
+    Allows different Claude models for different agent roles to optimize
+    cost and performance. Expensive models (Opus) for planning, cheaper
+    models (Haiku) for testing/regression.
+    """
+
+    architect_model: str = "claude-opus-4-5-20251101"
+    initializer_model: str = "claude-opus-4-5-20251101"
+    coding_model: str = "claude-sonnet-4-5-20250929"
+    reviewer_model: str = "claude-sonnet-4-5-20250929"
+    testing_model: str = "claude-3-5-haiku-20241022"
+
+    def get_model(self, agent_type: AgentType) -> str:
+        """Get the model ID for a given agent type."""
+        model_map = {
+            AgentType.ARCHITECT: self.architect_model,
+            AgentType.INITIALIZER: self.initializer_model,
+            AgentType.CODING: self.coding_model,
+            AgentType.REVIEWER: self.reviewer_model,
+            AgentType.TESTING: self.testing_model,
+        }
+        return model_map[agent_type]
+
+    def to_dict(self) -> dict[str, str]:
+        """Serialize to dictionary for API transport."""
+        return {
+            "architect": self.architect_model,
+            "initializer": self.initializer_model,
+            "coding": self.coding_model,
+            "reviewer": self.reviewer_model,
+            "testing": self.testing_model,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, str]) -> "ModelConfig":
+        """Create from dictionary."""
+        return cls(
+            architect_model=data.get("architect", cls.architect_model),
+            initializer_model=data.get("initializer", cls.initializer_model),
+            coding_model=data.get("coding", cls.coding_model),
+            reviewer_model=data.get("reviewer", cls.reviewer_model),
+            testing_model=data.get("testing", cls.testing_model),
+        )
+
+    @classmethod
+    def from_single_model(cls, model: str) -> "ModelConfig":
+        """Create config using the same model for all agent types."""
+        return cls(
+            architect_model=model,
+            initializer_model=model,
+            coding_model=model,
+            reviewer_model=model,
+            testing_model=model,
+        )
+
+    def describe(self) -> str:
+        """Human-readable description of model assignments."""
+        lines = []
+        for agent_type in AgentType:
+            model = self.get_model(agent_type)
+            # Extract short name from model ID
+            short = model.split("-20")[0] if "-20" in model else model
+            lines.append(f"  {agent_type.value:12s} → {short}")
+        return "\n".join(lines)
 
 
 @dataclass

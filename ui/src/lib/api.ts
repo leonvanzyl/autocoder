@@ -16,6 +16,8 @@ import type {
   PathValidationResponse,
   AssistantConversation,
   AssistantConversationDetail,
+  GitStatusResponse,
+  ModelConfig,
 } from './types'
 
 const API_BASE = '/api'
@@ -121,11 +123,19 @@ export async function getAgentStatus(projectName: string): Promise<AgentStatusRe
 
 export async function startAgent(
   projectName: string,
-  yoloMode: boolean = false
+  options: {
+    yoloMode?: boolean
+    yoloReview?: boolean
+    modelConfig?: ModelConfig
+  } = {}
 ): Promise<AgentActionResponse> {
   return fetchJSON(`/projects/${encodeURIComponent(projectName)}/agent/start`, {
     method: 'POST',
-    body: JSON.stringify({ yolo_mode: yoloMode }),
+    body: JSON.stringify({
+      yolo_mode: options.yoloMode ?? false,
+      yolo_review: options.yoloReview ?? false,
+      model_config: options.modelConfig ?? null,
+    }),
   })
 }
 
@@ -145,6 +155,10 @@ export async function resumeAgent(projectName: string): Promise<AgentActionRespo
   return fetchJSON(`/projects/${encodeURIComponent(projectName)}/agent/resume`, {
     method: 'POST',
   })
+}
+
+export async function getGitStatus(projectName: string): Promise<GitStatusResponse> {
+  return fetchJSON(`/projects/${encodeURIComponent(projectName)}/agent/git`)
 }
 
 // ============================================================================

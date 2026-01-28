@@ -4,8 +4,8 @@ Autonomous Coding Agent Demo
 ============================
 
 A minimal harness demonstrating long-running autonomous coding with Claude.
-This script implements the two-agent pattern (initializer + coding agent) and
-incorporates all the strategies from the long-running agents guide.
+This script implements the multi-agent pattern (architect → initializer → coding →
+reviewer → testing) with per-agent-type model configuration for cost optimization.
 
 Example Usage:
     # Using absolute path directly
@@ -19,6 +19,12 @@ Example Usage:
 
     # YOLO mode: rapid prototyping without browser testing
     python autonomous_agent_demo.py --project-dir my-app --yolo
+
+    # Use different models per agent type (cost optimization)
+    python autonomous_agent_demo.py --project-dir my-app \\
+        --architect-model claude-opus-4-5-20251101 \\
+        --coding-model claude-sonnet-4-5-20250929 \\
+        --testing-model claude-3-5-haiku-20241022
 """
 
 import argparse
@@ -32,11 +38,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from agent import run_autonomous_agent
+from agent_types import ModelConfig
 from registry import get_project_path
-
-# Configuration
-DEFAULT_MODEL = "claude-sonnet-4-5-20250929"
-# DEFAULT_MODEL = "claude-opus-4-5-20251101"
 
 
 def parse_args() -> argparse.Namespace:
@@ -52,14 +55,24 @@ Examples:
   # Use registered project name (looked up from registry)
   python autonomous_agent_demo.py --project-dir my-app
 
-  # Use a specific model
+  # Use a single model for all agent types
   python autonomous_agent_demo.py --project-dir my-app --model claude-sonnet-4-5-20250929
+
+  # Use different models per agent type (cost optimization)
+  python autonomous_agent_demo.py --project-dir my-app \\
+    --architect-model claude-opus-4-5-20251101 \\
+    --coding-model claude-sonnet-4-5-20250929 \\
+    --reviewer-model claude-sonnet-4-5-20250929 \\
+    --testing-model claude-3-5-haiku-20241022
 
   # Limit iterations for testing
   python autonomous_agent_demo.py --project-dir my-app --max-iterations 5
 
   # YOLO mode: rapid prototyping without browser testing
   python autonomous_agent_demo.py --project-dir my-app --yolo
+
+  # YOLO+Review mode: rapid prototyping with periodic code reviews
+  python autonomous_agent_demo.py --project-dir my-app --yolo-review
 
 Authentication:
   Uses Claude CLI credentials from ~/.claude/.credentials.json
@@ -81,21 +94,89 @@ Authentication:
         help="Maximum number of agent iterations (default: unlimited)",
     )
 
+    # Model configuration
     parser.add_argument(
         "--model",
         type=str,
-        default=DEFAULT_MODEL,
-        help=f"Claude model to use (default: {DEFAULT_MODEL})",
+        default=None,
+        help="Single Claude model for ALL agent types (overrides per-type defaults)",
+    )
+    parser.add_argument(
+        "--architect-model",
+        type=str,
+        default=None,
+        help="Model for architect agent (default: claude-opus-4-5-20251101)",
+    )
+    parser.add_argument(
+        "--initializer-model",
+        type=str,
+        default=None,
+        help="Model for initializer agent (default: claude-opus-4-5-20251101)",
+    )
+    parser.add_argument(
+        "--coding-model",
+        type=str,
+        default=None,
+        help="Model for coding agent (default: claude-sonnet-4-5-20250929)",
+    )
+    parser.add_argument(
+        "--reviewer-model",
+        type=str,
+        default=None,
+        help="Model for reviewer agent (default: claude-sonnet-4-5-20250929)",
+    )
+    parser.add_argument(
+        "--testing-model",
+        type=str,
+        default=None,
+        help="Model for testing agent (default: claude-3-5-haiku-20241022)",
     )
 
+    # YOLO modes
     parser.add_argument(
         "--yolo",
         action="store_true",
         default=False,
         help="Enable YOLO mode: rapid prototyping without browser testing",
     )
+    parser.add_argument(
+        "--yolo-review",
+        action="store_true",
+        default=False,
+        help="Enable YOLO+Review mode: rapid prototyping with periodic code reviews",
+    )
 
     return parser.parse_args()
+
+
+def build_model_config(args: argparse.Namespace) -> ModelConfig:
+    """Build a ModelConfig from CLI arguments.
+
+    Priority:
+    1. Per-agent-type flags (--architect-model, etc.)
+    2. Single --model flag (applies to all types)
+    3. Default per-type config (opus for planning, sonnet for coding, haiku for testing)
+    """
+    if args.model:
+        # Start from single model for all types
+        config = ModelConfig.from_single_model(args.model)
+    else:
+        # Start from defaults (different per type)
+        config = ModelConfig()
+
+    # Apply per-type overrides
+    if args.architect_model:
+        config.architect_model = args.architect_model
+    if args.initializer_model:
+        config.initializer_model = args.initializer_model
+    if args.coding_model:
+        config.coding_model = args.coding_model
+    if args.reviewer_model:
+        config.reviewer_model = args.reviewer_model
+    if args.testing_model:
+        config.testing_model = args.testing_model
+
+    return config
 
 
 def main() -> None:
@@ -126,14 +207,18 @@ def main() -> None:
             print("Use an absolute path or register the project first.")
             return
 
+    # Build model configuration from CLI args
+    model_config = build_model_config(args)
+
     try:
         # Run the agent (MCP server handles feature database)
         asyncio.run(
             run_autonomous_agent(
                 project_dir=project_dir,
-                model=args.model,
+                model_config=model_config,
                 max_iterations=args.max_iterations,
-                yolo_mode=args.yolo,
+                yolo_mode=args.yolo or args.yolo_review,
+                yolo_review=args.yolo_review,
             )
         )
     except KeyboardInterrupt:

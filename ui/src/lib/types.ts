@@ -178,6 +178,15 @@ export interface FeatureCreate {
   priority?: number
 }
 
+// Model configuration types
+export interface ModelConfig {
+  architect: string
+  initializer: string
+  coding: string
+  reviewer: string
+  testing: string
+}
+
 // Agent types
 export type AgentStatus = 'stopped' | 'running' | 'paused' | 'crashed'
 
@@ -186,6 +195,19 @@ export interface AgentStatusResponse {
   pid: number | null
   started_at: string | null
   yolo_mode: boolean
+  model_config: ModelConfig | null
+}
+
+// Git status types
+export interface GitStatusResponse {
+  has_git: boolean
+  branch: string | null
+  last_commit_hash: string | null
+  last_commit_message: string | null
+  last_commit_time: string | null
+  is_dirty: boolean
+  uncommitted_count: number
+  total_commits: number
 }
 
 export interface AgentActionResponse {

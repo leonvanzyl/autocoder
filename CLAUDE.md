@@ -62,7 +62,32 @@ python autonomous_agent_demo.py --project-dir my-app  # if registered
 
 # YOLO mode: rapid prototyping without browser testing
 python autonomous_agent_demo.py --project-dir my-app --yolo
+
+# Multi-model: use different models per agent type (cost optimization)
+python autonomous_agent_demo.py --project-dir my-app \
+  --architect-model claude-opus-4-5-20251101 \
+  --coding-model claude-sonnet-4-5-20250929 \
+  --reviewer-model claude-sonnet-4-5-20250929 \
+  --testing-model claude-3-5-haiku-20241022
+
+# Or use a single model for all agent types
+python autonomous_agent_demo.py --project-dir my-app --model claude-sonnet-4-5-20250929
 ```
+
+### Multi-Model Agent Support
+
+Different agent types can use different Claude models to optimize cost:
+
+| Agent Type | Default Model | Purpose |
+|------------|---------------|---------|
+| Architect | claude-opus-4-5 | System design (needs deep reasoning) |
+| Initializer | claude-opus-4-5 | Spec analysis, feature creation |
+| Coding | claude-sonnet-4-5 | Implementation (good balance) |
+| Reviewer | claude-sonnet-4-5 | Code review |
+| Testing | claude-3-5-haiku | Test execution (cheapest) |
+
+Override per agent type with CLI flags (`--architect-model`, `--coding-model`, etc.)
+or set a single model for all with `--model`.
 
 ### YOLO Modes (Rapid Prototyping)
 
@@ -122,7 +147,7 @@ npm run lint     # Run ESLint
 
 ### Multi-Agent Modules
 
-- `agent_types.py` - Agent type enum, selection logic, and orchestration
+- `agent_types.py` - Agent type enum, selection logic, orchestration, and ModelConfig
 - `shared_context.py` - Inter-agent communication (messages, decisions, findings)
 - `yolo_modes.py` - YOLO mode configurations and feature flags
 - `usage_tracking.py` - API usage monitoring with daily/monthly budgets
@@ -302,6 +327,21 @@ The UI receives updates via WebSocket (`/ws/projects/{project_name}`):
 - `agent_status` - Running/paused/stopped/crashed
 - `log` - Agent output lines (streamed from subprocess stdout)
 - `feature_update` - Feature status changes
+
+### Git Branching Workflow
+
+Agents automatically use feature branches for version control:
+
+- **Initializer** creates `feature/autocoder-dev` branch after `git init`
+- **Coding agents** check out `feature/autocoder-dev` at session start
+- The `main` branch stays clean and only receives merged code
+- The UI displays real-time git status (branch, last commit, dirty state)
+
+**API endpoint:** `GET /api/projects/{name}/agent/git` returns:
+- Current branch name
+- Last commit hash, message, and time
+- Whether there are uncommitted changes
+- Total commit count
 
 ### Design System
 
