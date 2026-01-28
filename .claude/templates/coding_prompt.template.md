@@ -156,6 +156,9 @@ Use browser automation tools:
 - [ ] Deleted the test data - verified it's gone everywhere
 - [ ] NO unexplained data appeared (would indicate mock data)
 - [ ] Dashboard/counts reflect real numbers after my changes
+- [ ] **Ran extended mock data grep (STEP 5.6) - no hits in src/ (excluding tests)**
+- [ ] **Verified no globalThis, devStore, or dev-store patterns**
+- [ ] **Server restart test passed (STEP 5.7) - data persists across restart**
 
 #### Navigation Verification
 
@@ -174,10 +177,92 @@ Use browser automation tools:
 
 ### STEP 5.6: MOCK DATA DETECTION (Before marking passing)
 
-1. **Search code:** `grep -r "mockData\|fakeData\|TODO\|STUB" --include="*.ts" --include="*.tsx"`
-2. **Runtime test:** Create unique data (e.g., "TEST_12345") → verify in UI → delete → verify gone
-3. **Check database:** All displayed data must come from real DB queries
-4. If unexplained data appears, it's mock data - fix before marking passing.
+**Run ALL these grep checks. Any hits in src/ (excluding test files) require investigation:**
+
+```bash
+# Common exclusions for test files
+EXCLUDE="--exclude=*.test.* --exclude=*.spec.* --exclude=*__test__* --exclude=*__mocks__*"
+
+# 1. In-memory storage patterns (CRITICAL - catches dev-store)
+grep -r "globalThis\." --include="*.ts" --include="*.tsx" --include="*.js" $EXCLUDE src/
+grep -r "dev-store\|devStore\|DevStore\|mock-db\|mockDb" --include="*.ts" --include="*.tsx" --include="*.js" $EXCLUDE src/
+
+# 2. Mock data variables
+grep -r "mockData\|fakeData\|sampleData\|dummyData\|testData" --include="*.ts" --include="*.tsx" --include="*.js" $EXCLUDE src/
+
+# 3. TODO/incomplete markers
+grep -r "TODO.*real\|TODO.*database\|TODO.*API\|STUB\|MOCK" --include="*.ts" --include="*.tsx" --include="*.js" $EXCLUDE src/
+
+# 4. Development-only conditionals
+grep -r "isDevelopment\|isDev\|process\.env\.NODE_ENV.*development" --include="*.ts" --include="*.tsx" --include="*.js" $EXCLUDE src/
+
+# 5. In-memory collections as data stores
+grep -r "new Map\(\)\|new Set\(\)" --include="*.ts" --include="*.tsx" --include="*.js" $EXCLUDE src/ 2>/dev/null
+```
+
+**Rule:** If ANY grep returns results in production code → investigate → FIX before marking passing.
+
+**Runtime verification:**
+1. Create unique data (e.g., "TEST_12345") → verify in UI → delete → verify gone
+2. Check database directly - all displayed data must come from real DB queries
+3. If unexplained data appears, it's mock data - fix before marking passing.
+
+### STEP 5.7: SERVER RESTART PERSISTENCE TEST (MANDATORY for data features)
+
+**When required:** Any feature involving CRUD operations or data persistence.
+
+**This test is NON-NEGOTIABLE. It catches in-memory storage implementations that pass all other tests.**
+
+**Steps:**
+
+1. Create unique test data via UI or API (e.g., item named "RESTART_TEST_12345")
+2. Verify data appears in UI and API response
+
+3. **STOP the server completely:**
+   ```bash
+   # Kill by port (safer - only kills the dev server, not VS Code/Claude Code/etc.)
+   # Unix/macOS:
+   lsof -ti :${PORT:-3000} | xargs kill -TERM 2>/dev/null || true
+   sleep 3
+   lsof -ti :${PORT:-3000} | xargs kill -9 2>/dev/null || true
+   sleep 2
+
+   # Windows alternative (use if lsof not available):
+   # netstat -ano | findstr :${PORT:-3000} | findstr LISTENING
+   # taskkill /F /PID <pid_from_above> 2>nul
+
+   # Verify server is stopped
+   if lsof -ti :${PORT:-3000} > /dev/null 2>&1; then
+     echo "ERROR: Server still running on port ${PORT:-3000}!"
+     exit 1
+   fi
+   ```
+
+4. **RESTART the server:**
+   ```bash
+   ./init.sh &
+   sleep 15  # Allow server to fully start
+   # Verify server is responding
+   if ! curl -f http://localhost:${PORT:-3000}/api/health && ! curl -f http://localhost:${PORT:-3000}; then
+     echo "ERROR: Server failed to start after restart"
+     exit 1
+   fi
+   ```
+
+5. **Query for test data - it MUST still exist**
+   - Via UI: Navigate to data location, verify data appears
+   - Via API: `curl http://localhost:${PORT:-3000}/api/items` - verify data in response
+
+6. **If data is GONE:** Implementation uses in-memory storage → CRITICAL FAIL
+   - Run all grep commands from STEP 5.6 to identify the mock pattern
+   - You MUST fix the in-memory storage implementation before proceeding
+   - Replace in-memory storage with real database queries
+
+7. **Clean up test data** after successful verification
+
+**Why this test exists:** In-memory stores like `globalThis.devStore` pass all other tests because data persists during a single server run. Only a full server restart reveals this bug. Skipping this step WILL allow dev-store implementations to slip through.
+
+**YOLO Mode Note:** Even in YOLO mode, this verification is MANDATORY for data features. Use curl instead of browser automation.
 
 ### STEP 6: UPDATE FEATURE STATUS (CAREFULLY!)
 
