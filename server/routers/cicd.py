@@ -163,6 +163,9 @@ async def preview_workflow(request: PreviewRequest):
     if not project_dir:
         raise HTTPException(status_code=404, detail="Project not found")
 
+    if not project_dir.exists():
+        raise HTTPException(status_code=404, detail="Project directory not found")
+
     if request.workflow_type not in ["ci", "security", "deploy"]:
         raise HTTPException(
             status_code=400,
@@ -253,4 +256,5 @@ async def get_workflow_content(project_name: str, filename: str):
             "content": content,
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error reading workflow: {str(e)}")
+        logger.exception(f"Error reading workflow {filename}: {e}")
+        raise HTTPException(status_code=500, detail="Error reading workflow")
