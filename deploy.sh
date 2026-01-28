@@ -171,14 +171,21 @@ ensure_packages() {
   apt-get install -y ca-certificates curl git gnupg
 
   install -m 0755 -d /etc/apt/keyrings
+  local docker_repo_changed=0
   if [[ ! -f /etc/apt/keyrings/docker.gpg ]]; then
     curl -fsSL "https://download.docker.com/linux/${DOCKER_DIST}/gpg" \
       | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
     chmod a+r /etc/apt/keyrings/docker.gpg
+    docker_repo_changed=1
+  fi
+  if [[ ! -f /etc/apt/sources.list.d/docker.list ]]; then
     echo \
       "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/${DOCKER_DIST} \
       $(. /etc/os-release && echo "${VERSION_CODENAME}") stable" \
       > /etc/apt/sources.list.d/docker.list
+    docker_repo_changed=1
+  fi
+  if [[ "${docker_repo_changed}" -eq 1 ]]; then
     apt-get update -y
   fi
 
