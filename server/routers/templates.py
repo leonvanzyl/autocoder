@@ -249,8 +249,12 @@ async def apply_template(request: ApplyRequest):
         if not template:
             raise HTTPException(status_code=404, detail=f"Template not found: {request.template_id}")
 
+        # Validate project_dir to prevent path traversal
+        if ".." in request.project_dir:
+            raise HTTPException(status_code=400, detail="Invalid project directory: path traversal not allowed")
+
         # Create project directory
-        project_dir = Path(request.project_dir)
+        project_dir = Path(request.project_dir).resolve()
         prompts_dir = project_dir / "prompts"
         prompts_dir.mkdir(parents=True, exist_ok=True)
 

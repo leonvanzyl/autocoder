@@ -148,6 +148,12 @@ async def run_code_review(request: RunReviewRequest):
     """
     project_dir = get_project_dir(request.project_name)
 
+    # Validate file paths to prevent directory traversal
+    if request.files:
+        for file_path in request.files:
+            if ".." in file_path or file_path.startswith("/") or file_path.startswith("\\"):
+                raise HTTPException(status_code=400, detail=f"Invalid file path: {file_path}")
+
     # Configure checks
     check_config = request.checks or {}
 
@@ -263,6 +269,7 @@ async def create_features_from_issues(request: CreateFeaturesRequest):
         raise HTTPException(status_code=404, detail="Project database not found")
 
     created_features = []
+    session = None
 
     try:
         session = get_session(db_path)
@@ -296,7 +303,6 @@ async def create_features_from_issues(request: CreateFeaturesRequest):
             )
 
         session.commit()
-        session.close()
 
         return CreateFeaturesResponse(
             created=len(created_features),
@@ -306,6 +312,9 @@ async def create_features_from_issues(request: CreateFeaturesRequest):
     except Exception as e:
         logger.error(f"Failed to create features: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if session:
+            session.close()
 
 
 @router.delete("/reports/{project_name}/{filename}")

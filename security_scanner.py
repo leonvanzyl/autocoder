@@ -471,9 +471,22 @@ class SecurityScanner:
         # Try pip-audit first
         pip_audit_path = shutil.which("pip-audit")
         if pip_audit_path:
+            # Determine which file to audit
+            req_file = self.project_dir / "requirements.txt"
+            pyproject_file = self.project_dir / "pyproject.toml"
+            
+            if req_file.exists():
+                audit_args = ["pip-audit", "--format", "json", "-r", "requirements.txt"]
+            elif pyproject_file.exists():
+                # pip-audit can scan pyproject.toml directly without -r flag
+                audit_args = ["pip-audit", "--format", "json"]
+            else:
+                # No dependency file found, skip
+                return
+
             try:
                 proc = subprocess.run(
-                    ["pip-audit", "--format", "json", "-r", "requirements.txt"],
+                    audit_args,
                     cwd=self.project_dir,
                     capture_output=True,
                     text=True,

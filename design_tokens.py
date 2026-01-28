@@ -546,7 +546,7 @@ module.exports = {config_json}
             output_dir: Output directory (default: project root styles/)
 
         Returns:
-            Dict with paths to generated files
+            Dict with paths to generated files as strings
         """
         tokens = self.load()
         output = output_dir or self.project_dir / "src" / "styles"

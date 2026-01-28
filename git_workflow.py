@@ -514,8 +514,8 @@ def get_workflow(project_dir: Path) -> GitWorkflow:
         branch_prefix = git_config.get("branch_prefix", "feature/")
         main_branch = git_config.get("main_branch", "main")
         auto_merge = git_config.get("auto_merge", False)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"Could not load git_workflow config, using defaults: {e}")
 
     return GitWorkflow(
         project_dir,

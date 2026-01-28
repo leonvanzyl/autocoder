@@ -395,7 +395,7 @@ def generate_security_workflow(project_dir: Path) -> GitHubWorkflow:
             "name": "Initialize CodeQL",
             "uses": "github/codeql-action/init@v3",
             "with": {
-                "languages": ", ".join(
+                "languages": list(
                     filter(None, [
                         "javascript" if stack["has_node"] else None,
                         "python" if stack["has_python"] else None,
