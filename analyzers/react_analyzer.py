@@ -337,7 +337,7 @@ class ReactAnalyzer(BaseAnalyzer):
     def _parse_api_route(self, api_file: Path, api_dir: Path) -> list[EndpointInfo]:
         """Parse a Pages Router API route file."""
         rel_path = api_file.relative_to(api_dir)
-        route_path = "/api/" + str(rel_path.with_suffix(""))
+        route_path = "/api/" + rel_path.with_suffix("").as_posix()
         route_path = route_path.replace("/index", "")
         route_path = re.sub(r"\[([^\]]+)\]", r":\1", route_path)
 
