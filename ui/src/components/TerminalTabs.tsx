@@ -96,7 +96,8 @@ export function TerminalTabs({
   // Handle key events during editing
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      if (e.key === 'Enter') {
+      // Skip if composing (e.g., Japanese IME input)
+      if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
         e.preventDefault()
         submitEdit()
       } else if (e.key === 'Escape') {

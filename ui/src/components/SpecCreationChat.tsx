@@ -127,7 +127,8 @@ export function SpecCreationChat({
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    // Skip if composing (e.g., Japanese IME input)
+    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault()
       handleSendMessage()
     }

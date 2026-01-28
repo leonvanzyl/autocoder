@@ -331,7 +331,7 @@ function App() {
       {/* Main Content */}
       <main
         className="max-w-7xl mx-auto px-4 py-8"
-        style={{ paddingBottom: debugOpen ? debugPanelHeight + 32 : undefined }}
+        style={{ paddingBottom: debugOpen ? debugPanelHeight + 32 : 48 }}
       >
         {!selectedProject ? (
           <div className="text-center mt-12">

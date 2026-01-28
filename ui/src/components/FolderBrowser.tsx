@@ -269,7 +269,8 @@ export function FolderBrowser({ onSelect, onCancel, initialPath }: FolderBrowser
                     className="flex-1"
                     autoFocus
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter') handleCreateFolder()
+                      // Skip if composing (e.g., Japanese IME input)
+                      if (e.key === 'Enter' && !e.nativeEvent.isComposing) handleCreateFolder()
                       if (e.key === 'Escape') {
                         setIsCreatingFolder(false)
                         setNewFolderName('')
