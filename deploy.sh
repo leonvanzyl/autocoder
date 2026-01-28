@@ -155,10 +155,12 @@ ensure_packages() {
   fi
 
   # Determine Docker distribution
-  if [[ "$OS_ID" == "debian" || "$OS_LIKE" == *"debian"* ]]; then
+  if [[ "$OS_ID" == "ubuntu" || "$OS_LIKE" == *"ubuntu"* ]]; then
+    DOCKER_DIST="ubuntu"
+  elif [[ "$OS_ID" == "debian" || "$OS_LIKE" == *"debian"* ]]; then
     DOCKER_DIST="debian"
   else
-    DOCKER_DIST="ubuntu"
+    DOCKER_DIST="$OS_ID"
   fi
 
   apt-get update -y
