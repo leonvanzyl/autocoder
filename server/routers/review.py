@@ -322,12 +322,12 @@ async def delete_report(project_name: str, filename: str):
     """
     Delete a specific review report.
     """
-    project_dir = get_project_dir(project_name)
-    report_path = project_dir / ".autocoder" / "review-reports" / filename
-
-    # Validate filename to prevent path traversal
+    # Validate filename to prevent path traversal before using it in path construction
     if ".." in filename or "/" in filename or "\\" in filename:
         raise HTTPException(status_code=400, detail="Invalid filename")
+    
+    project_dir = get_project_dir(project_name)
+    report_path = project_dir / ".autocoder" / "review-reports" / filename
 
     if not report_path.exists():
         raise HTTPException(status_code=404, detail=f"Report not found: {filename}")

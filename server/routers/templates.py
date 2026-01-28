@@ -12,6 +12,7 @@ Endpoints:
 """
 
 import logging
+import sys
 from pathlib import Path
 from typing import Optional
 
@@ -19,6 +20,12 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
+
+# Setup sys.path for imports
+# Compute project root and ensure it's in sys.path
+project_root = Path(__file__).parent.parent.parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
 
 router = APIRouter(prefix="/api/templates", tags=["templates"])
 
@@ -130,9 +137,7 @@ async def list_templates():
     Returns basic information about each template.
     """
     try:
-        from templates import list_templates as get_templates
-
-        templates = get_templates()
+        templates = list_templates()
 
         return TemplateListResponse(
             templates=[
@@ -151,7 +156,7 @@ async def list_templates():
 
     except Exception as e:
         logger.exception(f"Error listing templates: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to list templates: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to list templates")
 
 
 @router.get("/{template_id}", response_model=TemplateDetail)
@@ -160,9 +165,7 @@ async def get_template(template_id: str):
     Get detailed information about a specific template.
     """
     try:
-        from templates import get_template as load_template
-
-        template = load_template(template_id)
+        template = get_template(template_id)
 
         if not template:
             raise HTTPException(status_code=404, detail=f"Template not found: {template_id}")
@@ -195,7 +198,7 @@ async def get_template(template_id: str):
         raise
     except Exception as e:
         logger.exception(f"Error getting template: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get template: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to get template")
 
 
 @router.post("/preview", response_model=PreviewResponse)
@@ -206,8 +209,6 @@ async def preview_template(request: PreviewRequest):
     Does not create any files - just returns the content.
     """
     try:
-        from templates import generate_app_spec, generate_features, get_template
-
         template = get_template(request.template_id)
         if not template:
             raise HTTPException(status_code=404, detail=f"Template not found: {request.template_id}")
@@ -231,7 +232,7 @@ async def preview_template(request: PreviewRequest):
         raise
     except Exception as e:
         logger.exception(f"Error previewing template: {e}")
-        raise HTTPException(status_code=500, detail=f"Preview failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Preview failed")
 
 
 @router.post("/apply", response_model=ApplyResponse)
@@ -243,8 +244,6 @@ async def apply_template(request: ApplyRequest):
     Does NOT register the project or create features - use the projects API for that.
     """
     try:
-        from templates import generate_app_spec, generate_features, get_template
-
         template = get_template(request.template_id)
         if not template:
             raise HTTPException(status_code=404, detail=f"Template not found: {request.template_id}")
@@ -281,7 +280,7 @@ async def apply_template(request: ApplyRequest):
         )
 
         app_spec_path = prompts_dir / "app_spec.txt"
-        with open(app_spec_path, "w") as f:
+        with open(app_spec_path, "w", encoding="utf-8") as f:
             f.write(app_spec_content)
 
         features = generate_features(template)
@@ -299,7 +298,7 @@ async def apply_template(request: ApplyRequest):
         raise
     except Exception as e:
         logger.exception(f"Error applying template: {e}")
-        raise HTTPException(status_code=500, detail=f"Apply failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Apply failed")
 
 
 @router.get("/{template_id}/features")
@@ -310,8 +309,6 @@ async def get_template_features(template_id: str):
     Returns features in bulk_create format.
     """
     try:
-        from templates import generate_features, get_template
-
         template = get_template(template_id)
         if not template:
             raise HTTPException(status_code=404, detail=f"Template not found: {template_id}")
@@ -332,4 +329,4 @@ async def get_template_features(template_id: str):
         raise
     except Exception as e:
         logger.exception(f"Error getting template features: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get features: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to get features")

@@ -173,8 +173,13 @@ class SpecChatSession:
         # Build environment overrides for API configuration
         sdk_env = {var: os.getenv(var) for var in API_ENV_VARS if os.getenv(var)}
 
-        # Set default max output tokens for GLM 4.7 compatibility if not already set
-        if "CLAUDE_CODE_MAX_OUTPUT_TOKENS" not in sdk_env:
+        # Detect alternative API mode (Ollama or GLM)
+        base_url = sdk_env.get("ANTHROPIC_BASE_URL", "")
+        is_alternative_api = bool(base_url)
+        is_ollama = "localhost:11434" in base_url or "127.0.0.1:11434" in base_url
+
+        # Set default max output tokens for GLM 4.7 compatibility if not already set, but only for alternative APIs
+        if is_alternative_api and "CLAUDE_CODE_MAX_OUTPUT_TOKENS" not in sdk_env:
             sdk_env["CLAUDE_CODE_MAX_OUTPUT_TOKENS"] = DEFAULT_MAX_OUTPUT_TOKENS
 
         # Determine model from environment or use default

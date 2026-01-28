@@ -164,8 +164,6 @@ async def query_logs(
             level=level,
             agent_id=agent_id,
             feature_id=feature_id,
-            tool_name=tool_name,
-            search=search,
             since=since,
         )
 

@@ -13,6 +13,8 @@ Supports:
 """
 
 import json
+import os
+import platform
 import shutil
 import subprocess
 from datetime import datetime, timezone
@@ -79,13 +81,25 @@ def _detect_js_linter(project_dir: Path) -> tuple[str, list[str]] | None:
     Returns:
         (name, command) tuple, or None if no linter detected
     """
-    # Check for ESLint
-    if (project_dir / "node_modules/.bin/eslint").exists():
-        return ("eslint", ["node_modules/.bin/eslint", ".", "--max-warnings=0"])
+    # Check for ESLint using shutil.which for Windows shim support
+    eslint_path = shutil.which("eslint")
+    if eslint_path:
+        return ("eslint", [eslint_path, ".", "--max-warnings=0"])
+    
+    # Check for eslint in node_modules/.bin (fallback for non-global installs)
+    node_eslint = project_dir / "node_modules/.bin/eslint"
+    if node_eslint.exists():
+        return ("eslint", [str(node_eslint), ".", "--max-warnings=0"])
 
-    # Check for Biome
-    if (project_dir / "node_modules/.bin/biome").exists():
-        return ("biome", ["node_modules/.bin/biome", "lint", "."])
+    # Check for Biome using shutil.which for Windows shim support
+    biome_path = shutil.which("biome")
+    if biome_path:
+        return ("biome", [biome_path, "lint", "."])
+    
+    # Check for biome in node_modules/.bin (fallback for non-global installs)
+    node_biome = project_dir / "node_modules/.bin/biome"
+    if node_biome.exists():
+        return ("biome", [str(node_biome), "lint", "."])
 
     # Check for package.json lint script
     package_json = project_dir / "package.json"
@@ -108,22 +122,33 @@ def _detect_python_linter(project_dir: Path) -> tuple[str, list[str]] | None:
     Returns:
         (name, command) tuple, or None if no linter detected
     """
-    # Check for ruff
-    if shutil.which("ruff"):
-        return ("ruff", ["ruff", "check", "."])
+    # Check for ruff using shutil.which
+    ruff_path = shutil.which("ruff")
+    if ruff_path:
+        return ("ruff", [ruff_path, "check", "."])
 
-    # Check for flake8
-    if shutil.which("flake8"):
-        return ("flake8", ["flake8", "."])
+    # Check for flake8 using shutil.which
+    flake8_path = shutil.which("flake8")
+    if flake8_path:
+        return ("flake8", [flake8_path, "."])
 
-    # Check in virtual environment
-    venv_ruff = project_dir / "venv/bin/ruff"
-    if venv_ruff.exists():
-        return ("ruff", [str(venv_ruff), "check", "."])
+    # Check in virtual environment for both Unix and Windows paths
+    venv_paths = [
+        project_dir / "venv/bin/ruff",
+        project_dir / "venv/Scripts/ruff.exe",
+        project_dir / "venv/bin/flake8",
+        project_dir / "venv/Scripts/flake8.exe"
+    ]
+    
+    # Check for ruff in venv
+    for venv_ruff in venv_paths:
+        if venv_ruff.exists():
+            return ("ruff", [str(venv_ruff), "check", "."])
 
-    venv_flake8 = project_dir / "venv/bin/flake8"
-    if venv_flake8.exists():
-        return ("flake8", [str(venv_flake8), "."])
+    # Check for flake8 in venv  
+    for venv_flake8 in venv_paths:
+        if venv_flake8.exists():
+            return ("flake8", [str(venv_flake8), "."])
 
     return None
 
@@ -286,8 +311,40 @@ def run_custom_script(
     except OSError:
         pass
 
+    # Determine the appropriate command and runner based on platform and script extension
+    script_str = str(script_full_path)
+    script_ext = script_full_path.suffix.lower()
+    
+    # Platform detection
+    is_windows = os.name == "nt" or platform.system() == "Windows"
+    
+    if is_windows:
+        # Windows: check script extension and use appropriate runner
+        if script_ext == ".ps1":
+            command = ["powershell.exe", "-File", script_str]
+        elif script_ext in [".bat", ".cmd"]:
+            command = ["cmd", "/c", script_str]
+        else:
+            # For .sh files on Windows, try bash first, then sh
+            if shutil.which("bash"):
+                command = ["bash", script_str]
+            elif shutil.which("sh"):
+                command = ["sh", script_str]
+            else:
+                # Fall back to cmd for unknown extensions
+                command = ["cmd", "/c", script_str]
+    else:
+        # Unix-like: prefer bash, fall back to sh
+        if shutil.which("bash"):
+            command = ["bash", script_str]
+        elif shutil.which("sh"):
+            command = ["sh", script_str]
+        else:
+            # Last resort: try to execute directly
+            command = [script_str]
+    
     exit_code, output, duration_ms = _run_command(
-        ["bash", str(script_full_path)],
+        command,
         project_dir,
         timeout=300,  # 5 minutes for custom scripts
     )

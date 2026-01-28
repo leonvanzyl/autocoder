@@ -12,6 +12,7 @@ Endpoints:
 """
 
 import logging
+import os
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
@@ -91,13 +92,47 @@ def get_project_dir(project_name: str) -> Path:
     """Get project directory from name or path."""
     project_path = get_project_path(project_name)
     if project_path:
-        return Path(project_path)
+        # Validate that registered project path is within allowed boundaries
+        resolved_path = Path(project_path).resolve()
+        _validate_project_path(resolved_path)
+        return resolved_path
 
     path = Path(project_name)
     if path.exists() and path.is_dir():
-        return path
+        # Resolve and validate the arbitrary path
+        resolved_path = path.resolve()
+        _validate_project_path(resolved_path)
+        return resolved_path
 
     raise HTTPException(status_code=404, detail=f"Project not found: {project_name}")
+
+
+def _validate_project_path(path: Path) -> None:
+    """Validate that a project path is within allowed boundaries.
+    
+    Args:
+        path: The resolved project path to validate
+        
+    Raises:
+        HTTPException: If the path is outside allowed boundaries
+    """
+    # Use current working directory as the allowed projects root
+    # This prevents directory traversal attacks
+    allowed_root = Path.cwd().resolve()
+    
+    try:
+        # Check if the path is within the allowed root directory
+        if not path.is_relative_to(allowed_root):
+            raise HTTPException(
+                status_code=403, 
+                detail=f"Access denied: Project path '{path}' is outside allowed directory boundary"
+            )
+    except ValueError:
+        # Handle case where path comparison fails
+        raise HTTPException(
+            status_code=403, 
+            detail=f"Access denied: Project path '{path}' is outside allowed directory boundary"
+        )
 
 
 # ============================================================================
@@ -199,21 +234,27 @@ async def get_doc_content(project_name: str, filename: str):
         filename: Documentation file path (e.g., "README.md" or "docs/API.md")
     """
     project_dir = get_project_dir(project_name)
+    
+    # Resolve both paths to handle symlinks and get absolute paths
+    resolved_project_dir = project_dir.resolve()
+    resolved_file_path = (project_dir / filename).resolve()
 
-    # Validate filename to prevent path traversal
-    if ".." in filename:
-        raise HTTPException(status_code=400, detail="Invalid filename")
+    # Validate that the resolved file path is within the resolved project directory
+    try:
+        if os.path.commonpath([resolved_project_dir]) != os.path.commonpath([resolved_project_dir, resolved_file_path]):
+            raise HTTPException(status_code=400, detail="Invalid filename: path outside project directory")
+    except (ValueError, TypeError):
+        # Handle case where path comparison fails
+        raise HTTPException(status_code=400, detail="Invalid filename: path outside project directory")
 
-    file_path = project_dir / filename
-
-    if not file_path.exists():
+    if not resolved_file_path.exists():
         raise HTTPException(status_code=404, detail=f"File not found: {filename}")
 
-    if not file_path.suffix.lower() == ".md":
+    if not resolved_file_path.suffix.lower() == ".md":
         raise HTTPException(status_code=400, detail="Only Markdown files are supported")
 
     try:
-        content = file_path.read_text()
+        content = resolved_file_path.read_text()
         return {"filename": filename, "content": content}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error reading file: {e}")
@@ -280,21 +321,27 @@ async def delete_doc(project_name: str, filename: str):
         filename: Documentation file path
     """
     project_dir = get_project_dir(project_name)
+    
+    # Resolve both paths to handle symlinks and get absolute paths
+    resolved_project_dir = project_dir.resolve()
+    resolved_file_path = (project_dir / filename).resolve()
 
-    # Validate filename
-    if ".." in filename:
-        raise HTTPException(status_code=400, detail="Invalid filename")
+    # Validate that the resolved file path is within the resolved project directory
+    try:
+        if os.path.commonpath([resolved_project_dir]) != os.path.commonpath([resolved_project_dir, resolved_file_path]):
+            raise HTTPException(status_code=400, detail="Invalid filename: path outside project directory")
+    except (ValueError, TypeError):
+        # Handle case where path comparison fails
+        raise HTTPException(status_code=400, detail="Invalid filename: path outside project directory")
 
-    file_path = project_dir / filename
-
-    if not file_path.exists():
+    if not resolved_file_path.exists():
         raise HTTPException(status_code=404, detail=f"File not found: {filename}")
 
-    if not file_path.suffix.lower() == ".md":
+    if not resolved_file_path.suffix.lower() == ".md":
         raise HTTPException(status_code=400, detail="Only Markdown files can be deleted")
 
     try:
-        file_path.unlink()
+        resolved_file_path.unlink()
         return {"deleted": True, "filename": filename}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error deleting file: {e}")

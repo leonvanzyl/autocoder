@@ -99,10 +99,16 @@ def get_denied_commands(limit: int = 50) -> list[dict[str, Any]]:
         # Convert to list and reverse for most-recent-first
         commands = list(_denied_commands)[-limit:]
         commands.reverse()
+        
+        def redact_string(s: str, max_preview: int = 20) -> str:
+            if len(s) <= max_preview * 2:
+                return s
+            return f"{s[:max_preview]}...{s[-max_preview:]}"
+        
         return [
             {
                 "timestamp": cmd.timestamp,
-                "command": cmd.command,
+                "command": redact_string(cmd.command),
                 "reason": cmd.reason,
                 "project_dir": cmd.project_dir,
             }

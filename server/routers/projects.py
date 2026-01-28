@@ -756,6 +756,10 @@ async def delete_knowledge_file(name: str, filename: str):
     name = validate_project_name(name)
     project_dir = get_project_path(name)
 
+    # Check if project exists before proceeding
+    if project_dir is None or not project_dir.exists():
+        raise HTTPException(status_code=404, detail="Project not found")
+
     # CVE-2026-24486: python-multipart >=0.0.22 strips directory components from filenames
     # Defense-in-depth: Ensure filename contains no path separators
     if not re.match(r'^[a-zA-Z0-9_\-\.]+\.md$', filename):

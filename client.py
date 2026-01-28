@@ -305,14 +305,14 @@ def create_client(
         if value:
             sdk_env[var] = value
 
-    # Set default max output tokens for GLM 4.7 compatibility if not already set
-    if "CLAUDE_CODE_MAX_OUTPUT_TOKENS" not in sdk_env:
-        sdk_env["CLAUDE_CODE_MAX_OUTPUT_TOKENS"] = DEFAULT_MAX_OUTPUT_TOKENS
-
     # Detect alternative API mode (Ollama or GLM)
     base_url = sdk_env.get("ANTHROPIC_BASE_URL", "")
     is_alternative_api = bool(base_url)
     is_ollama = "localhost:11434" in base_url or "127.0.0.1:11434" in base_url
+
+    # Set default max output tokens for GLM 4.7 compatibility if not already set, but only for alternative APIs
+    if is_alternative_api and "CLAUDE_CODE_MAX_OUTPUT_TOKENS" not in sdk_env:
+        sdk_env["CLAUDE_CODE_MAX_OUTPUT_TOKENS"] = DEFAULT_MAX_OUTPUT_TOKENS
 
     if sdk_env:
         print(f"   - API overrides: {', '.join(sdk_env.keys())}")
@@ -357,7 +357,7 @@ def create_client(
             logger.info("Manual compaction requested")
 
         if custom_instructions:
-            logger.info(f"Compaction custom instructions: {custom_instructions}")
+            logger.info(f"Custom instructions provided for compaction, length={len(custom_instructions)} chars")
 
         # Return empty dict to allow compaction to proceed with default behavior
         # To customize, return:

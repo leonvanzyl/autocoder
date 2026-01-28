@@ -1208,21 +1208,27 @@ class ParallelOrchestrator:
 
         This prevents stale cache issues when the orchestrator restarts.
         """
-        if self._engine is not None:
-            try:
-                debug_log.log("CLEANUP", "Forcing WAL checkpoint before dispose")
-                with self._engine.connect() as conn:
-                    conn.execute(text("PRAGMA wal_checkpoint(FULL)"))
-                    conn.commit()
-                debug_log.log("CLEANUP", "WAL checkpoint completed, disposing engine")
-            except Exception as e:
-                debug_log.log("CLEANUP", f"WAL checkpoint failed (non-fatal): {e}")
+        if self._engine is None:
+            return  # Already cleaned up, idempotent safe
+        
+        # Capture engine and clear reference immediately to make cleanup idempotent
+        engine = self._engine
+        self._engine = None
+        
+        try:
+            debug_log.log("CLEANUP", "Forcing WAL checkpoint before dispose")
+            with engine.connect() as conn:
+                conn.execute(text("PRAGMA wal_checkpoint(FULL)"))
+                conn.commit()
+            debug_log.log("CLEANUP", "WAL checkpoint completed, disposing engine")
+        except Exception as e:
+            debug_log.log("CLEANUP", f"WAL checkpoint failed (non-fatal): {e}")
 
-            try:
-                self._engine.dispose()
-                debug_log.log("CLEANUP", "Engine disposed successfully")
-            except Exception as e:
-                debug_log.log("CLEANUP", f"Engine dispose failed: {e}")
+        try:
+            engine.dispose()
+            debug_log.log("CLEANUP", "Engine disposed successfully")
+        except Exception as e:
+            debug_log.log("CLEANUP", f"Engine dispose failed: {e}")
 
 
 async def run_parallel_orchestrator(
@@ -1253,6 +1259,7 @@ async def run_parallel_orchestrator(
     # Clear any stuck features from previous interrupted sessions
     # This is the RIGHT place to clear - BEFORE spawning any agents
     # Agents will NO LONGER clear features on their individual startups (see agent.py fix)
+    session = None
     try:
         session = orchestrator.get_session()
         cleared_count = 0
@@ -1268,13 +1275,19 @@ async def run_parallel_orchestrator(
             cleared_count += 1
 
         session.commit()
-        session.close()
-
         if cleared_count > 0:
             print(f"[ORCHESTRATOR] Cleared {cleared_count} stuck features from previous session", flush=True)
 
     except Exception as e:
         print(f"[ORCHESTRATOR] Warning: Failed to clear stuck features: {e}", flush=True)
+    finally:
+        # Ensure session is always closed if it was created
+        if session is not None:
+            try:
+                session.close()
+            except Exception as close_error:
+                # Log close error but don't let it mask the original error
+                print(f"[ORCHESTRATOR] Warning: Failed to close session: {close_error}", flush=True)
 
     # Set up cleanup to run on exit (handles normal exit, exceptions, signals)
     def cleanup_handler():

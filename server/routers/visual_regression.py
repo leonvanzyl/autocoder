@@ -151,7 +151,15 @@ def get_project_dir(project_name: str) -> Path:
     if project_path:
         return Path(project_path)
 
+    # Security: Check if raw path is blocked before using it
+    from .filesystem import is_path_blocked
     path = Path(project_name)
+    if is_path_blocked(path):
+        raise HTTPException(
+            status_code=403,
+            detail="Access to this path is forbidden"
+        )
+    
     if path.exists() and path.is_dir():
         return path
 

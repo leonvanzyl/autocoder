@@ -326,6 +326,10 @@ class GitWorkflow:
         current_branch = self._get_current_branch()
 
         try:
+            # Ensure we're on the feature branch
+            if current_branch != branch_name:
+                self._run_git("checkout", branch_name)
+
             # Commit any remaining changes
             if self._has_uncommitted_changes():
                 self._run_git("add", "-A")
@@ -386,7 +390,13 @@ class GitWorkflow:
                 message=f"No branch found for feature {feature_id}",
             )
 
+        current_branch = self._get_current_branch()
+
         try:
+            # Ensure we're on the feature branch before discarding changes
+            if current_branch != branch_name:
+                self._run_git("checkout", branch_name)
+
             # Discard uncommitted changes
             self._run_git("checkout", "--", ".", check=False)
             self._run_git("clean", "-fd", check=False)
@@ -409,6 +419,9 @@ class GitWorkflow:
             )
 
         except subprocess.CalledProcessError as e:
+            # Restore original branch on failure
+            if current_branch:
+                self._run_git("checkout", current_branch, check=False)
             return WorkflowResult(
                 success=False,
                 message=f"Abort failed: {e.stderr}",

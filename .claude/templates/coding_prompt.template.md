@@ -455,7 +455,10 @@ feature_mark_failing with feature_id={id}
 # 6. Skip a feature (moves to end of queue) - ONLY when blocked by external dependency
 feature_skip with feature_id={id}
 
-# 7. Clear in-progress status (when abandoning a feature)
+# 7. Get feature summary (lightweight status check)
+feature_get_summary with feature_id={id}
+
+# 8. Clear in-progress status (when abandoning a feature)
 feature_clear_in_progress with feature_id={id}
 ```
 
