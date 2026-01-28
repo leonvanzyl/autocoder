@@ -86,6 +86,23 @@ export async function deleteProject(name: string): Promise<void> {
   })
 }
 
+export async function resetProject(name: string, fullReset: boolean = false): Promise<{
+  success: boolean
+  message: string
+  deleted_files: string[]
+  full_reset: boolean
+}> {
+  return fetchJSON(`/projects/${encodeURIComponent(name)}/reset?full_reset=${fullReset}`, {
+    method: 'POST',
+  })
+}
+
+export async function openProjectInIDE(name: string, ide: string): Promise<{ status: string; message: string }> {
+  return fetchJSON(`/projects/${encodeURIComponent(name)}/open-in-ide?ide=${encodeURIComponent(ide)}`, {
+    method: 'POST',
+  })
+}
+
 export async function getProjectPrompts(name: string): Promise<ProjectPrompts> {
   return fetchJSON(`/projects/${encodeURIComponent(name)}/prompts`)
 }
@@ -497,4 +514,55 @@ export async function deleteSchedule(
 
 export async function getNextScheduledRun(projectName: string): Promise<NextRunResponse> {
   return fetchJSON(`/projects/${encodeURIComponent(projectName)}/schedules/next`)
+}
+
+// ============================================================================
+// Knowledge Files API
+// ============================================================================
+
+export interface KnowledgeFile {
+  name: string
+  size: number
+  modified: string
+}
+
+export interface KnowledgeFileList {
+  files: KnowledgeFile[]
+  count: number
+}
+
+export interface KnowledgeFileContent {
+  name: string
+  content: string
+}
+
+export async function listKnowledgeFiles(projectName: string): Promise<KnowledgeFileList> {
+  return fetchJSON(`/projects/${encodeURIComponent(projectName)}/knowledge`)
+}
+
+export async function getKnowledgeFile(
+  projectName: string,
+  filename: string
+): Promise<KnowledgeFileContent> {
+  return fetchJSON(`/projects/${encodeURIComponent(projectName)}/knowledge/${encodeURIComponent(filename)}`)
+}
+
+export async function uploadKnowledgeFile(
+  projectName: string,
+  filename: string,
+  content: string
+): Promise<KnowledgeFileContent> {
+  return fetchJSON(`/projects/${encodeURIComponent(projectName)}/knowledge`, {
+    method: 'POST',
+    body: JSON.stringify({ filename, content }),
+  })
+}
+
+export async function deleteKnowledgeFile(
+  projectName: string,
+  filename: string
+): Promise<void> {
+  await fetchJSON(`/projects/${encodeURIComponent(projectName)}/knowledge/${encodeURIComponent(filename)}`, {
+    method: 'DELETE',
+  })
 }

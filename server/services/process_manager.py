@@ -226,6 +226,67 @@ class AgentProcessManager:
         """Remove lock file."""
         self.lock_file.unlink(missing_ok=True)
 
+    def _ensure_lock_removed(self) -> None:
+        """
+        Ensure lock file is removed, with verification.
+
+        This is a more robust version of _remove_lock that:
+        1. Verifies the lock file content matches our process
+        2. Removes the lock even if it's stale
+        3. Handles edge cases like zombie processes
+
+        Should be called from multiple cleanup points to ensure
+        the lock is removed even if the primary cleanup path fails.
+        """
+        if not self.lock_file.exists():
+            return
+
+        try:
+            # Read lock file to verify it's ours
+            lock_content = self.lock_file.read_text().strip()
+
+            # Check if we own this lock
+            our_pid = self.pid
+            if our_pid is None:
+                # We don't have a running process, but lock exists
+                # This is unexpected - remove it anyway
+                self.lock_file.unlink(missing_ok=True)
+                logger.debug("Removed orphaned lock file (no running process)")
+                return
+
+            # Parse lock content
+            if ":" in lock_content:
+                lock_pid_str, _ = lock_content.split(":", 1)
+                lock_pid = int(lock_pid_str)
+            else:
+                lock_pid = int(lock_content)
+
+            # If lock PID matches our process, remove it
+            if lock_pid == our_pid:
+                self.lock_file.unlink(missing_ok=True)
+                logger.debug(f"Removed lock file for our process (PID {our_pid})")
+            else:
+                # Lock belongs to different process - only remove if that process is dead
+                if not psutil.pid_exists(lock_pid):
+                    self.lock_file.unlink(missing_ok=True)
+                    logger.debug(f"Removed stale lock file (PID {lock_pid} no longer exists)")
+                else:
+                    try:
+                        proc = psutil.Process(lock_pid)
+                        cmdline = " ".join(proc.cmdline())
+                        if "autonomous_agent_demo.py" not in cmdline:
+                            # Process exists but it's not our agent
+                            self.lock_file.unlink(missing_ok=True)
+                            logger.debug(f"Removed stale lock file (PID {lock_pid} is not an agent)")
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        # Process gone or inaccessible - safe to remove
+                        self.lock_file.unlink(missing_ok=True)
+
+        except (ValueError, OSError) as e:
+            # Invalid lock file - remove it
+            logger.warning(f"Removing invalid lock file: {e}")
+            self.lock_file.unlink(missing_ok=True)
+
     async def _broadcast_output(self, line: str) -> None:
         """Broadcast output line to all registered callbacks."""
         with self._callbacks_lock:
@@ -350,13 +411,23 @@ class AgentProcessManager:
             # Start subprocess with piped stdout/stderr
             # Use project_dir as cwd so Claude SDK sandbox allows access to project files
             # IMPORTANT: Set PYTHONUNBUFFERED to ensure output isn't delayed
-            self.process = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                cwd=str(self.project_dir),
-                env={**os.environ, "PYTHONUNBUFFERED": "1"},
-            )
+            # stdin=DEVNULL prevents blocking if Claude CLI or child process tries to read stdin
+
+            # On Windows, use CREATE_NEW_PROCESS_GROUP for better process tree management
+            # This allows taskkill /T to reliably kill all child processes
+            popen_kwargs = {
+                "stdin": subprocess.DEVNULL,
+                "stdout": subprocess.PIPE,
+                "stderr": subprocess.STDOUT,
+                "cwd": str(self.project_dir),
+                "env": {**os.environ, "PYTHONUNBUFFERED": "1"},
+            }
+            if sys.platform == "win32":
+                # CREATE_NEW_PROCESS_GROUP enables reliable process tree termination
+                # CREATE_NO_WINDOW could be added but conflicts with process group
+                popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+
+            self.process = subprocess.Popen(cmd, **popen_kwargs)
 
             # Atomic lock creation - if it fails, another process beat us
             if not self._create_lock():
@@ -390,6 +461,8 @@ class AgentProcessManager:
             Tuple of (success, message)
         """
         if not self.process or self.status == "stopped":
+            # Even if we think we're stopped, ensure lock is cleaned up
+            self._ensure_lock_removed()
             return False, "Agent is not running"
 
         try:
@@ -412,7 +485,8 @@ class AgentProcessManager:
                 result.children_terminated, result.children_killed
             )
 
-            self._remove_lock()
+            # Use robust lock removal to handle edge cases
+            self._ensure_lock_removed()
             self.status = "stopped"
             self.process = None
             self.started_at = None
@@ -425,6 +499,8 @@ class AgentProcessManager:
             return True, "Agent stopped"
         except Exception as e:
             logger.exception("Failed to stop agent")
+            # Still try to clean up lock file even on error
+            self._ensure_lock_removed()
             return False, f"Failed to stop agent: {e}"
 
     async def pause(self) -> tuple[bool, str]:
@@ -444,7 +520,7 @@ class AgentProcessManager:
             return True, "Agent paused"
         except psutil.NoSuchProcess:
             self.status = "crashed"
-            self._remove_lock()
+            self._ensure_lock_removed()
             return False, "Agent process no longer exists"
         except Exception as e:
             logger.exception("Failed to pause agent")
@@ -467,7 +543,7 @@ class AgentProcessManager:
             return True, "Agent resumed"
         except psutil.NoSuchProcess:
             self.status = "crashed"
-            self._remove_lock()
+            self._ensure_lock_removed()
             return False, "Agent process no longer exists"
         except Exception as e:
             logger.exception("Failed to resume agent")
@@ -478,11 +554,16 @@ class AgentProcessManager:
         Check if the agent process is still alive.
 
         Updates status to 'crashed' if process has died unexpectedly.
+        Uses robust lock removal to handle zombie processes.
 
         Returns:
             True if healthy, False otherwise
         """
         if not self.process:
+            # No process but we might have a stale lock
+            if self.status == "stopped":
+                # Ensure lock is cleaned up for consistency
+                self._ensure_lock_removed()
             return self.status == "stopped"
 
         poll = self.process.poll()
@@ -490,7 +571,8 @@ class AgentProcessManager:
             # Process has terminated
             if self.status in ("running", "paused"):
                 self.status = "crashed"
-                self._remove_lock()
+                # Use robust lock removal to handle edge cases
+                self._ensure_lock_removed()
             return False
 
         return True

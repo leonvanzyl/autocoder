@@ -7,6 +7,7 @@ Provides REST API, WebSocket, and static file serving.
 """
 
 import asyncio
+import base64
 import os
 import shutil
 import sys
@@ -24,8 +25,12 @@ load_dotenv()
 
 from fastapi import FastAPI, HTTPException, Request, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+from slowapi.util import get_remote_address
 
 from .routers import (
     agent_router,
@@ -50,17 +55,25 @@ from .services.expand_chat_session import cleanup_all_expand_sessions
 from .services.process_manager import cleanup_all_managers, cleanup_orphaned_locks
 from .services.scheduler_service import cleanup_scheduler, get_scheduler
 from .services.terminal_manager import cleanup_all_terminals
+from .utils.process_utils import cleanup_orphaned_agent_processes
 from .websocket import project_websocket
 
 # Paths
 ROOT_DIR = Path(__file__).parent.parent
 UI_DIST_DIR = ROOT_DIR / "ui" / "dist"
 
+# Rate limiting configuration
+# Using in-memory storage (appropriate for single-instance development server)
+limiter = Limiter(key_func=get_remote_address, default_limits=["200/minute"])
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager for startup and shutdown."""
-    # Startup - clean up orphaned lock files from previous runs
+    # Startup - clean up orphaned processes from previous runs (Windows)
+    cleanup_orphaned_agent_processes()
+
+    # Clean up orphaned lock files from previous runs
     cleanup_orphaned_locks()
     cleanup_orphaned_devserver_locks()
 
@@ -87,6 +100,11 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+# Add rate limiter state and exception handler
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
 
 # Check if remote access is enabled via environment variable
 # Set by start_ui.py when --host is not 127.0.0.1
@@ -119,6 +137,56 @@ else:
 # ============================================================================
 # Security Middleware
 # ============================================================================
+
+# Import auth utilities
+from .utils.auth import is_basic_auth_enabled, verify_basic_auth
+
+if is_basic_auth_enabled():
+    @app.middleware("http")
+    async def basic_auth_middleware(request: Request, call_next):
+        """
+        HTTP Basic Auth middleware.
+
+        Enabled when both BASIC_AUTH_USERNAME and BASIC_AUTH_PASSWORD
+        environment variables are set.
+
+        For WebSocket endpoints, auth is checked in the WebSocket handler.
+        """
+        # Skip auth for WebSocket upgrade requests (handled separately)
+        if request.headers.get("upgrade", "").lower() == "websocket":
+            return await call_next(request)
+
+        # Check Authorization header
+        auth_header = request.headers.get("Authorization")
+        if not auth_header or not auth_header.startswith("Basic "):
+            return Response(
+                status_code=401,
+                content="Authentication required",
+                headers={"WWW-Authenticate": 'Basic realm="Autocoder"'},
+            )
+
+        try:
+            # Decode credentials
+            encoded_credentials = auth_header[6:]  # Remove "Basic "
+            decoded = base64.b64decode(encoded_credentials).decode("utf-8")
+            username, password = decoded.split(":", 1)
+
+            # Verify using constant-time comparison
+            if not verify_basic_auth(username, password):
+                return Response(
+                    status_code=401,
+                    content="Invalid credentials",
+                    headers={"WWW-Authenticate": 'Basic realm="Autocoder"'},
+                )
+        except (ValueError, UnicodeDecodeError):
+            return Response(
+                status_code=401,
+                content="Invalid authorization header",
+                headers={"WWW-Authenticate": 'Basic realm="Autocoder"'},
+            )
+
+        return await call_next(request)
+
 
 if not ALLOW_REMOTE:
     @app.middleware("http")

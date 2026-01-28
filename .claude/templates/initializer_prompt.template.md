@@ -9,6 +9,20 @@ Start by reading `app_spec.txt` in your working directory. This file contains
 the complete specification for what you need to build. Read it carefully
 before proceeding.
 
+### SECOND: Check for Knowledge Files
+
+Check if a `knowledge/` directory exists. If it does, read all `.md` files inside.
+These contain additional project context, requirements documents, research notes,
+or reference materials that provide important context for the project.
+
+```bash
+# Check for knowledge files
+ls -la knowledge/ 2>/dev/null || echo "No knowledge directory"
+
+# Read all knowledge files if they exist
+for f in knowledge/*.md; do [ -f "$f" ] && echo "=== $f ===" && cat "$f"; done 2>/dev/null
+```
+
 ---
 
 ## REQUIRED FEATURE COUNT
@@ -28,6 +42,41 @@ which is the single source of truth for what needs to be built.
 
 Use the feature_create_bulk tool to add all features at once. You can create features in batches if there are many (e.g., 50 at a time).
 
+```
+Use the feature_create_bulk tool with features=[
+  {
+    "category": "functional",
+    "name": "Brief feature name",
+    "description": "Brief description of the feature and what this test verifies",
+    "steps": [
+      "Step 1: Navigate to relevant page",
+      "Step 2: Perform action",
+      "Step 3: Verify expected result"
+    ]
+  },
+  {
+    "category": "style",
+    "name": "Brief feature name",
+    "description": "Brief description of UI/UX requirement",
+    "steps": [
+      "Step 1: Navigate to page",
+      "Step 2: Take screenshot",
+      "Step 3: Verify visual requirements"
+    ]
+  },
+  {
+    "category": "refactoring",
+    "name": "Brief refactoring task name",
+    "description": "Description of code improvement or restructuring needed",
+    "steps": [
+      "Step 1: Review existing code",
+      "Step 2: Implement refactoring changes",
+      "Step 3: Verify code compiles and tests pass"
+    ]
+  }
+]
+```
+
 **Notes:**
 - IDs and priorities are assigned automatically based on order
 - All features start with `passes: false` by default
@@ -36,10 +85,10 @@ Use the feature_create_bulk tool to add all features at once. You can create fea
 
 - Feature count must match the `feature_count` specified in app_spec.txt
 - Reference tiers for other projects:
-  - **Simple apps**: ~150 tests
-  - **Medium apps**: ~250 tests
-  - **Complex apps**: ~400+ tests
-- Both "functional" and "style" categories
+  - **Simple apps**: ~165 tests (includes 5 infrastructure)
+  - **Medium apps**: ~265 tests (includes 5 infrastructure)
+  - **Complex apps**: ~405+ tests (includes 5 infrastructure)
+- Categories: "functional", "style", and "refactoring"
 - Mix of narrow tests (2-5 steps) and comprehensive tests (10+ steps)
 - At least 25 tests MUST have 10+ steps each (more for complex apps)
 - Order features by priority: fundamental features first (the API assigns priority based on order)
@@ -60,8 +109,9 @@ Dependencies enable **parallel execution** of independent features. When specifi
 2. **Can only depend on EARLIER features** (index must be less than current position)
 3. **No circular dependencies** allowed
 4. **Maximum 20 dependencies** per feature
-5. **Foundation features (index 0-9)** should have NO dependencies
-6. **60% of features after index 10** should have at least one dependency
+5. **Infrastructure features (indices 0-4)** have NO dependencies - they run FIRST
+6. **ALL features after index 4** MUST depend on `[0, 1, 2, 3, 4]` (infrastructure)
+7. **60% of features after index 10** should have additional dependencies beyond infrastructure
 
 ### Dependency Types
 
@@ -82,30 +132,113 @@ Create WIDE dependency graphs, not linear chains:
 
 ```json
 [
-  // FOUNDATION TIER (indices 0-2, no dependencies) - run first
-  { "name": "App loads without errors", "category": "functional" },
-  { "name": "Navigation bar displays", "category": "style" },
-  { "name": "Homepage renders correctly", "category": "functional" },
+  // INFRASTRUCTURE TIER (indices 0-4, no dependencies) - MUST run first
+  { "name": "Database connection established", "category": "functional" },
+  { "name": "Database schema applied correctly", "category": "functional" },
+  { "name": "Data persists across server restart", "category": "functional" },
+  { "name": "No mock data patterns in codebase", "category": "functional" },
+  { "name": "Backend API queries real database", "category": "functional" },
 
-  // AUTH TIER (indices 3-5, depend on foundation) - run in parallel
-  { "name": "User can register", "depends_on_indices": [0] },
-  { "name": "User can login", "depends_on_indices": [0, 3] },
-  { "name": "User can logout", "depends_on_indices": [4] },
+  // FOUNDATION TIER (indices 5-7, depend on infrastructure)
+  { "name": "App loads without errors", "category": "functional", "depends_on_indices": [0, 1, 2, 3, 4] },
+  { "name": "Navigation bar displays", "category": "style", "depends_on_indices": [0, 1, 2, 3, 4] },
+  { "name": "Homepage renders correctly", "category": "functional", "depends_on_indices": [0, 1, 2, 3, 4] },
 
-  // CORE CRUD TIER (indices 6-9) - WIDE GRAPH: all 4 depend on login
-  // All 4 start as soon as login passes!
-  { "name": "User can create todo", "depends_on_indices": [4] },
-  { "name": "User can view todos", "depends_on_indices": [4] },
-  { "name": "User can edit todo", "depends_on_indices": [4, 6] },
-  { "name": "User can delete todo", "depends_on_indices": [4, 6] },
+  // AUTH TIER (indices 8-10, depend on foundation + infrastructure)
+  { "name": "User can register", "depends_on_indices": [0, 1, 2, 3, 4, 5] },
+  { "name": "User can login", "depends_on_indices": [0, 1, 2, 3, 4, 5, 8] },
+  { "name": "User can logout", "depends_on_indices": [0, 1, 2, 3, 4, 9] },
 
-  // ADVANCED TIER (indices 10-11) - both depend on view, not each other
-  { "name": "User can filter todos", "depends_on_indices": [7] },
-  { "name": "User can search todos", "depends_on_indices": [7] }
+  // CORE CRUD TIER (indices 11-14) - WIDE GRAPH: all 4 depend on login
+  { "name": "User can create todo", "depends_on_indices": [0, 1, 2, 3, 4, 9] },
+  { "name": "User can view todos", "depends_on_indices": [0, 1, 2, 3, 4, 9] },
+  { "name": "User can edit todo", "depends_on_indices": [0, 1, 2, 3, 4, 9, 11] },
+  { "name": "User can delete todo", "depends_on_indices": [0, 1, 2, 3, 4, 9, 11] },
+
+  // ADVANCED TIER (indices 15-16) - both depend on view, not each other
+  { "name": "User can filter todos", "depends_on_indices": [0, 1, 2, 3, 4, 12] },
+  { "name": "User can search todos", "depends_on_indices": [0, 1, 2, 3, 4, 12] }
 ]
 ```
 
-**Result:** With 3 parallel agents, this 12-feature project completes in ~5-6 cycles instead of 12 sequential cycles.
+**Result:** With 3 parallel agents, this project completes efficiently with proper database validation first.
+
+---
+
+## MANDATORY INFRASTRUCTURE FEATURES (Indices 0-4)
+
+**CRITICAL:** Create these FIRST, before any functional features. These features ensure the application uses a real database, not mock data or in-memory storage.
+
+| Index | Name | Test Steps |
+|-------|------|------------|
+| 0 | Database connection established | Start server → check logs for DB connection → health endpoint returns DB status |
+| 1 | Database schema applied correctly | Connect to DB directly → list tables → verify schema matches spec |
+| 2 | Data persists across server restart | Create via API → STOP server completely → START server → query API → data still exists |
+| 3 | No mock data patterns in codebase | Run grep for prohibited patterns → must return empty |
+| 4 | Backend API queries real database | Check server logs → SQL/DB queries appear for API calls |
+
+**ALL other features MUST depend on indices [0, 1, 2, 3, 4].**
+
+### Infrastructure Feature Descriptions
+
+**Feature 0 - Database connection established:**
+```text
+Steps:
+1. Start the development server
+2. Check server logs for database connection message
+3. Call health endpoint (e.g., GET /api/health)
+4. Verify response includes database status: connected
+```
+
+**Feature 1 - Database schema applied correctly:**
+```text
+Steps:
+1. Connect to database directly (sqlite3, psql, etc.)
+2. List all tables in the database
+3. Verify tables match what's defined in app_spec.txt
+4. Verify key columns exist on each table
+```
+
+**Feature 2 - Data persists across server restart (CRITICAL):**
+```text
+Steps:
+1. Create unique test data via API (e.g., POST /api/items with name "RESTART_TEST_12345")
+2. Verify data appears in API response (GET /api/items)
+3. STOP the server completely (kill by port to avoid killing unrelated Node processes):
+   - Unix/macOS: lsof -ti :$PORT | xargs kill -9 2>/dev/null || true && sleep 5
+   - Windows: FOR /F "tokens=5" %a IN ('netstat -aon ^| find ":$PORT"') DO taskkill /F /PID %a 2>nul
+   - Note: Replace $PORT with actual port (e.g., 3000)
+4. Verify server is stopped: lsof -ti :$PORT returns nothing (or netstat on Windows)
+5. RESTART the server: ./init.sh & sleep 15
+6. Query API again: GET /api/items
+7. Verify "RESTART_TEST_12345" still exists
+8. If data is GONE → CRITICAL FAILURE (in-memory storage detected)
+9. Clean up test data
+```
+
+**Feature 3 - No mock data patterns in codebase:**
+```text
+Steps:
+1. Run: grep -r "globalThis\." --include="*.ts" --include="*.tsx" --include="*.js" src/
+2. Run: grep -r "dev-store\|devStore\|DevStore\|mock-db\|mockDb" --include="*.ts" --include="*.tsx" --include="*.js" src/
+3. Run: grep -r "mockData\|testData\|fakeData\|sampleData\|dummyData" --include="*.ts" --include="*.tsx" --include="*.js" src/
+4. Run: grep -r "TODO.*real\|TODO.*database\|TODO.*API\|STUB\|MOCK" --include="*.ts" --include="*.tsx" --include="*.js" src/
+5. Run: grep -r "isDevelopment\|isDev\|process\.env\.NODE_ENV.*development" --include="*.ts" --include="*.tsx" --include="*.js" src/
+6. Run: grep -r "new Map\(\)\|new Set\(\)" --include="*.ts" --include="*.tsx" --include="*.js" src/ 2>/dev/null
+7. Run: grep -E "json-server|miragejs|msw" package.json
+8. ALL grep commands must return empty (exit code 1)
+9. If any returns results → investigate and fix before passing
+```
+
+**Feature 4 - Backend API queries real database:**
+```text
+Steps:
+1. Start server with verbose logging
+2. Make API call (e.g., GET /api/items)
+3. Check server logs
+4. Verify SQL query appears (SELECT, INSERT, etc.) or ORM query log
+5. If no DB queries in logs → implementation is using mock data
+```
 
 ---
 
@@ -117,6 +250,7 @@ The feature_list.json **MUST** include tests from ALL 20 categories. Minimum cou
 
 | Category                         | Simple  | Medium  | Complex  |
 | -------------------------------- | ------- | ------- | -------- |
+| **0. Infrastructure (REQUIRED)** | 5       | 5       | 5        |
 | A. Security & Access Control     | 5       | 20      | 40       |
 | B. Navigation Integrity          | 15      | 25      | 40       |
 | C. Real Data Verification        | 20      | 30      | 50       |
@@ -137,11 +271,13 @@ The feature_list.json **MUST** include tests from ALL 20 categories. Minimum cou
 | R. Concurrency & Race Conditions | 5       | 8       | 15       |
 | S. Export/Import                 | 5       | 6       | 10       |
 | T. Performance                   | 5       | 5       | 10       |
-| **TOTAL**                        | **150** | **250** | **400+** |
+| **TOTAL**                        | **165** | **265** | **405+** |
 
 ---
 
 ### Category Descriptions
+
+**0. Infrastructure (REQUIRED - Priority 0)** - Database connectivity, schema existence, data persistence across server restart, absence of mock patterns. These features MUST pass before any functional features can begin. All tiers require exactly 5 infrastructure features (indices 0-4).
 
 **A. Security & Access Control** - Test unauthorized access blocking, permission enforcement, session management, role-based access, and data isolation between users.
 
@@ -204,6 +340,16 @@ The feature_list.json must include tests that **actively verify real data** and 
 - `// TODO: replace with real API`
 - `setTimeout` simulating API delays with static data
 - Static returns instead of database queries
+
+**Additional prohibited patterns (in-memory stores):**
+
+- `globalThis.` (in-memory storage pattern)
+- `dev-store`, `devStore`, `DevStore` (development stores)
+- `json-server`, `mirage`, `msw` (mock backends)
+- `Map()` or `Set()` used as primary data store
+- Environment checks like `if (process.env.NODE_ENV === 'development')` for data routing
+
+**Why this matters:** In-memory stores (like `globalThis.devStore`) will pass simple tests because data persists during a single server run. But data is LOST on server restart, which is unacceptable for production. The Infrastructure features (0-4) specifically test for this by requiring data to survive a full server restart.
 
 ---
 

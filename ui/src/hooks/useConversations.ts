@@ -26,6 +26,16 @@ export function useConversation(projectName: string | null, conversationId: numb
     queryFn: () => api.getAssistantConversation(projectName!, conversationId!),
     enabled: !!projectName && !!conversationId,
     staleTime: 30_000, // Cache for 30 seconds
+    retry: (failureCount, error) => {
+      // Don't retry on "not found" errors (404) - conversation doesn't exist
+      if (error instanceof Error && (
+        error.message.toLowerCase().includes('not found') ||
+        error.message === 'HTTP 404'
+      )) {
+        return false
+      }
+      return failureCount < 3
+    },
   })
 }
 

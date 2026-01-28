@@ -11,17 +11,25 @@ Tools:
 - feature_get_summary: Get minimal feature info (id, name, status, deps)
 - feature_mark_passing: Mark a feature as passing
 - feature_mark_failing: Mark a feature as failing (regression detected)
+- feature_get_for_regression: Get passing features for regression testing (least-tested-first)
 - feature_skip: Skip a feature (move to end of queue)
 - feature_mark_in_progress: Mark a feature as in-progress
 - feature_claim_and_get: Atomically claim and get feature details
 - feature_clear_in_progress: Clear in-progress status
 - feature_create_bulk: Create multiple features at once
 - feature_create: Create a single feature
+- feature_update: Update a feature's editable fields
 - feature_add_dependency: Add a dependency between features
 - feature_remove_dependency: Remove a dependency
 - feature_get_ready: Get features ready to implement
 - feature_get_blocked: Get features blocked by dependencies (with limit)
 - feature_get_graph: Get the dependency graph
+- feature_start_attempt: Start tracking an agent attempt on a feature
+- feature_end_attempt: End tracking an agent attempt with outcome
+- feature_get_attempts: Get attempt history for a feature
+- feature_log_error: Log an error for a feature
+- feature_get_errors: Get error history for a feature
+- feature_resolve_error: Mark an error as resolved
 
 Note: Feature selection (which feature to work on) is handled by the
 orchestrator, not by agents. Agents receive pre-assigned feature IDs.
@@ -32,8 +40,14 @@ import os
 import sys
 import threading
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated
+
+
+def _utc_now() -> datetime:
+    """Return current UTC time."""
+    return datetime.now(timezone.utc)
 
 from mcp.server.fastmcp import FastMCP
 from pydantic import BaseModel, Field
@@ -41,7 +55,7 @@ from pydantic import BaseModel, Field
 # Add parent directory to path so we can import from api module
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from api.database import Feature, create_database
+from api.database import Feature, FeatureAttempt, FeatureError, create_database
 from api.dependency_resolver import (
     MAX_DEPENDENCIES_PER_FEATURE,
     compute_scheduling_scores,
@@ -74,11 +88,6 @@ class ClearInProgressInput(BaseModel):
     feature_id: int = Field(..., description="The ID of the feature to clear in-progress status", ge=1)
 
 
-class RegressionInput(BaseModel):
-    """Input for getting regression features."""
-    limit: int = Field(default=3, ge=1, le=10, description="Maximum number of passing features to return")
-
-
 class FeatureCreateItem(BaseModel):
     """Schema for creating a single feature."""
     category: str = Field(..., min_length=1, max_length=100, description="Feature category")
@@ -98,6 +107,9 @@ _engine = None
 
 # Lock for priority assignment to prevent race conditions
 _priority_lock = threading.Lock()
+
+# Lock for atomic claim operations to prevent multi-agent race conditions
+_claim_lock = threading.Lock()
 
 
 @asynccontextmanager
@@ -228,15 +240,20 @@ def feature_get_summary(
 
 @mcp.tool()
 def feature_mark_passing(
-    feature_id: Annotated[int, Field(description="The ID of the feature to mark as passing", ge=1)]
+    feature_id: Annotated[int, Field(description="The ID of the feature to mark as passing", ge=1)],
+    quality_result: Annotated[dict | None, Field(description="Optional quality gate results to store as test evidence", default=None)] = None
 ) -> str:
     """Mark a feature as passing after successful implementation.
 
     Updates the feature's passes field to true and clears the in_progress flag.
     Use this after you have implemented the feature and verified it works correctly.
 
+    Optionally stores quality gate results (lint, type-check, test outputs) as
+    test evidence for compliance and debugging purposes.
+
     Args:
         feature_id: The ID of the feature to mark as passing
+        quality_result: Optional dict with quality gate results (lint, type-check, etc.)
 
     Returns:
         JSON with success confirmation: {success, feature_id, name}
@@ -250,6 +267,13 @@ def feature_mark_passing(
 
         feature.passes = True
         feature.in_progress = False
+        feature.completed_at = _utc_now()
+        feature.last_error = None  # Clear any previous error
+
+        # Store quality gate results as test evidence
+        if quality_result:
+            feature.quality_result = quality_result
+
         session.commit()
 
         return json.dumps({"success": True, "feature_id": feature_id, "name": feature.name})
@@ -262,7 +286,8 @@ def feature_mark_passing(
 
 @mcp.tool()
 def feature_mark_failing(
-    feature_id: Annotated[int, Field(description="The ID of the feature to mark as failing", ge=1)]
+    feature_id: Annotated[int, Field(description="The ID of the feature to mark as failing", ge=1)],
+    error_message: Annotated[str | None, Field(description="Optional error message describing why the feature failed", default=None)] = None
 ) -> str:
     """Mark a feature as failing after finding a regression.
 
@@ -278,6 +303,7 @@ def feature_mark_failing(
 
     Args:
         feature_id: The ID of the feature to mark as failing
+        error_message: Optional message describing the failure (e.g., test output, stack trace)
 
     Returns:
         JSON with the updated feature details, or error if not found.
@@ -291,16 +317,80 @@ def feature_mark_failing(
 
         feature.passes = False
         feature.in_progress = False
+        feature.last_failed_at = _utc_now()
+        if error_message:
+            # Truncate to 10KB to prevent storing huge stack traces
+            feature.last_error = error_message[:10240] if len(error_message) > 10240 else error_message
+        else:
+            # Clear stale error message when no new error is provided
+            feature.last_error = None
         session.commit()
         session.refresh(feature)
 
         return json.dumps({
-            "message": f"Feature #{feature_id} marked as failing - regression detected",
-            "feature": feature.to_dict()
+            "success": True,
+            "feature_id": feature_id,
+            "name": feature.name,
+            "message": "Regression detected"
         })
     except Exception as e:
         session.rollback()
         return json.dumps({"error": f"Failed to mark feature failing: {str(e)}"})
+    finally:
+        session.close()
+
+
+@mcp.tool()
+def feature_get_for_regression(
+    limit: Annotated[int, Field(default=3, ge=1, le=10, description="Maximum number of passing features to return")] = 3
+) -> str:
+    """Get passing features for regression testing, prioritizing least-tested features.
+
+    Returns features that are currently passing, ordered by regression_count (ascending)
+    so that features tested fewer times are prioritized. This ensures even distribution
+    of regression testing across all features, avoiding duplicate testing of the same
+    features while others are never tested.
+
+    Each returned feature has its regression_count incremented to track testing frequency.
+
+    Args:
+        limit: Maximum number of features to return (1-10, default 3)
+
+    Returns:
+        JSON with list of features for regression testing.
+    """
+    session = get_session()
+    try:
+        # Use application-level _claim_lock to serialize feature selection and updates.
+        # This prevents race conditions where concurrent requests both select
+        # the same features (with lowest regression_count) before either commits.
+        # The lock ensures requests are serialized: the second request will block
+        # until the first commits, then see the updated regression_count values.
+        with _claim_lock:
+            features = (
+                session.query(Feature)
+                .filter(Feature.passes == True)
+                .order_by(Feature.regression_count.asc(), Feature.id.asc())
+                .limit(limit)
+                .all()
+            )
+
+            # Increment regression_count for selected features (now safe under lock)
+            for feature in features:
+                feature.regression_count = (feature.regression_count or 0) + 1
+            session.commit()
+
+            # Refresh to get updated counts after commit
+            for feature in features:
+                session.refresh(feature)
+
+        return json.dumps({
+            "features": [f.to_dict() for f in features],
+            "count": len(features)
+        })
+    except Exception as e:
+        session.rollback()
+        return json.dumps({"error": f"Failed to get regression features: {str(e)}"})
     finally:
         session.close()
 
@@ -311,10 +401,16 @@ def feature_skip(
 ) -> str:
     """Skip a feature by moving it to the end of the priority queue.
 
-    Use this when a feature cannot be implemented yet due to:
-    - Dependencies on other features that aren't implemented yet
-    - External blockers (missing assets, unclear requirements)
-    - Technical prerequisites that need to be addressed first
+    Use this ONLY for truly external blockers you cannot control:
+    - External API credentials not configured (e.g., Stripe keys, OAuth secrets)
+    - External service unavailable or inaccessible
+    - Hardware/environment limitations you cannot fulfill
+
+    DO NOT skip for:
+    - Missing functionality (build it yourself)
+    - Refactoring features (implement them like any other feature)
+    - "Unclear requirements" (interpret the intent and implement)
+    - Dependencies on other features (build those first)
 
     The feature's priority is set to max_priority + 1, so it will be
     worked on after all other pending features. Also clears the in_progress
@@ -373,35 +469,41 @@ def feature_mark_in_progress(
     This prevents other agent sessions from working on the same feature.
     Call this after getting your assigned feature details with feature_get_by_id.
 
+    Uses atomic locking to prevent race conditions when multiple agents
+    try to claim the same feature simultaneously.
+
     Args:
         feature_id: The ID of the feature to mark as in-progress
 
     Returns:
         JSON with the updated feature details, or error if not found or already in-progress.
     """
-    session = get_session()
-    try:
-        feature = session.query(Feature).filter(Feature.id == feature_id).first()
+    # Use lock to prevent race condition when multiple agents try to claim simultaneously
+    with _claim_lock:
+        session = get_session()
+        try:
+            feature = session.query(Feature).filter(Feature.id == feature_id).first()
 
-        if feature is None:
-            return json.dumps({"error": f"Feature with ID {feature_id} not found"})
+            if feature is None:
+                return json.dumps({"error": f"Feature with ID {feature_id} not found"})
 
-        if feature.passes:
-            return json.dumps({"error": f"Feature with ID {feature_id} is already passing"})
+            if feature.passes:
+                return json.dumps({"error": f"Feature with ID {feature_id} is already passing"})
 
-        if feature.in_progress:
-            return json.dumps({"error": f"Feature with ID {feature_id} is already in-progress"})
+            if feature.in_progress:
+                return json.dumps({"error": f"Feature with ID {feature_id} is already in-progress"})
 
-        feature.in_progress = True
-        session.commit()
-        session.refresh(feature)
+            feature.in_progress = True
+            feature.started_at = _utc_now()
+            session.commit()
+            session.refresh(feature)
 
-        return json.dumps(feature.to_dict())
-    except Exception as e:
-        session.rollback()
-        return json.dumps({"error": f"Failed to mark feature in-progress: {str(e)}"})
-    finally:
-        session.close()
+            return json.dumps(feature.to_dict())
+        except Exception as e:
+            session.rollback()
+            return json.dumps({"error": f"Failed to mark feature in-progress: {str(e)}"})
+        finally:
+            session.close()
 
 
 @mcp.tool()
@@ -413,37 +515,43 @@ def feature_claim_and_get(
     Combines feature_mark_in_progress + feature_get_by_id into a single operation.
     If already in-progress, still returns the feature details (idempotent).
 
+    Uses atomic locking to prevent race conditions when multiple agents
+    try to claim the same feature simultaneously.
+
     Args:
         feature_id: The ID of the feature to claim and retrieve
 
     Returns:
         JSON with feature details including claimed status, or error if not found.
     """
-    session = get_session()
-    try:
-        feature = session.query(Feature).filter(Feature.id == feature_id).first()
+    # Use lock to ensure atomic claim operation across multiple processes
+    with _claim_lock:
+        session = get_session()
+        try:
+            feature = session.query(Feature).filter(Feature.id == feature_id).first()
 
-        if feature is None:
-            return json.dumps({"error": f"Feature with ID {feature_id} not found"})
+            if feature is None:
+                return json.dumps({"error": f"Feature with ID {feature_id} not found"})
 
-        if feature.passes:
-            return json.dumps({"error": f"Feature with ID {feature_id} is already passing"})
+            if feature.passes:
+                return json.dumps({"error": f"Feature with ID {feature_id} is already passing"})
 
-        # Idempotent: if already in-progress, just return details
-        already_claimed = feature.in_progress
-        if not already_claimed:
-            feature.in_progress = True
-            session.commit()
-            session.refresh(feature)
+            # Idempotent: if already in-progress, just return details
+            already_claimed = feature.in_progress
+            if not already_claimed:
+                feature.in_progress = True
+                feature.started_at = _utc_now()
+                session.commit()
+                session.refresh(feature)
 
-        result = feature.to_dict()
-        result["already_claimed"] = already_claimed
-        return json.dumps(result)
-    except Exception as e:
-        session.rollback()
-        return json.dumps({"error": f"Failed to claim feature: {str(e)}"})
-    finally:
-        session.close()
+            result = feature.to_dict()
+            result["already_claimed"] = already_claimed
+            return json.dumps(result)
+        except Exception as e:
+            session.rollback()
+            return json.dumps({"error": f"Failed to claim feature: {str(e)}"})
+        finally:
+            session.close()
 
 
 @mcp.tool()
@@ -476,6 +584,56 @@ def feature_clear_in_progress(
     except Exception as e:
         session.rollback()
         return json.dumps({"error": f"Failed to clear in-progress status: {str(e)}"})
+    finally:
+        session.close()
+
+
+@mcp.tool()
+def feature_release_testing(
+    feature_id: Annotated[int, Field(ge=1, description="Feature ID to release testing claim")],
+    tested_ok: Annotated[bool, Field(description="True if feature passed, False if regression found")]
+) -> str:
+    """Release a testing claim on a feature.
+
+    Testing agents MUST call this when done, regardless of outcome.
+
+    Args:
+        feature_id: The ID of the feature to release
+        tested_ok: True if the feature still passes, False if a regression was found
+
+    Returns:
+        JSON with: success, feature_id, tested_ok, message
+    """
+    session = get_session()
+    try:
+        feature = session.query(Feature).filter(Feature.id == feature_id).first()
+        if not feature:
+            return json.dumps({"error": f"Feature {feature_id} not found"})
+
+        feature.in_progress = False
+        
+        # Persist the regression test outcome
+        if tested_ok:
+            # Feature still passes - clear failure markers
+            feature.passes = True
+            feature.last_failed_at = None
+            feature.last_error = None
+        else:
+            # Regression detected - mark as failing
+            feature.passes = False
+            feature.last_failed_at = _utc_now()
+        
+        session.commit()
+
+        return json.dumps({
+            "success": True,
+            "feature_id": feature_id,
+            "tested_ok": tested_ok,
+            "message": f"Released testing claim on feature #{feature_id}"
+        })
+    except Exception as e:
+        session.rollback()
+        return json.dumps({"error": str(e)})
     finally:
         session.close()
 
@@ -643,6 +801,71 @@ def feature_create(
 
 
 @mcp.tool()
+def feature_update(
+    feature_id: Annotated[int, Field(description="The ID of the feature to update", ge=1)],
+    category: Annotated[str | None, Field(default=None, min_length=1, max_length=100, description="New category (optional)")] = None,
+    name: Annotated[str | None, Field(default=None, min_length=1, max_length=255, description="New name (optional)")] = None,
+    description: Annotated[str | None, Field(default=None, min_length=1, description="New description (optional)")] = None,
+    steps: Annotated[list[str] | None, Field(default=None, min_length=1, description="New steps list (optional)")] = None,
+) -> str:
+    """Update an existing feature's editable fields.
+
+    Use this when the user asks to modify, update, edit, or change a feature.
+    Only the provided fields will be updated; others remain unchanged.
+
+    Cannot update: id, priority (use feature_skip), passes, in_progress (agent-controlled)
+
+    Args:
+        feature_id: The ID of the feature to update
+        category: New category (optional)
+        name: New name (optional)
+        description: New description (optional)
+        steps: New steps list (optional)
+
+    Returns:
+        JSON with the updated feature details, or error if not found.
+    """
+    session = get_session()
+    try:
+        feature = session.query(Feature).filter(Feature.id == feature_id).first()
+
+        if feature is None:
+            return json.dumps({"error": f"Feature with ID {feature_id} not found"})
+
+        # Collect updates
+        updates = {}
+        if category is not None:
+            updates["category"] = category
+        if name is not None:
+            updates["name"] = name
+        if description is not None:
+            updates["description"] = description
+        if steps is not None:
+            updates["steps"] = steps
+
+        if not updates:
+            return json.dumps({"error": "No fields to update. Provide at least one of: category, name, description, steps"})
+
+        # Apply updates
+        for field, value in updates.items():
+            setattr(feature, field, value)
+
+        session.commit()
+        session.refresh(feature)
+
+        return json.dumps({
+            "success": True,
+            "message": f"Updated feature: {feature.name}",
+            "feature": feature.to_dict()
+        }, indent=2)
+    except Exception as e:
+        session.rollback()
+        return json.dumps({"error": str(e)})
+    finally:
+        session.close()
+
+
+@mcp.tool()
 def feature_add_dependency(
     feature_id: Annotated[int, Field(ge=1, description="Feature to add dependency to")],
     dependency_id: Annotated[int, Field(ge=1, description="ID of the dependency feature")]
@@ -748,6 +971,74 @@ def feature_remove_dependency(
 
 
 @mcp.tool()
+def feature_delete(
+    feature_id: Annotated[int, Field(description="The ID of the feature to delete", ge=1)]
+) -> str:
+    """Delete a feature from the backlog.
+
+    Use this when the user asks to remove, delete, or drop a feature.
+    This removes the feature from tracking only - any implemented code remains.
+
+    For completed features, consider suggesting the user create a new "removal"
+    feature if they also want the code removed.
+
+    Args:
+        feature_id: The ID of the feature to delete
+
+    Returns:
+        JSON with success message and deleted feature details, or error if not found.
+    """
+    session = get_session()
+    try:
+        feature = session.query(Feature).filter(Feature.id == feature_id).first()
+
+        if feature is None:
+            return json.dumps({"error": f"Feature with ID {feature_id} not found"})
+
+        # Check for dependent features that reference this feature
+        # Query all features and filter those that have this feature_id in their dependencies
+        all_features = session.query(Feature).all()
+        dependent_features = [
+            f for f in all_features 
+            if f.dependencies and feature_id in f.dependencies
+        ]
+
+        # Cascade-update dependent features to remove this feature_id from their dependencies
+        if dependent_features:
+            for dependent in dependent_features:
+                deps = dependent.dependencies.copy()
+                deps.remove(feature_id)
+                dependent.dependencies = deps if deps else None
+            session.flush()  # Flush updates before deletion
+
+        # Store details before deletion for confirmation message
+        feature_data = feature.to_dict()
+
+        session.delete(feature)
+        session.commit()
+
+        result = {
+            "success": True,
+            "message": f"Deleted feature: {feature_data['name']}",
+            "deleted_feature": feature_data
+        }
+        
+        # Include info about updated dependencies if any
+        if dependent_features:
+            result["updated_dependents"] = [
+                {"id": f.id, "name": f.name} for f in dependent_features
+            ]
+            result["message"] += f" (removed dependency reference from {len(dependent_features)} dependent feature(s))"
+
+        return json.dumps(result, indent=2)
+    except Exception as e:
+        session.rollback()
+        return json.dumps({"error": str(e)})
+    finally:
+        session.close()
+
+
+@mcp.tool()
 def feature_get_ready(
     limit: Annotated[int, Field(default=10, ge=1, le=50, description="Max features to return")] = 10
 ) -> str:
@@ -764,19 +1055,28 @@ def feature_get_ready(
     """
     session = get_session()
     try:
-        all_features = session.query(Feature).all()
-        passing_ids = {f.id for f in all_features if f.passes}
+        # Optimized: Query only passing IDs (smaller result set)
+        passing_ids = {
+            f.id for f in session.query(Feature.id).filter(Feature.passes == True).all()
+        }
 
+        # Optimized: Query only candidate features (not passing, not in progress)
+        candidates = session.query(Feature).filter(
+            Feature.passes == False,
+            Feature.in_progress == False
+        ).all()
+
+        # Filter by dependencies (must be done in Python since deps are JSON)
         ready = []
-        all_dicts = [f.to_dict() for f in all_features]
-        for f in all_features:
-            if f.passes or f.in_progress:
-                continue
+        for f in candidates:
             deps = f.dependencies or []
             if all(dep_id in passing_ids for dep_id in deps):
                 ready.append(f.to_dict())
 
         # Sort by scheduling score (higher = first), then priority, then id
+        # Need all features for scoring computation
+        all_dicts = [f.to_dict() for f in candidates]
+        all_dicts.extend([{"id": pid} for pid in passing_ids])
         scores = compute_scheduling_scores(all_dicts)
         ready.sort(key=lambda f: (-scores.get(f["id"], 0), f["priority"], f["id"]))
 
@@ -806,13 +1106,16 @@ def feature_get_blocked(
     """
     session = get_session()
     try:
-        all_features = session.query(Feature).all()
-        passing_ids = {f.id for f in all_features if f.passes}
+        # Optimized: Query only passing IDs
+        passing_ids = {
+            f.id for f in session.query(Feature.id).filter(Feature.passes == True).all()
+        }
+
+        # Optimized: Query only non-passing features (candidates for being blocked)
+        candidates = session.query(Feature).filter(Feature.passes == False).all()
 
         blocked = []
-        for f in all_features:
-            if f.passes:
-                continue
+        for f in candidates:
             deps = f.dependencies or []
             blocking = [d for d in deps if d not in passing_ids]
             if blocking:
@@ -948,6 +1251,365 @@ def feature_set_dependencies(
     except Exception as e:
         session.rollback()
         return json.dumps({"error": f"Failed to set dependencies: {str(e)}"})
+    finally:
+        session.close()
+
+
+@mcp.tool()
+def feature_start_attempt(
+    feature_id: Annotated[int, Field(ge=1, description="Feature ID to start attempt on")],
+    agent_type: Annotated[str, Field(description="Agent type: 'initializer', 'coding', or 'testing'")],
+    agent_id: Annotated[str | None, Field(description="Optional unique agent identifier", default=None)] = None,
+    agent_index: Annotated[int | None, Field(description="Optional agent index for parallel runs", default=None)] = None
+) -> str:
+    """Start tracking an agent's attempt on a feature.
+
+    Creates a new FeatureAttempt record to track which agent is working on
+    which feature, with timing and outcome tracking.
+
+    Args:
+        feature_id: The ID of the feature being worked on
+        agent_type: Type of agent ("initializer", "coding", "testing")
+        agent_id: Optional unique identifier for the agent
+        agent_index: Optional index for parallel agent runs (0, 1, 2, etc.)
+
+    Returns:
+        JSON with the created attempt ID and details
+    """
+    session = get_session()
+    try:
+        # Verify feature exists
+        feature = session.query(Feature).filter(Feature.id == feature_id).first()
+        if not feature:
+            return json.dumps({"error": f"Feature {feature_id} not found"})
+
+        # Validate agent_type
+        valid_types = {"initializer", "coding", "testing"}
+        if agent_type not in valid_types:
+            return json.dumps({"error": f"Invalid agent_type. Must be one of: {valid_types}"})
+
+        # Create attempt record
+        attempt = FeatureAttempt(
+            feature_id=feature_id,
+            agent_type=agent_type,
+            agent_id=agent_id,
+            agent_index=agent_index,
+            started_at=_utc_now(),
+            outcome="in_progress"
+        )
+        session.add(attempt)
+        session.commit()
+        session.refresh(attempt)
+
+        return json.dumps({
+            "success": True,
+            "attempt_id": attempt.id,
+            "feature_id": feature_id,
+            "agent_type": agent_type,
+            "started_at": attempt.started_at.isoformat()
+        })
+    except Exception as e:
+        session.rollback()
+        return json.dumps({"error": f"Failed to start attempt: {str(e)}"})
+    finally:
+        session.close()
+
+
+@mcp.tool()
+def feature_end_attempt(
+    attempt_id: Annotated[int, Field(ge=1, description="Attempt ID to end")],
+    outcome: Annotated[str, Field(description="Outcome: 'success', 'failure', or 'abandoned'")],
+    error_message: Annotated[str | None, Field(description="Optional error message for failures", default=None)] = None
+) -> str:
+    """End tracking an agent's attempt on a feature.
+
+    Updates the FeatureAttempt record with the final outcome and timing.
+
+    Args:
+        attempt_id: The ID of the attempt to end
+        outcome: Final outcome ("success", "failure", "abandoned")
+        error_message: Optional error message for failure cases
+
+    Returns:
+        JSON with the updated attempt details including duration
+    """
+    session = get_session()
+    try:
+        attempt = session.query(FeatureAttempt).filter(FeatureAttempt.id == attempt_id).first()
+        if not attempt:
+            return json.dumps({"error": f"Attempt {attempt_id} not found"})
+
+        # Validate outcome
+        valid_outcomes = {"success", "failure", "abandoned"}
+        if outcome not in valid_outcomes:
+            return json.dumps({"error": f"Invalid outcome. Must be one of: {valid_outcomes}"})
+
+        # Update attempt
+        attempt.ended_at = _utc_now()
+        attempt.outcome = outcome
+        if error_message:
+            # Truncate long error messages
+            attempt.error_message = error_message[:10240] if len(error_message) > 10240 else error_message
+
+        session.commit()
+        session.refresh(attempt)
+
+        return json.dumps({
+            "success": True,
+            "attempt": attempt.to_dict(),
+            "duration_seconds": attempt.duration_seconds
+        })
+    except Exception as e:
+        session.rollback()
+        return json.dumps({"error": f"Failed to end attempt: {str(e)}"})
+    finally:
+        session.close()
+
+
+@mcp.tool()
+def feature_get_attempts(
+    feature_id: Annotated[int, Field(ge=1, description="Feature ID to get attempts for")],
+    limit: Annotated[int, Field(default=10, ge=1, le=100, description="Max attempts to return")] = 10
+) -> str:
+    """Get attempt history for a feature.
+
+    Returns all attempts made on a feature, ordered by most recent first.
+    Useful for debugging and understanding which agents worked on a feature.
+
+    Args:
+        feature_id: The ID of the feature
+        limit: Maximum number of attempts to return (1-100, default 10)
+
+    Returns:
+        JSON with list of attempts and statistics
+    """
+    session = get_session()
+    try:
+        # Verify feature exists
+        feature = session.query(Feature).filter(Feature.id == feature_id).first()
+        if not feature:
+            return json.dumps({"error": f"Feature {feature_id} not found"})
+
+        # Get attempts ordered by most recent
+        attempts = session.query(FeatureAttempt).filter(
+            FeatureAttempt.feature_id == feature_id
+        ).order_by(FeatureAttempt.started_at.desc()).limit(limit).all()
+
+        # Calculate statistics
+        total_attempts = session.query(FeatureAttempt).filter(
+            FeatureAttempt.feature_id == feature_id
+        ).count()
+
+        success_count = session.query(FeatureAttempt).filter(
+            FeatureAttempt.feature_id == feature_id,
+            FeatureAttempt.outcome == "success"
+        ).count()
+
+        failure_count = session.query(FeatureAttempt).filter(
+            FeatureAttempt.feature_id == feature_id,
+            FeatureAttempt.outcome == "failure"
+        ).count()
+
+        return json.dumps({
+            "feature_id": feature_id,
+            "feature_name": feature.name,
+            "attempts": [a.to_dict() for a in attempts],
+            "statistics": {
+                "total_attempts": total_attempts,
+                "success_count": success_count,
+                "failure_count": failure_count,
+                "abandoned_count": total_attempts - success_count - failure_count
+            }
+        })
+    finally:
+        session.close()
+
+
+@mcp.tool()
+def feature_log_error(
+    feature_id: Annotated[int, Field(ge=1, description="Feature ID to log error for")],
+    error_type: Annotated[str, Field(description="Error type: 'test_failure', 'lint_error', 'runtime_error', 'timeout', 'other'")],
+    error_message: Annotated[str, Field(description="Error message describing what went wrong")],
+    stack_trace: Annotated[str | None, Field(description="Optional full stack trace", default=None)] = None,
+    agent_type: Annotated[str | None, Field(description="Optional agent type that encountered the error", default=None)] = None,
+    agent_id: Annotated[str | None, Field(description="Optional agent ID", default=None)] = None,
+    attempt_id: Annotated[int | None, Field(description="Optional attempt ID to link this error to", default=None)] = None
+) -> str:
+    """Log an error for a feature.
+
+    Creates a new error record to track issues encountered while working on a feature.
+    This maintains a full history of all errors for debugging and analysis.
+
+    Args:
+        feature_id: The ID of the feature
+        error_type: Type of error (test_failure, lint_error, runtime_error, timeout, other)
+        error_message: Description of the error
+        stack_trace: Optional full stack trace
+        agent_type: Optional type of agent that encountered the error
+        agent_id: Optional identifier of the agent
+        attempt_id: Optional attempt ID to associate this error with
+
+    Returns:
+        JSON with the created error ID and details
+    """
+    session = get_session()
+    try:
+        # Verify feature exists
+        feature = session.query(Feature).filter(Feature.id == feature_id).first()
+        if not feature:
+            return json.dumps({"error": f"Feature {feature_id} not found"})
+
+        # Validate error_type
+        valid_types = {"test_failure", "lint_error", "runtime_error", "timeout", "other"}
+        if error_type not in valid_types:
+            return json.dumps({"error": f"Invalid error_type. Must be one of: {valid_types}"})
+
+        # Truncate long messages
+        truncated_message = error_message[:10240] if len(error_message) > 10240 else error_message
+        truncated_trace = stack_trace[:50000] if stack_trace and len(stack_trace) > 50000 else stack_trace
+
+        # Create error record
+        error = FeatureError(
+            feature_id=feature_id,
+            error_type=error_type,
+            error_message=truncated_message,
+            stack_trace=truncated_trace,
+            agent_type=agent_type,
+            agent_id=agent_id,
+            attempt_id=attempt_id,
+            occurred_at=_utc_now()
+        )
+        session.add(error)
+
+        # Also update the feature's last_error field
+        feature.last_error = truncated_message
+        feature.last_failed_at = _utc_now()
+
+        session.commit()
+        session.refresh(error)
+
+        return json.dumps({
+            "success": True,
+            "error_id": error.id,
+            "feature_id": feature_id,
+            "error_type": error_type,
+            "occurred_at": error.occurred_at.isoformat()
+        })
+    except Exception as e:
+        session.rollback()
+        return json.dumps({"error": f"Failed to log error: {str(e)}"})
+    finally:
+        session.close()
+
+
+@mcp.tool()
+def feature_get_errors(
+    feature_id: Annotated[int, Field(ge=1, description="Feature ID to get errors for")],
+    limit: Annotated[int, Field(default=20, ge=1, le=100, description="Max errors to return")] = 20,
+    include_resolved: Annotated[bool, Field(default=False, description="Include resolved errors")] = False
+) -> str:
+    """Get error history for a feature.
+
+    Returns all errors recorded for a feature, ordered by most recent first.
+    By default, only unresolved errors are returned.
+
+    Args:
+        feature_id: The ID of the feature
+        limit: Maximum number of errors to return (1-100, default 20)
+        include_resolved: Whether to include resolved errors (default False)
+
+    Returns:
+        JSON with list of errors and statistics
+    """
+    session = get_session()
+    try:
+        # Verify feature exists
+        feature = session.query(Feature).filter(Feature.id == feature_id).first()
+        if not feature:
+            return json.dumps({"error": f"Feature {feature_id} not found"})
+
+        # Build query
+        query = session.query(FeatureError).filter(FeatureError.feature_id == feature_id)
+        if not include_resolved:
+            query = query.filter(FeatureError.resolved == False)
+
+        # Get errors ordered by most recent
+        errors = query.order_by(FeatureError.occurred_at.desc()).limit(limit).all()
+
+        # Calculate statistics
+        total_errors = session.query(FeatureError).filter(
+            FeatureError.feature_id == feature_id
+        ).count()
+
+        unresolved_count = session.query(FeatureError).filter(
+            FeatureError.feature_id == feature_id,
+            FeatureError.resolved == False
+        ).count()
+
+        # Count by type
+        from sqlalchemy import func
+        type_counts = dict(
+            session.query(FeatureError.error_type, func.count(FeatureError.id))
+            .filter(FeatureError.feature_id == feature_id)
+            .group_by(FeatureError.error_type)
+            .all()
+        )
+
+        return json.dumps({
+            "feature_id": feature_id,
+            "feature_name": feature.name,
+            "errors": [e.to_dict() for e in errors],
+            "statistics": {
+                "total_errors": total_errors,
+                "unresolved_count": unresolved_count,
+                "resolved_count": total_errors - unresolved_count,
+                "by_type": type_counts
+            }
+        })
+    finally:
+        session.close()
+
+
+@mcp.tool()
+def feature_resolve_error(
+    error_id: Annotated[int, Field(ge=1, description="Error ID to resolve")],
+    resolution_notes: Annotated[str | None, Field(description="Optional notes about how the error was resolved", default=None)] = None
+) -> str:
+    """Mark an error as resolved.
+
+    Updates an error record to indicate it has been fixed or addressed.
+
+    Args:
+        error_id: The ID of the error to resolve
+        resolution_notes: Optional notes about the resolution
+
+    Returns:
+        JSON with the updated error details
+    """
+    session = get_session()
+    try:
+        error = session.query(FeatureError).filter(FeatureError.id == error_id).first()
+        if not error:
+            return json.dumps({"error": f"Error {error_id} not found"})
+
+        if error.resolved:
+            return json.dumps({"error": "Error is already resolved"})
+
+        error.resolved = True
+        error.resolved_at = _utc_now()
+        if resolution_notes:
+            error.resolution_notes = resolution_notes[:5000] if len(resolution_notes) > 5000 else resolution_notes
+
+        session.commit()
+        session.refresh(error)
+
+        return json.dumps({
+            "success": True,
+            "error": error.to_dict()
+        })
+    except Exception as e:
+        session.rollback()
+        return json.dumps({"error": f"Failed to resolve error: {str(e)}"})
     finally:
         session.close()
 

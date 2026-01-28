@@ -522,18 +522,23 @@ export interface ModelsResponse {
   default: string
 }
 
+// IDE type for opening projects in external editors
+export type IDEType = 'vscode' | 'cursor' | 'antigravity'
+
 export interface Settings {
   yolo_mode: boolean
   model: string
   glm_mode: boolean
   ollama_mode: boolean
   testing_agent_ratio: number  // Regression testing agents (0-3)
+  preferred_ide: IDEType | null  // Preferred IDE for opening projects
 }
 
 export interface SettingsUpdate {
   yolo_mode?: boolean
   model?: string
   testing_agent_ratio?: number
+  preferred_ide?: IDEType | null
 }
 
 // ============================================================================

@@ -7,12 +7,16 @@ Shared utilities for process management across the codebase.
 
 import logging
 import subprocess
+import sys
 from dataclasses import dataclass
 from typing import Literal
 
 import psutil
 
 logger = logging.getLogger(__name__)
+
+# Check if running on Windows
+IS_WINDOWS = sys.platform == "win32"
 
 
 @dataclass
@@ -35,6 +39,35 @@ class KillResult:
     children_terminated: int = 0
     children_killed: int = 0
     parent_forcekilled: bool = False
+
+
+def _kill_windows_process_tree_taskkill(pid: int) -> bool:
+    """Use Windows taskkill command to forcefully kill a process tree.
+
+    This is a fallback method that uses the Windows taskkill command with /T (tree)
+    and /F (force) flags, which is more reliable for killing nested cmd/bash/node
+    process trees on Windows.
+
+    Args:
+        pid: Process ID to kill along with its entire tree
+
+    Returns:
+        True if taskkill succeeded, False otherwise
+    """
+    if not IS_WINDOWS:
+        return False
+
+    try:
+        # /T = kill child processes, /F = force kill
+        result = subprocess.run(
+            ["taskkill", "/F", "/T", "/PID", str(pid)],
+            capture_output=True,
+            timeout=10,
+        )
+        return result.returncode == 0
+    except Exception as e:
+        logger.debug("taskkill failed for PID %d: %s", pid, e)
+        return False
 
 
 def kill_process_tree(proc: subprocess.Popen, timeout: float = 5.0) -> KillResult:
@@ -108,6 +141,20 @@ def kill_process_tree(proc: subprocess.Popen, timeout: float = 5.0) -> KillResul
             result.parent_forcekilled = True
             result.status = "partial"
 
+        # On Windows, use taskkill as a final cleanup to catch any orphans
+        # that psutil may have missed (e.g., conhost.exe, deeply nested processes)
+        if IS_WINDOWS:
+            try:
+                remaining = psutil.Process(proc.pid).children(recursive=True)
+                if remaining:
+                    logger.warning(
+                        "Found %d remaining children after psutil cleanup, using taskkill",
+                        len(remaining)
+                    )
+                    _kill_windows_process_tree_taskkill(proc.pid)
+            except psutil.NoSuchProcess:
+                pass  # Parent already dead, good
+
         logger.debug(
             "Process tree kill complete: status=%s, children=%d (terminated=%d, killed=%d)",
             result.status, result.children_found,
@@ -132,3 +179,49 @@ def kill_process_tree(proc: subprocess.Popen, timeout: float = 5.0) -> KillResul
                 result.status = "failure"
 
     return result
+
+
+def cleanup_orphaned_agent_processes() -> int:
+    """Clean up orphaned agent processes from previous runs.
+
+    On Windows, agent subprocesses (bash, cmd, node, conhost) may remain orphaned
+    if the server was killed abruptly. This function finds and terminates processes
+    that look like orphaned autocoder agents based on command line patterns.
+
+    Returns:
+        Number of processes terminated
+    """
+    if not IS_WINDOWS:
+        return 0
+
+    terminated = 0
+    agent_patterns = [
+        "autonomous_agent_demo.py",
+        "parallel_orchestrator.py",
+    ]
+
+    try:
+        for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+            try:
+                cmdline = proc.info.get('cmdline') or []
+                cmdline_str = ' '.join(cmdline)
+
+                # Check if this looks like an autocoder agent process
+                for pattern in agent_patterns:
+                    if pattern in cmdline_str:
+                        logger.info(
+                            "Terminating orphaned agent process: PID %d (%s)",
+                            proc.pid, pattern
+                        )
+                        _kill_windows_process_tree_taskkill(proc.pid)
+                        terminated += 1
+                        break
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
+    except Exception as e:
+        logger.warning("Error during orphan cleanup: %s", e)
+
+    if terminated > 0:
+        logger.info("Cleaned up %d orphaned agent processes", terminated)
+
+    return terminated

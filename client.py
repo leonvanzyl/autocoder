@@ -6,6 +6,7 @@ Functions for creating and configuring the Claude Agent SDK client.
 """
 
 import json
+import logging
 import os
 import shutil
 import sys
@@ -16,6 +17,9 @@ from claude_agent_sdk.types import HookContext, HookInput, HookMatcher, SyncHook
 from dotenv import load_dotenv
 
 from security import bash_security_hook
+
+# Module logger
+logger = logging.getLogger(__name__)
 
 # Load environment variables from .env file if present
 load_dotenv()
@@ -40,7 +44,11 @@ API_ENV_VARS = [
     "ANTHROPIC_DEFAULT_SONNET_MODEL",  # Model override for Sonnet
     "ANTHROPIC_DEFAULT_OPUS_MODEL",    # Model override for Opus
     "ANTHROPIC_DEFAULT_HAIKU_MODEL",   # Model override for Haiku
+    "CLAUDE_CODE_MAX_OUTPUT_TOKENS",   # Max output tokens (default 32000, GLM 4.7 supports 131072)
 ]
+
+# Default max output tokens for GLM 4.7 compatibility (131k output limit)
+DEFAULT_MAX_OUTPUT_TOKENS = "131072"
 
 
 def get_playwright_headless() -> bool:
@@ -54,7 +62,7 @@ def get_playwright_headless() -> bool:
     truthy = {"true", "1", "yes", "on"}
     falsy = {"false", "0", "no", "off"}
     if value not in truthy | falsy:
-        print(f"   - Warning: Invalid PLAYWRIGHT_HEADLESS='{value}', defaulting to {DEFAULT_PLAYWRIGHT_HEADLESS}")
+        logger.warning(f"Invalid PLAYWRIGHT_HEADLESS='{value}', defaulting to {DEFAULT_PLAYWRIGHT_HEADLESS}")
         return DEFAULT_PLAYWRIGHT_HEADLESS
     return value in truthy
 
@@ -225,23 +233,22 @@ def create_client(
     with open(settings_file, "w") as f:
         json.dump(security_settings, f, indent=2)
 
-    print(f"Created security settings at {settings_file}")
-    print("   - Sandbox enabled (OS-level bash isolation)")
-    print(f"   - Filesystem restricted to: {project_dir.resolve()}")
-    print("   - Bash commands restricted to allowlist (see security.py)")
+    logger.info(f"Created security settings at {settings_file}")
+    logger.debug("  Sandbox enabled (OS-level bash isolation)")
+    logger.debug(f"  Filesystem restricted to: {project_dir.resolve()}")
+    logger.debug("  Bash commands restricted to allowlist (see security.py)")
     if yolo_mode:
-        print("   - MCP servers: features (database) - YOLO MODE (no Playwright)")
+        logger.info("  MCP servers: features (database) - YOLO MODE (no Playwright)")
     else:
-        print("   - MCP servers: playwright (browser), features (database)")
-    print("   - Project settings enabled (skills, commands, CLAUDE.md)")
-    print()
+        logger.debug("  MCP servers: playwright (browser), features (database)")
+    logger.debug("  Project settings enabled (skills, commands, CLAUDE.md)")
 
     # Use system Claude CLI instead of bundled one (avoids Bun runtime crash on Windows)
     system_cli = shutil.which("claude")
     if system_cli:
-        print(f"   - Using system CLI: {system_cli}")
+        logger.debug(f"Using system CLI: {system_cli}")
     else:
-        print("   - Warning: System 'claude' CLI not found, using bundled CLI")
+        logger.warning("System 'claude' CLI not found, using bundled CLI")
 
     # Build MCP servers config - features is always included, playwright only in standard mode
     mcp_servers = {
@@ -267,7 +274,7 @@ def create_client(
         ]
         if get_playwright_headless():
             playwright_args.append("--headless")
-        print(f"   - Browser: {browser} (headless={get_playwright_headless()})")
+        logger.debug(f"Browser: {browser} (headless={get_playwright_headless()})")
 
         # Browser isolation for parallel execution
         # Each agent gets its own isolated browser context to prevent tab conflicts
@@ -276,7 +283,7 @@ def create_client(
             # This creates a fresh, isolated context without persistent state
             # Note: --isolated and --user-data-dir are mutually exclusive
             playwright_args.append("--isolated")
-            print(f"   - Browser isolation enabled for agent: {agent_id}")
+            logger.debug(f"Browser isolation enabled for agent: {agent_id}")
 
         mcp_servers["playwright"] = {
             "command": "npx",
@@ -293,17 +300,21 @@ def create_client(
         if value:
             sdk_env[var] = value
 
+    # Set default max output tokens for GLM 4.7 compatibility if not already set
+    if "CLAUDE_CODE_MAX_OUTPUT_TOKENS" not in sdk_env:
+        sdk_env["CLAUDE_CODE_MAX_OUTPUT_TOKENS"] = DEFAULT_MAX_OUTPUT_TOKENS
+
     # Detect alternative API mode (Ollama or GLM)
     base_url = sdk_env.get("ANTHROPIC_BASE_URL", "")
     is_alternative_api = bool(base_url)
     is_ollama = "localhost:11434" in base_url or "127.0.0.1:11434" in base_url
 
     if sdk_env:
-        print(f"   - API overrides: {', '.join(sdk_env.keys())}")
+        logger.info(f"API overrides: {', '.join(sdk_env.keys())}")
         if is_ollama:
-            print("   - Ollama Mode: Using local models")
+            logger.info("Ollama Mode: Using local models")
         elif "ANTHROPIC_BASE_URL" in sdk_env:
-            print(f"   - GLM Mode: Using {sdk_env['ANTHROPIC_BASE_URL']}")
+            logger.info(f"GLM Mode: Using {sdk_env['ANTHROPIC_BASE_URL']}")
 
     # Create a wrapper for bash_security_hook that passes project_dir via context
     async def bash_hook_with_context(input_data, tool_use_id=None, context=None):
@@ -335,12 +346,12 @@ def create_client(
         custom_instructions = input_data.get("custom_instructions")
 
         if trigger == "auto":
-            print("[Context] Auto-compaction triggered (context approaching limit)")
+            logger.info("Auto-compaction triggered (context approaching limit)")
         else:
-            print("[Context] Manual compaction requested")
+            logger.info("Manual compaction requested")
 
         if custom_instructions:
-            print(f"[Context] Custom instructions: {custom_instructions}")
+            logger.info(f"Compaction custom instructions: {custom_instructions}")
 
         # Return empty dict to allow compaction to proceed with default behavior
         # To customize, return:

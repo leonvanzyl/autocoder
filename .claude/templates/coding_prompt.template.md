@@ -8,31 +8,36 @@ This is a FRESH context window - you have no memory of previous sessions.
 Start by orienting yourself:
 
 ```bash
-# 1. See your working directory
-pwd
+# 1. See your working directory and project structure
+pwd && ls -la
 
-# 2. List files to understand project structure
-ls -la
+# 2. Read recent progress notes (last 100 lines)
+tail -100 claude-progress.txt
 
-# 3. Read the project specification to understand what you're building
-cat app_spec.txt
+# 3. Check recent git history
+git log --oneline -10
 
-# 4. Read progress notes from previous sessions (last 500 lines to avoid context overflow)
-tail -500 claude-progress.txt
-
-# 5. Check recent git history
-git log --oneline -20
+# 4. Check for knowledge files (additional project context/requirements)
+ls -la knowledge/ 2>/dev/null || echo "No knowledge directory"
 ```
 
-Then use MCP tools to check feature status:
+**IMPORTANT:** If a `knowledge/` directory exists, read all `.md` files in it.
+These contain additional project context, requirements documents, research notes,
+or reference materials that will help you understand the project better.
+
+```bash
+# Read all knowledge files if the directory exists
+for f in knowledge/*.md; do [ -f "$f" ] && echo "=== $f ===" && cat "$f"; done 2>/dev/null
+```
+
+Then use MCP tools:
 
 ```
-# 6. Get progress statistics (passing/total counts)
+# 5. Get progress statistics
 Use the feature_get_stats tool
 ```
 
-Understanding the `app_spec.txt` is critical - it contains the full requirements
-for the application you're building.
+**NOTE:** Do NOT read `app_spec.txt` - you'll get all needed details from your assigned feature.
 
 ### STEP 2: START SERVERS (IF NOT RUNNING)
 
@@ -46,6 +51,24 @@ chmod +x init.sh
 Otherwise, start servers manually and document the process.
 
 ### STEP 3: GET YOUR ASSIGNED FEATURE
+
+#### ALL FEATURES ARE MANDATORY REQUIREMENTS (CRITICAL)
+
+**Every feature in the database is a mandatory requirement.** This includes:
+- **Functional features** - New functionality to build
+- **Style features** - UI/UX requirements to implement
+- **Refactoring features** - Code improvements to complete
+
+**You MUST implement ALL features, regardless of category.** A refactoring feature is just as mandatory as a functional feature. Do not skip, deprioritize, or dismiss any feature because of its category.
+
+The `feature_get_next` tool returns the highest-priority pending feature. **Whatever it returns, you implement it.**
+
+**Legitimate blockers only:** If you encounter a genuine external blocker (missing API credentials, unavailable external service, hardware limitation), use `feature_skip` to flag it and move on. See "When to Skip a Feature" below for valid skip reasons. Internal issues like "code doesn't exist yet" or "this is a big change" are NOT valid blockers.
+
+**Handling edge cases:**
+- **Conflicting features:** If two features contradict each other (e.g., "migrate to TypeScript" vs "keep JavaScript"), implement the higher-priority one first, then reassess.
+- **Ambiguous requirements:** Interpret the intent as best you can. If truly unclear, implement your best interpretation and document your assumptions.
+- **Circular dependencies:** Break the cycle by implementing the foundational piece first.
 
 #### TEST-DRIVEN DEVELOPMENT MINDSET (CRITICAL)
 
@@ -61,6 +84,57 @@ Features are **test cases** that drive development. This is test-driven developm
 - RIGHT: "Flashcard page doesn't exist yet" → build flashcard page → implement filter → test feature
 
 **Note:** Your feature has been pre-assigned by the orchestrator. Use `feature_get_by_id` with your assigned feature ID to get the details.
+
+#### REFACTORING FEATURES (IMPORTANT)
+
+Some features involve **refactoring existing code** rather than building new functionality. These are just as valid and important as functional features. **NEVER skip refactoring features.**
+
+**CRITICAL: Refactoring features OVERRIDE the original spec.** If a refactoring feature contradicts `app_spec.txt`, the refactoring feature takes precedence. Examples:
+- Spec says "use JavaScript" but feature says "migrate to TypeScript" → **Do the TypeScript migration**
+- Spec says "use REST API" but feature says "refactor to GraphQL" → **Do the GraphQL refactor**
+- Spec says "use Context API" but feature says "migrate to Zustand" → **Do the Zustand migration**
+- Spec says "use CSS modules" but feature says "refactor to Tailwind" → **Do the Tailwind refactor**
+
+**CRITICAL: The CURRENT STATE of the codebase is NOT an excuse.** If the code is currently in JavaScript but a feature says "migrate to TypeScript", your job is to CHANGE IT:
+- "The app is currently in JavaScript" → **That's WHY you're refactoring - change it to TypeScript**
+- "The codebase uses REST" → **That's WHY you're refactoring - change it to GraphQL**
+- "We're currently using X" → **That's WHY you're refactoring - migrate to Y**
+
+The whole point of refactoring is to change the current state. The current state is the PROBLEM, not an excuse.
+
+**The feature database is the living source of truth.** The original spec was a starting point. Refactoring features represent evolved requirements that supersede the original spec.
+
+For refactoring features:
+1. **Review** the existing code that needs refactoring
+2. **Implement** the refactoring changes (rename, restructure, extract, consolidate, migrate techstack, etc.)
+3. **Verify** existing functionality still works:
+   - Run `npm run build` or `tsc` - code must compile
+   - Run `npm run lint` - no new lint errors
+   - Run tests if available
+   - Do a quick regression check on related features
+4. **Mark as passing** when the refactoring is complete and verified
+
+**Refactoring verification criteria:**
+- Code compiles without errors
+- Lint passes
+- Tests pass (if applicable)
+- Related features still work
+
+**Example:** Feature says "Refactor authentication to use JWT tokens"
+- WRONG: "This is just refactoring, not a real feature" → skip
+- WRONG: "The spec doesn't mention JWT" → skip
+- RIGHT: Review current auth → implement JWT → verify login still works → mark passing
+
+**Example:** Feature says "Migrate codebase from JavaScript to TypeScript"
+- WRONG: "The spec says JavaScript, I can't change the techstack" → skip
+- WRONG: "This is too big a change" → skip
+- RIGHT: Add TypeScript config → convert files one by one → fix type errors → verify build passes → mark passing
+
+**Example:** Feature says "Extract shared utilities into a common module"
+- WRONG: "Requirements are unclear" → skip
+- RIGHT: Identify shared code → create module → update imports → verify everything compiles → mark passing
+
+**NO EXCUSES.** If the feature says to refactor, you refactor. Period.
 
 Once you've retrieved the feature, **mark it as in-progress** (if not already):
 
@@ -92,6 +166,14 @@ It's ok if you only complete one feature in this session, as there will be more 
 | "Component not built" | Skip | Build the component |
 | "No data to test with" | Skip | Create test data or build data entry flow |
 | "Feature X needs to be done first" | Skip | Build feature X as part of this feature |
+| "This is a refactoring feature" | Skip | Implement the refactoring, verify with build/lint/tests |
+| "Refactoring requirements are vague" | Skip | Interpret the intent, implement, verify code compiles |
+| "This is not a functional requirement" | Skip | ALL features are requirements - implement it |
+| "The spec says to use X technology" | Skip | Refactoring features override the spec - do the migration |
+| "This contradicts the original requirements" | Skip | Feature database is the living truth - implement it |
+| "This is too big a change" | Skip | Break it into steps and start - no change is too big |
+| "The app is currently in JavaScript" | Skip | That's WHY you're refactoring - change it to TypeScript |
+| "The codebase currently uses X" | Skip | That's the problem you're solving - migrate it |
 
 If a feature requires building other functionality first, **build that functionality**. You are the coding agent - your job is to make the feature work, not to defer it.
 
@@ -156,6 +238,9 @@ Use browser automation tools:
 - [ ] Deleted the test data - verified it's gone everywhere
 - [ ] NO unexplained data appeared (would indicate mock data)
 - [ ] Dashboard/counts reflect real numbers after my changes
+- [ ] **Ran extended mock data grep (STEP 5.6) - no hits in src/ (excluding tests)**
+- [ ] **Verified no globalThis, devStore, or dev-store patterns**
+- [ ] **Server restart test passed (STEP 5.7) - data persists across restart**
 
 #### Navigation Verification
 
@@ -174,10 +259,89 @@ Use browser automation tools:
 
 ### STEP 5.6: MOCK DATA DETECTION (Before marking passing)
 
-1. **Search code:** `grep -r "mockData\|fakeData\|TODO\|STUB" --include="*.ts" --include="*.tsx"`
-2. **Runtime test:** Create unique data (e.g., "TEST_12345") → verify in UI → delete → verify gone
-3. **Check database:** All displayed data must come from real DB queries
-4. If unexplained data appears, it's mock data - fix before marking passing.
+**Run ALL these grep checks. Any hits in src/ (excluding test files) require investigation:**
+
+```bash
+# 1. In-memory storage patterns (CRITICAL - catches dev-store)
+grep -r "globalThis\." --include="*.ts" --include="*.tsx" --include="*.js" src/
+grep -r "dev-store\|devStore\|DevStore\|mock-db\|mockDb" --include="*.ts" --include="*.tsx" --include="*.js" src/
+
+# 2. Mock data variables
+grep -r "mockData\|fakeData\|sampleData\|dummyData\|testData" --include="*.ts" --include="*.tsx" --include="*.js" src/
+
+# 3. TODO/incomplete markers
+grep -r "TODO.*real\|TODO.*database\|TODO.*API\|STUB\|MOCK" --include="*.ts" --include="*.tsx" --include="*.js" src/
+
+# 4. Development-only conditionals
+grep -r "isDevelopment\|isDev\|process\.env\.NODE_ENV.*development" --include="*.ts" --include="*.tsx" --include="*.js" src/
+
+# 5. In-memory collections as data stores
+grep -r "new Map\(\)\|new Set\(\)" --include="*.ts" --include="*.tsx" --include="*.js" src/ 2>/dev/null
+```
+
+**Rule:** If ANY grep returns results in production code → investigate → FIX before marking passing.
+
+**Runtime verification:**
+1. Create unique data (e.g., "TEST_12345") → verify in UI → delete → verify gone
+2. Check database directly - all displayed data must come from real DB queries
+3. If unexplained data appears, it's mock data - fix before marking passing.
+
+### STEP 5.7: SERVER RESTART PERSISTENCE TEST (MANDATORY for data features)
+
+**When required:** Any feature involving CRUD operations or data persistence.
+
+**This test is NON-NEGOTIABLE. It catches in-memory storage implementations that pass all other tests.**
+
+**Steps:**
+
+1. Create unique test data via UI or API (e.g., item named "RESTART_TEST_12345")
+2. Verify data appears in UI and API response
+
+3. **STOP the server completely:**
+   ```bash
+   # Kill by port (safer - only kills the dev server, not VS Code/Claude Code/etc.)
+   # Unix/macOS:
+   lsof -ti :${PORT:-3000} | xargs kill -TERM 2>/dev/null || true
+   sleep 3
+   lsof -ti :${PORT:-3000} | xargs kill -9 2>/dev/null || true
+   sleep 2
+
+   # Windows alternative (use if lsof not available):
+   # netstat -ano | findstr :${PORT:-3000} | findstr LISTENING
+   # taskkill /F /PID <pid_from_above> 2>nul
+
+   # Verify server is stopped
+   if lsof -ti :${PORT:-3000} > /dev/null 2>&1; then
+     echo "ERROR: Server still running on port ${PORT:-3000}!"
+     exit 1
+   fi
+   ```
+
+4. **RESTART the server:**
+   ```bash
+   ./init.sh &
+   sleep 15  # Allow server to fully start
+   # Verify server is responding
+   if ! curl -f http://localhost:${PORT:-3000}/api/health && ! curl -f http://localhost:${PORT:-3000}; then
+     echo "ERROR: Server failed to start after restart"
+     exit 1
+   fi
+   ```
+
+5. **Query for test data - it MUST still exist**
+   - Via UI: Navigate to data location, verify data appears
+   - Via API: `curl http://localhost:${PORT:-3000}/api/items` - verify data in response
+
+6. **If data is GONE:** Implementation uses in-memory storage → CRITICAL FAIL
+   - Run all grep commands from STEP 5.6 to identify the mock pattern
+   - You MUST fix the in-memory storage implementation before proceeding
+   - Replace in-memory storage with real database queries
+
+7. **Clean up test data** after successful verification
+
+**Why this test exists:** In-memory stores like `globalThis.devStore` pass all other tests because data persists during a single server run. Only a full server restart reveals this bug. Skipping this step WILL allow dev-store implementations to slip through.
+
+**YOLO Mode Note:** Even in YOLO mode, this verification is MANDATORY for data features. Use curl instead of browser automation.
 
 ### STEP 6: UPDATE FEATURE STATUS (CAREFULLY!)
 
@@ -302,6 +466,17 @@ When building applications that require email functionality (password resets, em
 3. Use that link directly to verify the functionality works
 
 This allows you to fully test email-dependent flows without needing external email services.
+
+---
+
+## TOKEN EFFICIENCY
+
+To maximize context window usage:
+
+- **Don't read files unnecessarily** - Feature details from `feature_get_by_id` contain everything you need
+- **Be concise** - Short, focused responses save tokens for actual work
+- **Use `feature_get_summary`** for status checks (lighter than `feature_get_by_id`)
+- **Avoid re-reading large files** - Read once, remember the content
 
 ---
 

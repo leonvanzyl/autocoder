@@ -11,12 +11,15 @@ import logging
 import os
 import platform
 import shutil
+import subprocess
 import threading
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Callable, Set
+
+import psutil
 
 logger = logging.getLogger(__name__)
 
@@ -464,17 +467,59 @@ class TerminalSession:
         logger.info(f"Terminal stopped for {self.project_name}")
 
     async def _stop_windows(self) -> None:
-        """Stop Windows PTY process."""
+        """Stop Windows PTY process and all child processes.
+
+        We use a two-phase approach:
+        1. psutil to gracefully terminate the process tree
+        2. Windows taskkill /T /F as a fallback to catch any orphans
+        """
         if self._pty_process is None:
             return
 
+        pid = None
         try:
+            # Get the PID before any termination attempts
+            if hasattr(self._pty_process, 'pid'):
+                pid = self._pty_process.pid
+
+            # Phase 1: Use psutil to terminate process tree gracefully
+            if pid:
+                try:
+                    parent = psutil.Process(pid)
+                    children = parent.children(recursive=True)
+
+                    # Terminate children first
+                    for child in children:
+                        try:
+                            child.terminate()
+                        except (psutil.NoSuchProcess, psutil.AccessDenied):
+                            pass
+
+                    # Wait briefly for graceful termination
+                    psutil.wait_procs(children, timeout=2)
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pass  # Parent already gone
+
+            # Terminate the PTY process itself
             if self._pty_process.isalive():
                 self._pty_process.terminate()
-                # Give it a moment to terminate
                 await asyncio.sleep(0.1)
                 if self._pty_process.isalive():
                     self._pty_process.kill()
+
+            # Phase 2: Use taskkill as a final cleanup to catch any orphaned processes
+            # that psutil may have missed (e.g., conhost.exe, deeply nested shells)
+            if pid:
+                try:
+                    result = subprocess.run(
+                        ["taskkill", "/F", "/T", "/PID", str(pid)],
+                        capture_output=True,
+                        timeout=5,
+                    )
+                    logger.debug(f"taskkill cleanup for PID {pid}: returncode={result.returncode}")
+                except Exception as e:
+                    logger.debug(f"taskkill cleanup for PID {pid}: {e}")
+
         except Exception as e:
             logger.warning(f"Error terminating Windows PTY: {e}")
         finally:

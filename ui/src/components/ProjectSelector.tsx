@@ -120,7 +120,7 @@ export function ProjectSelector({
                   <Button
                     variant="ghost"
                     size="icon-xs"
-                    onClick={(e) => handleDeleteClick(e, project.name)}
+                    onClick={(e: React.MouseEvent) => handleDeleteClick(e, project.name)}
                     className="text-muted-foreground hover:text-destructive"
                   >
                     <Trash2 size={14} />

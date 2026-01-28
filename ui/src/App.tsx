@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useQueryClient, useQuery } from '@tanstack/react-query'
-import { useProjects, useFeatures, useAgentStatus, useSettings } from './hooks/useProjects'
+import { useProjects, useFeatures, useAgentStatus, useSettings, useUpdateSettings } from './hooks/useProjects'
 import { useProjectWebSocket } from './hooks/useWebSocket'
 import { useFeatureSound } from './hooks/useFeatureSound'
 import { useCelebration } from './hooks/useCelebration'
@@ -21,14 +21,15 @@ import { AssistantPanel } from './components/AssistantPanel'
 import { ExpandProjectModal } from './components/ExpandProjectModal'
 import { SpecCreationChat } from './components/SpecCreationChat'
 import { SettingsModal } from './components/SettingsModal'
+import { IDESelectionModal } from './components/IDESelectionModal'
 import { DevServerControl } from './components/DevServerControl'
 import { ViewToggle, type ViewMode } from './components/ViewToggle'
 import { DependencyGraph } from './components/DependencyGraph'
 import { KeyboardShortcutsHelp } from './components/KeyboardShortcutsHelp'
 import { ThemeSelector } from './components/ThemeSelector'
-import { getDependencyGraph } from './lib/api'
-import { Loader2, Settings, Moon, Sun } from 'lucide-react'
-import type { Feature } from './lib/types'
+import { getDependencyGraph, openProjectInIDE } from './lib/api'
+import { Loader2, Settings, Moon, Sun, ExternalLink } from 'lucide-react'
+import type { Feature, IDEType } from './lib/types'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -57,6 +58,8 @@ function App() {
   const [showKeyboardHelp, setShowKeyboardHelp] = useState(false)
   const [isSpecCreating, setIsSpecCreating] = useState(false)
   const [showSpecChat, setShowSpecChat] = useState(false)  // For "Create Spec" button in empty kanban
+  const [showIDESelection, setShowIDESelection] = useState(false)
+  const [isOpeningIDE, setIsOpeningIDE] = useState(false)
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
     try {
       const stored = localStorage.getItem(VIEW_MODE_KEY)
@@ -70,6 +73,7 @@ function App() {
   const { data: projects, isLoading: projectsLoading } = useProjects()
   const { data: features } = useFeatures(selectedProject)
   const { data: settings } = useSettings()
+  const updateSettings = useUpdateSettings()
   useAgentStatus(selectedProject) // Keep polling for status updates
   const wsState = useProjectWebSocket(selectedProject)
   const { theme, setTheme, darkMode, toggleDarkMode, themes } = useTheme()
@@ -235,6 +239,41 @@ function App() {
     progress.percentage = Math.round((progress.passing / progress.total) * 100 * 10) / 10
   }
 
+  // Handle opening project in IDE
+  const handleOpenInIDE = useCallback(async (ide?: IDEType) => {
+    if (!selectedProject) return
+    
+    const ideToUse = ide ?? settings?.preferred_ide
+    if (!ideToUse) {
+      setShowIDESelection(true)
+      return
+    }
+    
+    setIsOpeningIDE(true)
+    try {
+      await openProjectInIDE(selectedProject, ideToUse)
+    } catch (error) {
+      console.error('Failed to open project in IDE:', error)
+    } finally {
+      setIsOpeningIDE(false)
+    }
+  }, [selectedProject, settings?.preferred_ide])
+
+  // Handle IDE selection from modal
+  const handleIDESelect = useCallback(async (ide: IDEType, remember: boolean) => {
+    if (remember) {
+      try {
+        await updateSettings.mutateAsync({ preferred_ide: ide })
+      } catch (error) {
+        console.error('Failed to save IDE preference:', error)
+        // Continue with opening IDE even if save failed
+      }
+    }
+    
+    setShowIDESelection(false)
+    handleOpenInIDE(ide)
+  }, [handleOpenInIDE, updateSettings])
+
   if (!setupComplete) {
     return <SetupWizard onComplete={() => setSetupComplete(true)} />
   }
@@ -281,6 +320,17 @@ function App() {
                     aria-label="Open Settings"
                   >
                     <Settings size={18} />
+                  </Button>
+
+                  <Button
+                    onClick={() => handleOpenInIDE()}
+                    variant="outline"
+                    size="sm"
+                    title="Open in IDE"
+                    aria-label="Open project in IDE"
+                    disabled={isOpeningIDE}
+                  >
+                    <ExternalLink size={18} />
                   </Button>
 
                   {/* Ollama Mode Indicator */}
@@ -504,6 +554,13 @@ function App() {
 
       {/* Settings Modal */}
       <SettingsModal isOpen={showSettings} onClose={() => setShowSettings(false)} />
+
+      {/* IDE Selection Modal */}
+      <IDESelectionModal
+        isOpen={showIDESelection}
+        onClose={() => setShowIDESelection(false)}
+        onSelect={handleIDESelect}
+      />
 
       {/* Keyboard Shortcuts Help */}
       <KeyboardShortcutsHelp isOpen={showKeyboardHelp} onClose={() => setShowKeyboardHelp(false)} />

@@ -27,6 +27,8 @@ from ..services.terminal_manager import (
     rename_terminal,
     stop_terminal_session,
 )
+from ..utils.auth import reject_unauthenticated_websocket
+from ..utils.validation import is_valid_project_name
 
 # Add project root to path for registry import
 _root = Path(__file__).parent.parent.parent
@@ -51,22 +53,6 @@ class TerminalCloseCode:
 def _get_project_path(project_name: str) -> Path | None:
     """Get project path from registry."""
     return registry_get_project_path(project_name)
-
-
-def validate_project_name(name: str) -> bool:
-    """
-    Validate project name to prevent path traversal attacks.
-
-    Allows only alphanumeric characters, underscores, and hyphens.
-    Maximum length of 50 characters.
-
-    Args:
-        name: The project name to validate
-
-    Returns:
-        True if valid, False otherwise
-    """
-    return bool(re.match(r"^[a-zA-Z0-9_-]{1,50}$", name))
 
 
 def validate_terminal_id(terminal_id: str) -> bool:
@@ -117,7 +103,7 @@ async def list_project_terminals(project_name: str) -> list[TerminalInfoResponse
     Returns:
         List of terminal info objects
     """
-    if not validate_project_name(project_name):
+    if not is_valid_project_name(project_name):
         raise HTTPException(status_code=400, detail="Invalid project name")
 
     project_dir = _get_project_path(project_name)
@@ -150,7 +136,7 @@ async def create_project_terminal(
     Returns:
         The created terminal info
     """
-    if not validate_project_name(project_name):
+    if not is_valid_project_name(project_name):
         raise HTTPException(status_code=400, detail="Invalid project name")
 
     project_dir = _get_project_path(project_name)
@@ -176,7 +162,7 @@ async def rename_project_terminal(
     Returns:
         The updated terminal info
     """
-    if not validate_project_name(project_name):
+    if not is_valid_project_name(project_name):
         raise HTTPException(status_code=400, detail="Invalid project name")
 
     if not validate_terminal_id(terminal_id):
@@ -208,7 +194,7 @@ async def delete_project_terminal(project_name: str, terminal_id: str) -> dict:
     Returns:
         Success message
     """
-    if not validate_project_name(project_name):
+    if not is_valid_project_name(project_name):
         raise HTTPException(status_code=400, detail="Invalid project name")
 
     if not validate_terminal_id(terminal_id):
@@ -249,8 +235,12 @@ async def terminal_websocket(websocket: WebSocket, project_name: str, terminal_i
     - {"type": "pong"} - Keep-alive response
     - {"type": "error", "message": "..."} - Error message
     """
+    # Check authentication if Basic Auth is enabled
+    if not await reject_unauthenticated_websocket(websocket):
+        return
+
     # Validate project name
-    if not validate_project_name(project_name):
+    if not is_valid_project_name(project_name):
         await websocket.close(
             code=TerminalCloseCode.INVALID_PROJECT_NAME, reason="Invalid project name"
         )

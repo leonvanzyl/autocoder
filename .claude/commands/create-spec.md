@@ -95,6 +95,27 @@ Ask the user about their involvement preference:
 
 **For Detailed Mode users**, ask specific tech questions about frontend, backend, database, etc.
 
+### Phase 3b: Database Requirements (MANDATORY)
+
+**Always ask this question regardless of mode:**
+
+> "One foundational question about data storage:
+>
+> **Does this application need to store user data persistently?**
+>
+> 1. **Yes, needs a database** - Users create, save, and retrieve data (most apps)
+> 2. **No, stateless** - Pure frontend, no data storage needed (calculators, static sites)
+> 3. **Not sure** - Let me describe what I need and you decide"
+
+**Branching logic:**
+
+- **If "Yes" or "Not sure"**: Continue normally. The spec will include database in tech stack and the initializer will create 5 mandatory Infrastructure features (indices 0-4) to verify database connectivity and persistence.
+
+- **If "No, stateless"**: Note this in the spec. Skip database from tech stack. Infrastructure features will be simplified (no database persistence tests). Mark this clearly:
+  ```xml
+  <database>none - stateless application</database>
+  ```
+
 ## Phase 4: Features (THE MAIN PHASE)
 
 This is where you spend most of your time. Ask questions in plain language that anyone can answer.
@@ -207,11 +228,22 @@ After gathering all features, **you** (the agent) should tally up the testable f
 
 **Typical ranges for reference:**
 
-- **Simple apps** (todo list, calculator, notes): ~20-50 features
-- **Medium apps** (blog, task manager with auth): ~100 features
-- **Advanced apps** (e-commerce, CRM, full SaaS): ~150-200 features
+- **Simple apps** (todo list, calculator, notes): ~25-55 features (includes 5 infrastructure)
+- **Medium apps** (blog, task manager with auth): ~105 features (includes 5 infrastructure)
+- **Advanced apps** (e-commerce, CRM, full SaaS): ~155-205 features (includes 5 infrastructure)
 
 These are just reference points - your actual count should come from the requirements discussed.
+
+**MANDATORY: Infrastructure Features**
+
+If the app requires a database (Phase 3b answer was "Yes" or "Not sure"), you MUST include 5 Infrastructure features (indices 0-4):
+1. Database connection established
+2. Database schema applied correctly
+3. Data persists across server restart
+4. No mock data patterns in codebase
+5. Backend API queries real database
+
+These features ensure the coding agent implements a real database, not mock data or in-memory storage.
 
 **How to count features:**
 For each feature area discussed, estimate the number of discrete, testable behaviors:
@@ -225,16 +257,19 @@ For each feature area discussed, estimate the number of discrete, testable behav
 
 > "Based on what we discussed, here's my feature breakdown:
 >
+> - **Infrastructure (required)**: 5 features (database setup, persistence verification)
 > - [Category 1]: ~X features
 > - [Category 2]: ~Y features
 > - [Category 3]: ~Z features
 > - ...
 >
-> **Total: ~N features**
+> **Total: ~N features** (including 5 infrastructure)
 >
 > Does this seem right, or should I adjust?"
 
 Let the user confirm or adjust. This becomes your `feature_count` for the spec.
+
+**Important:** The first 5 features (indices 0-4) created by the initializer MUST be the Infrastructure category with no dependencies. All other features depend on these.
 
 ## Phase 5: Technical Details (DERIVED OR DISCUSSED)
 
