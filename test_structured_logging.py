@@ -156,7 +156,8 @@ class TestStructuredLogger(TestCase):
         query = get_log_query(self.project_dir)
         logs = query.query(level="warning")
         self.assertEqual(len(logs), 1)
-        self.assertIn("warning", logs[0]["message"].lower())
+        # Assert on level field, not message content (more robust)
+        self.assertEqual(logs[0]["level"], "warning")
 
     def test_log_error(self):
         """Test error level logging."""

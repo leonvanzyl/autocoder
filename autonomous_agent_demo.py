@@ -52,6 +52,7 @@ load_dotenv()
 
 from agent import run_autonomous_agent
 from registry import DEFAULT_MODEL, get_project_path
+from structured_logging import get_logger
 
 
 def safe_asyncio_run(coro):
@@ -216,6 +217,9 @@ def main() -> None:
     project_dir_input = args.project_dir
     project_dir = Path(project_dir_input)
 
+    # Logger will be initialized after project_dir is resolved
+    logger = None
+
     if project_dir.is_absolute():
         # Absolute path provided - use directly
         if not project_dir.exists():
@@ -230,6 +234,17 @@ def main() -> None:
             print(f"Error: Project '{project_dir_input}' not found in registry")
             print("Use an absolute path or register the project first.")
             return
+
+    # Initialize logger now that project_dir is resolved
+    logger = get_logger(project_dir, agent_id="entry-point", console_output=False)
+    logger.info(
+        "Script started",
+        input_path=project_dir_input,
+        resolved_path=str(project_dir),
+        agent_type=args.agent_type,
+        concurrency=args.concurrency,
+        yolo_mode=args.yolo,
+    )
 
     try:
         if args.agent_type:
@@ -266,8 +281,12 @@ def main() -> None:
     except KeyboardInterrupt:
         print("\n\nInterrupted by user")
         print("To resume, run the same command again")
+        if logger:
+            logger.info("Interrupted by user")
     except Exception as e:
         print(f"\nFatal error: {e}")
+        if logger:
+            logger.error("Fatal error", error_type=type(e).__name__, message=str(e)[:200])
         raise
 
 

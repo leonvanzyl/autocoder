@@ -17,6 +17,7 @@ from claude_agent_sdk.types import HookContext, HookInput, HookMatcher, SyncHook
 from dotenv import load_dotenv
 
 from security import bash_security_hook
+from structured_logging import get_logger
 
 # Module logger
 logger = logging.getLogger(__name__)
@@ -102,7 +103,7 @@ FEATURE_MCP_TOOLS = [
     "mcp__features__feature_create_bulk",
     "mcp__features__feature_create",
     "mcp__features__feature_clear_in_progress",
-    "mcp__features__feature_release_testing",  # Release testing claim
+    "mcp__features__feature_verify_quality",  # Run quality checks (lint, type-check)
     # Dependency management
     "mcp__features__feature_add_dependency",
     "mcp__features__feature_remove_dependency",
@@ -187,6 +188,9 @@ def create_client(
     Note: Authentication is handled by start.bat/start.sh before this runs.
     The Claude SDK auto-detects credentials from the Claude CLI configuration
     """
+    # Initialize logger for client configuration events
+    logger = get_logger(project_dir, agent_id="client", console_output=False)
+
     # Build allowed tools list based on mode
     # In YOLO mode, exclude Playwright tools for faster prototyping
     allowed_tools = [*BUILTIN_TOOLS, *FEATURE_MCP_TOOLS]
@@ -233,10 +237,11 @@ def create_client(
     with open(settings_file, "w") as f:
         json.dump(security_settings, f, indent=2)
 
-    logger.info(f"Created security settings at {settings_file}")
-    logger.debug("  Sandbox enabled (OS-level bash isolation)")
-    logger.debug(f"  Filesystem restricted to: {project_dir.resolve()}")
-    logger.debug("  Bash commands restricted to allowlist (see security.py)")
+    logger.info("Settings file written", file_path=str(settings_file))
+    print(f"Created security settings at {settings_file}")
+    print("   - Sandbox enabled (OS-level bash isolation)")
+    print(f"   - Filesystem restricted to: {project_dir.resolve()}")
+    print("   - Bash commands restricted to allowlist (see security.py)")
     if yolo_mode:
         logger.info("  MCP servers: features (database) - YOLO MODE (no Playwright)")
     else:
@@ -310,7 +315,8 @@ def create_client(
     is_ollama = "localhost:11434" in base_url or "127.0.0.1:11434" in base_url
 
     if sdk_env:
-        logger.info(f"API overrides: {', '.join(sdk_env.keys())}")
+        print(f"   - API overrides: {', '.join(sdk_env.keys())}")
+        logger.info("API overrides configured", is_ollama=is_ollama, overrides=list(sdk_env.keys()))
         if is_ollama:
             logger.info("Ollama Mode: Using local models")
         elif "ANTHROPIC_BASE_URL" in sdk_env:
@@ -362,6 +368,16 @@ def create_client(
         #     }
         # }
         return SyncHookJSONOutput()
+
+    # Log client creation
+    logger.info(
+        "Client created",
+        model=model,
+        yolo_mode=yolo_mode,
+        agent_id=agent_id,
+        is_alternative_api=is_alternative_api,
+        max_turns=1000,
+    )
 
     return ClaudeSDKClient(
         options=ClaudeAgentOptions(

@@ -369,17 +369,24 @@ Use the feature_mark_passing tool with feature_id=42
 
 ### STEP 7: COMMIT YOUR PROGRESS
 
-Make a descriptive git commit:
+Make a descriptive git commit.
+
+**Git Commit Rules:**
+- ALWAYS use simple `-m` flag for commit messages
+- NEVER use heredocs (`cat <<EOF` or `<<'EOF'`) - they fail in sandbox mode with "can't create temp file for here document: operation not permitted"
+- For multi-line content, use alternatives like `echo -e "line1\nline2"` or `printf '%s\n' "line1" "line2"`
+- For multi-line messages, use multiple `-m` flags:
 
 ```bash
 git add .
-git commit -m "Implement [feature name] - verified end-to-end
+git commit -m "Implement [feature name] - verified end-to-end" -m "- Added [specific changes]" -m "- Tested with browser automation" -m "- Marked feature #X as passing"
+```
 
-- Added [specific changes]
-- Tested with browser automation
-- Marked feature #X as passing
-- Screenshots in verification/ directory
-"
+Or use a single descriptive message:
+
+```bash
+git add .
+git commit -m "feat: implement [feature name] with browser verification"
 ```
 
 ### STEP 8: UPDATE PROGRESS NOTES
@@ -409,6 +416,20 @@ Before context fills up:
 Use Playwright MCP tools (`browser_*`) for UI verification. Key tools: `navigate`, `click`, `type`, `fill_form`, `take_screenshot`, `console_messages`, `network_requests`. All tools have auto-wait built in.
 
 Test like a human user with mouse and keyboard. Use `browser_console_messages` to detect errors. Don't bypass UI with JavaScript evaluation.
+
+### Browser File Upload Pattern
+
+When uploading files via browser automation:
+1. First click the file input element to open the file chooser dialog
+2. Wait for the modal dialog to appear (use `browser_wait_for` if needed)
+3. Then call `browser_file_upload` with the file path
+
+**WRONG:** Call `browser_file_upload` immediately without opening the dialog first
+**RIGHT:** Click file input → wait for dialog → call `browser_file_upload`
+
+### Unavailable Browser Tools
+
+- `browser_run_code` - DO NOT USE. This tool causes the Playwright MCP server to crash. Use `browser_evaluate` instead for executing JavaScript in the browser context.
 
 ---
 

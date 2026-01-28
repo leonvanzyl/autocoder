@@ -15,7 +15,7 @@ Supports:
 import json
 import shutil
 import subprocess
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import TypedDict
 
@@ -139,7 +139,9 @@ def _detect_type_checker(project_dir: Path) -> tuple[str, list[str]] | None:
         if (project_dir / "node_modules/.bin/tsc").exists():
             return ("tsc", ["node_modules/.bin/tsc", "--noEmit"])
         if shutil.which("npx"):
-            return ("tsc", ["npx", "tsc", "--noEmit"])
+            # Use --no-install to fail fast if tsc is not locally installed
+            # rather than prompting/auto-downloading
+            return ("tsc", ["npx", "--no-install", "tsc", "--noEmit"])
 
     # Python (mypy)
     if (project_dir / "pyproject.toml").exists() or (project_dir / "setup.py").exists():
@@ -291,9 +293,9 @@ def run_custom_script(
 
 def verify_quality(
     project_dir: Path,
-    run_lint: bool = True,
-    run_type_check: bool = True,
-    run_custom: bool = True,
+    do_lint: bool = True,
+    do_type_check: bool = True,
+    do_custom: bool = True,
     custom_script_path: str | None = None,
 ) -> QualityGateResult:
     """
@@ -301,9 +303,9 @@ def verify_quality(
 
     Args:
         project_dir: Path to the project directory
-        run_lint: Whether to run lint check
-        run_type_check: Whether to run type check
-        run_custom: Whether to run custom script
+        do_lint: Whether to run lint check
+        do_type_check: Whether to run type check
+        do_custom: Whether to run custom script
         custom_script_path: Path to custom script (optional)
 
     Returns:
@@ -312,19 +314,19 @@ def verify_quality(
     checks: dict[str, QualityCheckResult] = {}
     all_passed = True
 
-    if run_lint:
+    if do_lint:
         lint_result = run_lint_check(project_dir)
         checks["lint"] = lint_result
         if not lint_result["passed"]:
             all_passed = False
 
-    if run_type_check:
+    if do_type_check:
         type_result = run_type_check(project_dir)
         checks["type_check"] = type_result
         if not type_result["passed"]:
             all_passed = False
 
-    if run_custom:
+    if do_custom:
         custom_result = run_custom_script(
             project_dir,
             custom_script_path,
@@ -347,7 +349,7 @@ def verify_quality(
 
     return {
         "passed": all_passed,
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "checks": checks,
         "summary": summary,
     }
