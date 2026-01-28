@@ -8,6 +8,7 @@ Provides REST API, WebSocket, and static file serving.
 
 import asyncio
 import base64
+import binascii
 import os
 import shutil
 import sys
@@ -218,7 +219,7 @@ if is_basic_auth_enabled():
         try:
             # Decode credentials
             encoded_credentials = auth_header[6:]  # Remove "Basic "
-            decoded = base64.b64decode(encoded_credentials).decode("utf-8")
+            decoded = base64.b64decode(encoded_credentials, validate=True).decode("utf-8")
             username, password = decoded.split(":", 1)
 
             # Verify using constant-time comparison
@@ -228,7 +229,7 @@ if is_basic_auth_enabled():
                     content="Invalid credentials",
                     headers={"WWW-Authenticate": 'Basic realm="Autocoder"'},
                 )
-        except (ValueError, UnicodeDecodeError):
+        except (ValueError, UnicodeDecodeError, binascii.Error):
             return Response(
                 status_code=401,
                 content="Invalid authorization header",
