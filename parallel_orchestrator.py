@@ -448,6 +448,9 @@ class ParallelOrchestrator:
         if passing_count == 0:
             return
 
+        # Determine desired testing agent count (respecting max_concurrency)
+        desired = min(self.testing_agent_ratio, self.max_concurrency)
+
         # Don't spawn testing agents if all features are already complete
         if self.get_all_complete():
             return

@@ -249,6 +249,10 @@ class AssistantChatSession:
 
         Creates a new conversation if none exists, then sends an initial greeting.
         For resumed conversations, skips the greeting since history is loaded from DB.
+        
+        Args:
+            skip_greeting: If True, skip sending the greeting even for new conversations.
+        
         Yields message chunks as they stream in.
 
         Args:
@@ -377,9 +381,18 @@ class AssistantChatSession:
 
                 yield {"type": "text", "content": greeting}
                 yield {"type": "response_done"}
-            except Exception as e:
-                logger.exception("Failed to send greeting")
-                yield {"type": "error", "content": f"Failed to start conversation: {str(e)}"}
+            else:
+                try:
+                    greeting = f"Hello! I'm your project assistant for **{self.project_name}**. I can help you understand the codebase, manage features (create, edit, delete, and deprioritize), and answer questions about the project. What would you like to do?"
+
+                    # Store the greeting in the database
+                    add_message(self.project_dir, self.conversation_id, "assistant", greeting)
+
+                    yield {"type": "text", "content": greeting}
+                    yield {"type": "response_done"}
+                except Exception as e:
+                    logger.exception("Failed to send greeting")
+                    yield {"type": "error", "content": f"Failed to start conversation: {str(e)}"}
         else:
             # For resumed conversations, history will be loaded on first message
             # _history_loaded stays False so send_message() will include history

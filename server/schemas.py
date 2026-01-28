@@ -20,6 +20,9 @@ if str(_root) not in sys.path:
 
 from registry import DEFAULT_MODEL, VALID_MODELS
 
+# Valid IDE choices for preferred_ide setting
+VALID_IDES = ['vscode', 'cursor', 'antigravity']
+
 # ============================================================================
 # Project Schemas
 # ============================================================================

@@ -242,6 +242,21 @@ class ExpandChatSession:
             self._client_entered = True
         except Exception:
             logger.exception("Failed to create Claude client")
+            # Clean up temp files created earlier in start()
+            if self._settings_file and self._settings_file.exists():
+                try:
+                    self._settings_file.unlink()
+                except Exception as e:
+                    logger.warning(f"Error removing settings file: {e}")
+                finally:
+                    self._settings_file = None
+            if self._mcp_config_file and self._mcp_config_file.exists():
+                try:
+                    self._mcp_config_file.unlink()
+                except Exception as e:
+                    logger.warning(f"Error removing MCP config file: {e}")
+                finally:
+                    self._mcp_config_file = None
             yield {
                 "type": "error",
                 "content": "Failed to initialize Claude"

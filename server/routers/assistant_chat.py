@@ -220,7 +220,8 @@ async def assistant_chat_websocket(websocket: WebSocket, project_name: str):
     Message protocol:
 
     Client -> Server:
-    - {"type": "start", "conversation_id": int | null} - Start/resume session
+    - {"type": "start", "conversation_id": int | null} - Start session
+    - {"type": "resume", "conversation_id": int} - Resume session without greeting
     - {"type": "message", "content": "..."} - Send user message
     - {"type": "ping"} - Keep-alive ping
 

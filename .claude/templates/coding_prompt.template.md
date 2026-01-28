@@ -32,6 +32,9 @@ for f in knowledge/*.md; do [ -f "$f" ] && echo "=== $f ===" && cat "$f"; done 2
 
 Then use MCP tools:
 
+```bash
+# Read all knowledge files if the directory exists
+for f in knowledge/*.md; do [ -f "$f" ] && echo "=== $f ===" && cat "$f"; done 2>/dev/null
 ```
 # 5. Get progress statistics
 Use the feature_get_stats tool

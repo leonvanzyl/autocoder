@@ -116,6 +116,10 @@ def kill_process_tree(proc: subprocess.Popen, timeout: float = 5.0) -> KillResul
             len(gone), len(still_alive)
         )
 
+        # On Windows, use taskkill while the parent still exists if any children remain
+        if IS_WINDOWS and still_alive:
+            _kill_windows_process_tree_taskkill(proc.pid)
+
         # Force kill any remaining children
         for child in still_alive:
             try:

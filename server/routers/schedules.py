@@ -141,6 +141,7 @@ async def create_schedule(project_name: str, data: ScheduleCreate):
             enabled=data.enabled,
             yolo_mode=data.yolo_mode,
             model=data.model,
+            max_concurrency=data.max_concurrency,
         )
         db.add(schedule)
         db.commit()

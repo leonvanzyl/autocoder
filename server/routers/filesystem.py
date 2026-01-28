@@ -457,6 +457,8 @@ async def create_directory(request: CreateDirectoryRequest):
     """
     # Validate directory name
     name = request.name.strip()
+    # Normalize to prevent Unicode bypass attacks
+    name = normalize_name(name)
     if not name:
         raise HTTPException(status_code=400, detail="Directory name cannot be empty")
 

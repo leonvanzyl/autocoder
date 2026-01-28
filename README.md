@@ -272,7 +272,7 @@ npm run build    # Builds to ui/dist/
 
 ### Tech Stack
 
-- React 18 with TypeScript
+- React 19 with TypeScript
 - TanStack Query for data fetching
 - Tailwind CSS v4 with neobrutalism design
 - Radix UI components
