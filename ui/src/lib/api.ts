@@ -35,6 +35,9 @@ import type {
 
 const API_BASE = '/api'
 
+// Export for hooks that make direct fetch calls with full paths
+export const API_BASE_URL = ''
+
 async function fetchJSON<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${url}`, {
     ...options,

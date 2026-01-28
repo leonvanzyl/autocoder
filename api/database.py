@@ -396,3 +396,210 @@ def get_db() -> Session:
         yield db
     finally:
         db.close()
+
+
+# =============================================================================
+# Atomic Transaction Helpers for Parallel Mode
+# =============================================================================
+# These helpers prevent database corruption when multiple processes access the
+# same SQLite database concurrently. They use IMMEDIATE transactions which
+# acquire write locks at the start (preventing stale reads) and atomic
+# UPDATE ... WHERE clauses (preventing check-then-modify races).
+
+
+from contextlib import contextmanager
+
+
+@contextmanager
+def atomic_transaction(session_maker, isolation_level: str = "IMMEDIATE"):
+    """Context manager for atomic SQLite transactions.
+
+    Uses BEGIN IMMEDIATE to acquire a write lock immediately, preventing
+    stale reads in read-modify-write patterns. This is essential for
+    preventing race conditions in parallel mode.
+
+    Args:
+        session_maker: SQLAlchemy sessionmaker
+        isolation_level: "IMMEDIATE" (default) or "EXCLUSIVE"
+            - IMMEDIATE: Acquires write lock at transaction start
+            - EXCLUSIVE: Also blocks other readers (rarely needed)
+
+    Yields:
+        SQLAlchemy session with automatic commit/rollback
+
+    Example:
+        with atomic_transaction(session_maker) as session:
+            # All reads in this block are protected by write lock
+            feature = session.query(Feature).filter(...).first()
+            feature.priority = new_priority
+            # Commit happens automatically on exit
+    """
+    session = session_maker()
+    try:
+        # Start transaction with write lock
+        session.execute(text(f"BEGIN {isolation_level}"))
+        yield session
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+
+
+def atomic_claim_feature(session_maker, feature_id: int) -> dict:
+    """Atomically claim a feature for implementation.
+
+    Uses atomic UPDATE ... WHERE to prevent race conditions where two agents
+    try to claim the same feature simultaneously.
+
+    Args:
+        session_maker: SQLAlchemy sessionmaker
+        feature_id: ID of the feature to claim
+
+    Returns:
+        Dict with:
+        - success: True if claimed, False if already claimed/passing/not found
+        - feature: Feature dict if claimed successfully
+        - error: Error message if not claimed
+    """
+    session = session_maker()
+    try:
+        # Atomic claim: only succeeds if feature is not already claimed or passing
+        result = session.execute(text("""
+            UPDATE features
+            SET in_progress = 1
+            WHERE id = :id AND passes = 0 AND in_progress = 0
+        """), {"id": feature_id})
+        session.commit()
+
+        if result.rowcount == 0:
+            # Check why the claim failed
+            feature = session.query(Feature).filter(Feature.id == feature_id).first()
+            if feature is None:
+                return {"success": False, "error": f"Feature {feature_id} not found"}
+            if feature.passes:
+                return {"success": False, "error": f"Feature {feature_id} already passing"}
+            if feature.in_progress:
+                return {"success": False, "error": f"Feature {feature_id} already in progress"}
+            return {"success": False, "error": "Claim failed for unknown reason"}
+
+        # Fetch the claimed feature
+        feature = session.query(Feature).filter(Feature.id == feature_id).first()
+        return {"success": True, "feature": feature.to_dict()}
+    finally:
+        session.close()
+
+
+def atomic_mark_passing(session_maker, feature_id: int) -> dict:
+    """Atomically mark a feature as passing.
+
+    Uses atomic UPDATE with BEGIN IMMEDIATE to ensure consistency and
+    prevent race conditions in parallel mode.
+
+    Args:
+        session_maker: SQLAlchemy sessionmaker
+        feature_id: ID of the feature to mark passing
+
+    Returns:
+        Dict with success status and feature name
+    """
+    try:
+        with atomic_transaction(session_maker) as session:
+            # Get the feature name for the response (protected by write lock)
+            feature = session.query(Feature).filter(Feature.id == feature_id).first()
+            if feature is None:
+                return {"success": False, "error": f"Feature {feature_id} not found"}
+
+            name = feature.name
+
+            # Atomic update
+            session.execute(text("""
+                UPDATE features
+                SET passes = 1, in_progress = 0
+                WHERE id = :id
+            """), {"id": feature_id})
+
+            return {"success": True, "feature_id": feature_id, "name": name}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def atomic_update_priority_to_end(session_maker, feature_id: int) -> dict:
+    """Atomically move a feature to the end of the queue.
+
+    Uses BEGIN IMMEDIATE and a subquery to atomically calculate MAX(priority) + 1
+    and update in a single statement, preventing race conditions where two features
+    get the same priority.
+
+    Args:
+        session_maker: SQLAlchemy sessionmaker
+        feature_id: ID of the feature to move
+
+    Returns:
+        Dict with old_priority and new_priority
+    """
+    try:
+        with atomic_transaction(session_maker) as session:
+            # Get current state (protected by write lock)
+            feature = session.query(Feature).filter(Feature.id == feature_id).first()
+            if feature is None:
+                return {"success": False, "error": f"Feature {feature_id} not found"}
+            if feature.passes:
+                return {"success": False, "error": "Cannot skip a feature that is already passing"}
+
+            old_priority = feature.priority
+            name = feature.name
+
+            # Atomic update: set priority to max+1 in a single statement
+            session.execute(text("""
+                UPDATE features
+                SET priority = (SELECT COALESCE(MAX(priority), 0) + 1 FROM features),
+                    in_progress = 0
+                WHERE id = :id
+            """), {"id": feature_id})
+
+            # Flush to ensure update is visible, then fetch new priority
+            session.flush()
+            result = session.execute(
+                text("SELECT priority FROM features WHERE id = :id"),
+                {"id": feature_id}
+            ).fetchone()
+            new_priority = result[0] if result else old_priority + 1
+
+            return {
+                "success": True,
+                "id": feature_id,
+                "name": name,
+                "old_priority": old_priority,
+                "new_priority": new_priority,
+            }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def atomic_get_next_priority(session_maker) -> int:
+    """Atomically get the next available priority.
+
+    Uses BEGIN IMMEDIATE to ensure consistent reads under concurrent access.
+
+    Args:
+        session_maker: SQLAlchemy sessionmaker
+
+    Returns:
+        Next priority value (max + 1, or 1 if no features exist)
+    """
+    session = session_maker()
+    try:
+        # Use BEGIN IMMEDIATE for proper serialization in parallel mode
+        session.execute(text("BEGIN IMMEDIATE"))
+        result = session.execute(text("""
+            SELECT COALESCE(MAX(priority), 0) + 1 FROM features
+        """)).fetchone()
+        session.commit()
+        return result[0]
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()

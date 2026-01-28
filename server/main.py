@@ -30,15 +30,25 @@ from fastapi.staticfiles import StaticFiles
 from .routers import (
     agent_router,
     assistant_chat_router,
+    cicd_router,
+    design_tokens_router,
     devserver_router,
+    documentation_router,
     expand_project_router,
     features_router,
     filesystem_router,
+    git_workflow_router,
+    import_project_router,
+    logs_router,
     projects_router,
+    review_router,
     schedules_router,
+    security_router,
     settings_router,
     spec_creation_router,
+    templates_router,
     terminal_router,
+    visual_regression_router,
 )
 from .schemas import SetupStatus
 from .services.assistant_chat_session import cleanup_all_sessions as cleanup_assistant_sessions
@@ -148,6 +158,16 @@ app.include_router(filesystem_router)
 app.include_router(assistant_chat_router)
 app.include_router(settings_router)
 app.include_router(terminal_router)
+app.include_router(import_project_router)
+app.include_router(logs_router)
+app.include_router(security_router)
+app.include_router(git_workflow_router)
+app.include_router(cicd_router)
+app.include_router(templates_router)
+app.include_router(review_router)
+app.include_router(documentation_router)
+app.include_router(design_tokens_router)
+app.include_router(visual_regression_router)
 
 
 # ============================================================================

@@ -7,6 +7,7 @@ Each project has its own assistant.db file in the project directory.
 """
 
 import logging
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -21,6 +22,10 @@ Base = declarative_base()
 # Engine cache to avoid creating new engines for each request
 # Key: project directory path (as posix string), Value: SQLAlchemy engine
 _engine_cache: dict[str, object] = {}
+
+# Lock for thread-safe access to the engine cache
+# Prevents race conditions when multiple threads create engines simultaneously
+_cache_lock = threading.Lock()
 
 
 def _utc_now() -> datetime:
@@ -64,17 +69,33 @@ def get_engine(project_dir: Path):
 
     Uses a cache to avoid creating new engines for each request, which improves
     performance by reusing database connections.
+
+    Thread-safe: Uses a lock to prevent race conditions when multiple threads
+    try to create engines simultaneously for the same project.
     """
     cache_key = project_dir.as_posix()
 
-    if cache_key not in _engine_cache:
-        db_path = get_db_path(project_dir)
-        # Use as_posix() for cross-platform compatibility with SQLite connection strings
-        db_url = f"sqlite:///{db_path.as_posix()}"
-        engine = create_engine(db_url, echo=False)
-        Base.metadata.create_all(engine)
-        _engine_cache[cache_key] = engine
-        logger.debug(f"Created new database engine for {cache_key}")
+    # Double-checked locking for thread safety and performance
+    if cache_key in _engine_cache:
+        return _engine_cache[cache_key]
+
+    with _cache_lock:
+        # Check again inside the lock in case another thread created it
+        if cache_key not in _engine_cache:
+            db_path = get_db_path(project_dir)
+            # Use as_posix() for cross-platform compatibility with SQLite connection strings
+            db_url = f"sqlite:///{db_path.as_posix()}"
+            engine = create_engine(
+                db_url,
+                echo=False,
+                connect_args={
+                    "check_same_thread": False,
+                    "timeout": 30,  # Wait up to 30s for locks
+                }
+            )
+            Base.metadata.create_all(engine)
+            _engine_cache[cache_key] = engine
+            logger.debug(f"Created new database engine for {cache_key}")
 
     return _engine_cache[cache_key]
 

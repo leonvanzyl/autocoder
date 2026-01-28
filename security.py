@@ -6,6 +6,7 @@ Pre-tool-use hooks that validate bash commands for security.
 Uses an allowlist approach - only explicitly permitted commands can run.
 """
 
+import logging
 import os
 import re
 import shlex
@@ -13,6 +14,8 @@ from pathlib import Path
 from typing import Optional
 
 import yaml
+
+logger = logging.getLogger(__name__)
 
 # Regex pattern for valid pkill process names (no regex metacharacters allowed)
 # Matches alphanumeric names with dots, underscores, and hyphens
@@ -106,7 +109,7 @@ DANGEROUS_COMMANDS = {
     "az",
     # Container and orchestration
     "kubectl",
-    "docker-compose",
+    # Note: docker-compose removed - commonly needed for local dev environments
 }
 
 
@@ -140,6 +143,45 @@ def split_command_segments(command_string: str) -> list[str]:
     return result
 
 
+def _extract_primary_command(segment: str) -> str | None:
+    """
+    Fallback command extraction when shlex fails.
+
+    Extracts the first word that looks like a command, handling cases
+    like complex docker exec commands with nested quotes.
+
+    Args:
+        segment: The command segment to parse
+
+    Returns:
+        The primary command name, or None if extraction fails
+    """
+    # Remove leading whitespace
+    segment = segment.lstrip()
+
+    if not segment:
+        return None
+
+    # Skip env var assignments at start (VAR=value cmd)
+    words = segment.split()
+    while words and "=" in words[0] and not words[0].startswith("="):
+        words = words[1:]
+
+    if not words:
+        return None
+
+    # Extract first token (the command)
+    first_word = words[0]
+
+    # Match valid command characters (alphanumeric, dots, underscores, hyphens, slashes)
+    match = re.match(r"^([a-zA-Z0-9_./-]+)", first_word)
+    if match:
+        cmd = match.group(1)
+        return os.path.basename(cmd)
+
+    return None
+
+
 def extract_commands(command_string: str) -> list[str]:
     """
     Extract command names from a shell command string.
@@ -156,7 +198,7 @@ def extract_commands(command_string: str) -> list[str]:
     commands = []
 
     # shlex doesn't treat ; as a separator, so we need to pre-process
-    import re
+    # (re is already imported at module level)
 
     # Split on semicolons that aren't inside quotes (simple heuristic)
     # This handles common cases like "echo hello; ls"
@@ -171,8 +213,11 @@ def extract_commands(command_string: str) -> list[str]:
             tokens = shlex.split(segment)
         except ValueError:
             # Malformed command (unclosed quotes, etc.)
-            # Return empty to trigger block (fail-safe)
-            return []
+            # Try fallback extraction instead of blocking entirely
+            fallback_cmd = _extract_primary_command(segment)
+            if fallback_cmd:
+                commands.append(fallback_cmd)
+            continue
 
         if not tokens:
             continue
@@ -444,58 +489,74 @@ def load_org_config() -> Optional[dict]:
             config = yaml.safe_load(f)
 
         if not config:
+            logger.warning(f"Org config at {config_path} is empty")
             return None
 
         # Validate structure
         if not isinstance(config, dict):
+            logger.warning(f"Org config at {config_path} must be a YAML dictionary")
             return None
 
         if "version" not in config:
+            logger.warning(f"Org config at {config_path} missing required 'version' field")
             return None
 
         # Validate allowed_commands if present
         if "allowed_commands" in config:
             allowed = config["allowed_commands"]
             if not isinstance(allowed, list):
+                logger.warning(f"Org config at {config_path}: 'allowed_commands' must be a list")
                 return None
-            for cmd in allowed:
+            for i, cmd in enumerate(allowed):
                 if not isinstance(cmd, dict):
+                    logger.warning(f"Org config at {config_path}: allowed_commands[{i}] must be a dict")
                     return None
                 if "name" not in cmd:
+                    logger.warning(f"Org config at {config_path}: allowed_commands[{i}] missing 'name'")
                     return None
                 # Validate that name is a non-empty string
                 if not isinstance(cmd["name"], str) or cmd["name"].strip() == "":
+                    logger.warning(f"Org config at {config_path}: allowed_commands[{i}] has invalid 'name'")
                     return None
 
         # Validate blocked_commands if present
         if "blocked_commands" in config:
             blocked = config["blocked_commands"]
             if not isinstance(blocked, list):
+                logger.warning(f"Org config at {config_path}: 'blocked_commands' must be a list")
                 return None
-            for cmd in blocked:
+            for i, cmd in enumerate(blocked):
                 if not isinstance(cmd, str):
+                    logger.warning(f"Org config at {config_path}: blocked_commands[{i}] must be a string")
                     return None
 
         # Validate pkill_processes if present
         if "pkill_processes" in config:
             processes = config["pkill_processes"]
             if not isinstance(processes, list):
+                logger.warning(f"Org config at {config_path}: 'pkill_processes' must be a list")
                 return None
             # Normalize and validate each process name against safe pattern
             normalized = []
-            for proc in processes:
+            for i, proc in enumerate(processes):
                 if not isinstance(proc, str):
+                    logger.warning(f"Org config at {config_path}: pkill_processes[{i}] must be a string")
                     return None
                 proc = proc.strip()
                 # Block empty strings and regex metacharacters
                 if not proc or not VALID_PROCESS_NAME_PATTERN.fullmatch(proc):
+                    logger.warning(f"Org config at {config_path}: pkill_processes[{i}] has invalid value '{proc}'")
                     return None
                 normalized.append(proc)
             config["pkill_processes"] = normalized
 
         return config
 
-    except (yaml.YAMLError, IOError, OSError):
+    except yaml.YAMLError as e:
+        logger.warning(f"Failed to parse org config at {config_path}: {e}")
+        return None
+    except (IOError, OSError) as e:
+        logger.warning(f"Failed to read org config at {config_path}: {e}")
         return None
 
 
@@ -509,7 +570,7 @@ def load_project_commands(project_dir: Path) -> Optional[dict]:
     Returns:
         Dict with parsed YAML config, or None if file doesn't exist or is invalid
     """
-    config_path = project_dir / ".autocoder" / "allowed_commands.yaml"
+    config_path = project_dir.resolve() / ".autocoder" / "allowed_commands.yaml"
 
     if not config_path.exists():
         return None
@@ -519,53 +580,68 @@ def load_project_commands(project_dir: Path) -> Optional[dict]:
             config = yaml.safe_load(f)
 
         if not config:
+            logger.warning(f"Project config at {config_path} is empty")
             return None
 
         # Validate structure
         if not isinstance(config, dict):
+            logger.warning(f"Project config at {config_path} must be a YAML dictionary")
             return None
 
         if "version" not in config:
+            logger.warning(f"Project config at {config_path} missing required 'version' field")
             return None
 
         commands = config.get("commands", [])
         if not isinstance(commands, list):
+            logger.warning(f"Project config at {config_path}: 'commands' must be a list")
             return None
 
         # Enforce 100 command limit
         if len(commands) > 100:
+            logger.warning(f"Project config at {config_path} exceeds 100 command limit ({len(commands)} commands)")
             return None
 
         # Validate each command entry
-        for cmd in commands:
+        for i, cmd in enumerate(commands):
             if not isinstance(cmd, dict):
+                logger.warning(f"Project config at {config_path}: commands[{i}] must be a dict")
                 return None
             if "name" not in cmd:
+                logger.warning(f"Project config at {config_path}: commands[{i}] missing 'name'")
                 return None
-            # Validate name is a string
-            if not isinstance(cmd["name"], str):
+            # Validate name is a non-empty string
+            if not isinstance(cmd["name"], str) or cmd["name"].strip() == "":
+                logger.warning(f"Project config at {config_path}: commands[{i}] has invalid 'name'")
                 return None
 
         # Validate pkill_processes if present
         if "pkill_processes" in config:
             processes = config["pkill_processes"]
             if not isinstance(processes, list):
+                logger.warning(f"Project config at {config_path}: 'pkill_processes' must be a list")
                 return None
             # Normalize and validate each process name against safe pattern
             normalized = []
-            for proc in processes:
+            for i, proc in enumerate(processes):
                 if not isinstance(proc, str):
+                    logger.warning(f"Project config at {config_path}: pkill_processes[{i}] must be a string")
                     return None
                 proc = proc.strip()
                 # Block empty strings and regex metacharacters
                 if not proc or not VALID_PROCESS_NAME_PATTERN.fullmatch(proc):
+                    logger.warning(f"Project config at {config_path}: pkill_processes[{i}] has invalid value '{proc}'")
                     return None
                 normalized.append(proc)
             config["pkill_processes"] = normalized
 
         return config
 
-    except (yaml.YAMLError, IOError, OSError):
+    except yaml.YAMLError as e:
+        logger.warning(f"Failed to parse project config at {config_path}: {e}")
+        return None
+    except (IOError, OSError) as e:
+        logger.warning(f"Failed to read project config at {config_path}: {e}")
         return None
 
 
