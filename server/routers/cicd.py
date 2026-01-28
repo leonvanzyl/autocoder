@@ -203,7 +203,9 @@ async def list_workflows(project_name: str):
         return WorkflowListResponse(workflows=[], count=0)
 
     workflows = []
-    for file in workflows_dir.glob("*.yml"):
+    for file in workflows_dir.iterdir():
+        if file.suffix not in (".yml", ".yaml"):
+            continue
         # Determine workflow type from filename
         wf_type = "custom"
         if file.stem in ["ci", "security", "deploy"]:

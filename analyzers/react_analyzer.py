@@ -85,6 +85,9 @@ class ReactAnalyzer(BaseAnalyzer):
 
     def analyze(self) -> AnalysisResult:
         """Analyze the React/Next.js project."""
+        # Keep confidence consistent with detection
+        _, confidence = self.can_analyze()
+
         routes: list[RouteInfo] = []
         components: list[ComponentInfo] = []
         endpoints: list[EndpointInfo] = []
@@ -131,7 +134,7 @@ class ReactAnalyzer(BaseAnalyzer):
 
         return {
             "stack_name": self._detected_stack,
-            "confidence": 0.9,
+            "confidence": confidence,
             "routes": routes,
             "components": components,
             "endpoints": endpoints,

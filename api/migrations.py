@@ -121,8 +121,6 @@ def migrate_add_testing_columns(engine) -> None:
                         last_tested_at DATETIME{optional_col_defs}
                     )
                 """
-                conn.execute(text(create_sql))
-
                 # Step 2: Copy data including optional columns
                 insert_sql = f"""
                     INSERT INTO features_new
@@ -130,18 +128,22 @@ def migrate_add_testing_columns(engine) -> None:
                            dependencies, testing_in_progress, last_tested_at{optional_col_names}
                     FROM features
                 """
-                conn.execute(text(insert_sql))
 
-                # Step 3: Atomic table swap - wrap in transaction
-                # The transaction provides the necessary atomicity
+                # Wrap entire migration in a single transaction to prevent InvalidRequestError
+                # from nested conn.begin() calls in SQLAlchemy 2.0
                 with conn.begin():
-                    # Atomic table swap - rename old, rename new, drop old
+                    # Step 1: Create new table
+                    conn.execute(text(create_sql))
+
+                    # Step 2: Copy data including optional columns
+                    conn.execute(text(insert_sql))
+
+                    # Step 3: Atomic table swap - rename old, rename new, drop old
                     conn.execute(text("ALTER TABLE features RENAME TO features_old"))
                     conn.execute(text("ALTER TABLE features_new RENAME TO features"))
                     conn.execute(text("DROP TABLE features_old"))
 
-                # Step 4: Recreate indexes
-                with conn.begin():
+                    # Step 4: Recreate indexes
                     conn.execute(text("CREATE INDEX IF NOT EXISTS ix_features_id ON features (id)"))
                     conn.execute(text("CREATE INDEX IF NOT EXISTS ix_features_priority ON features (priority)"))
                     conn.execute(text("CREATE INDEX IF NOT EXISTS ix_features_passes ON features (passes)"))

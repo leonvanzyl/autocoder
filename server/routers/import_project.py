@@ -68,6 +68,13 @@ def validate_path(path: str) -> bool:
             Path(r"C:\Program Files").resolve(),
         ])
 
+        # Block Windows user credential/config stores
+        home = Path.home()
+        blocked_paths.extend([
+            (home / "AppData" / "Local").resolve(),
+            (home / "AppData" / "Roaming").resolve(),
+        ])
+
     # Check if path is a subpath of any blocked location
     for blocked in blocked_paths:
         try:
