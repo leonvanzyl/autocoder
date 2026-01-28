@@ -31,6 +31,7 @@ from api.database import Feature, create_database
 from api.dependency_resolver import are_dependencies_satisfied, compute_scheduling_scores
 from progress import has_features
 from server.utils.process_utils import kill_process_tree
+from structured_logging import get_logger
 
 # Root directory of autocoder (where this script and autonomous_agent_demo.py live)
 AUTOCODER_ROOT = Path(__file__).parent.resolve()
@@ -191,6 +192,16 @@ class ParallelOrchestrator:
 
         # Database session for this orchestrator
         self._engine, self._session_maker = create_database(project_dir)
+
+        # Structured logger for persistent logs (saved to {project_dir}/.autocoder/logs.db)
+        # Uses console_output=False since orchestrator already has its own print statements
+        self._logger = get_logger(project_dir, agent_id="orchestrator", console_output=False)
+        self._logger.info(
+            "Orchestrator initialized",
+            max_concurrency=self.max_concurrency,
+            yolo_mode=yolo_mode,
+            testing_agent_ratio=testing_agent_ratio,
+        )
 
     def get_session(self):
         """Get a new database session."""
@@ -514,6 +525,7 @@ class ParallelOrchestrator:
             )
         except Exception as e:
             # Reset in_progress on failure
+            self._logger.error("Spawn coding agent failed", feature_id=feature_id, error=str(e)[:200])
             session = self.get_session()
             try:
                 feature = session.query(Feature).filter(Feature.id == feature_id).first()
@@ -539,6 +551,7 @@ class ParallelOrchestrator:
             self.on_status(feature_id, "running")
 
         print(f"Started coding agent for feature #{feature_id}", flush=True)
+        self._logger.info("Spawned coding agent", feature_id=feature_id, pid=proc.pid)
         return True, f"Started feature {feature_id}"
 
     def _spawn_testing_agent(self) -> tuple[bool, str]:
@@ -788,9 +801,11 @@ class ParallelOrchestrator:
             return
 
         # Coding agent completion
+        agent_status = "success" if return_code == 0 else "failed"
         debug_log.log("COMPLETE", f"Coding agent for feature #{feature_id} finished",
             return_code=return_code,
-            status="success" if return_code == 0 else "failed")
+            status=agent_status)
+        self._logger.info("Coding agent completed", feature_id=feature_id, status=agent_status, return_code=return_code)
 
         with self._lock:
             self.running_coding_agents.pop(feature_id, None)
@@ -826,6 +841,7 @@ class ParallelOrchestrator:
                 print(f"Feature #{feature_id} has failed {failure_count} times, will not retry", flush=True)
                 debug_log.log("COMPLETE", f"Feature #{feature_id} exceeded max retries",
                     failure_count=failure_count)
+                self._logger.warn("Feature exceeded max retries", feature_id=feature_id, failure_count=failure_count)
 
         status = "completed" if return_code == 0 else "failed"
         if self.on_status:
@@ -1102,6 +1118,7 @@ class ParallelOrchestrator:
 
             except Exception as e:
                 print(f"Orchestrator error: {e}", flush=True)
+                self._logger.error("Orchestrator loop error", error_type=type(e).__name__, message=str(e)[:200])
                 await self._wait_for_agent_completion()
 
         # Wait for remaining agents to complete
