@@ -305,6 +305,8 @@ async def get_report(project_name: str, filename: str):
     # Validate filename
     if ".." in filename or "/" in filename or "\\" in filename:
         raise HTTPException(status_code=400, detail="Invalid filename")
+    if not (filename.startswith("visual_test_") and filename.endswith(".json")):
+        raise HTTPException(status_code=400, detail="Invalid report filename")
 
     report_path = project_dir / ".visual-snapshots" / "reports" / filename
 
@@ -420,6 +422,8 @@ async def delete_report(project_name: str, filename: str):
     # Validate filename
     if ".." in filename or "/" in filename or "\\" in filename:
         raise HTTPException(status_code=400, detail="Invalid filename")
+    if not (filename.startswith("visual_test_") and filename.endswith(".json")):
+        raise HTTPException(status_code=400, detail="Invalid report filename")
 
     report_path = project_dir / ".visual-snapshots" / "reports" / filename
 

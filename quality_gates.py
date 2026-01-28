@@ -175,9 +175,14 @@ def _detect_type_checker(project_dir: Path) -> tuple[str, list[str]] | None:
     if (project_dir / "pyproject.toml").exists() or (project_dir / "setup.py").exists():
         if shutil.which("mypy"):
             return ("mypy", ["mypy", "."])
-        venv_mypy = project_dir / "venv/bin/mypy"
-        if venv_mypy.exists():
-            return ("mypy", [str(venv_mypy), "."])
+        venv_mypy_paths = [
+            project_dir / "venv/bin/mypy",
+            project_dir / "venv/Scripts/mypy.exe",
+            project_dir / "venv/Scripts/mypy",
+        ]
+        for venv_mypy in venv_mypy_paths:
+            if venv_mypy.exists():
+                return ("mypy", [str(venv_mypy), "."])
 
     return None
 

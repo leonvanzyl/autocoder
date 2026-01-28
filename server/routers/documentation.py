@@ -305,7 +305,7 @@ async def preview_readme(request: PreviewRequest):
             lines.append("\n## Features\n")
             for f in docs.features[:10]:
                 status = "[x]" if f.get("status") == "completed" else "[ ]"
-                lines.append(f"- {status} {f['name']}")
+                lines.append(f"- {status} {f.get('name', 'Unnamed Feature')}")
             if len(docs.features) > 10:
                 lines.append(f"\n*...and {len(docs.features) - 10} more features*")
 
