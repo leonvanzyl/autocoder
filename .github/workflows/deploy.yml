@@ -3,7 +3,7 @@ name: Deploy to VPS
 on:
   workflow_run:
     workflows: ["Push CI"]
-    branches: [master]
+    branches: [main]
     types:
       - completed
 

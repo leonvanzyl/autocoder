@@ -368,7 +368,7 @@ class LogQuery:
             params.append(tool_name)
 
         if search:
-            conditions.append("message LIKE ?")
+            conditions.append(r"message LIKE ? ESCAPE '\'")
             # Escape LIKE wildcards to prevent unexpected query behavior
             escaped_search = search.replace("%", "\\%").replace("_", "\\_")
             params.append(f"%{escaped_search}%")

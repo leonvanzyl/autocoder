@@ -6,7 +6,7 @@ temp/
 nul
 issues/
 
-# Repository-specific
+# Local Codex/Claude configuration (do not commit)
 .code/
 
 # Browser profiles for parallel agent execution
@@ -18,9 +18,6 @@ logs/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-
-# Local Codex/Claude configuration (do not commit)
-.code/
 
 # ===================
 # Node.js

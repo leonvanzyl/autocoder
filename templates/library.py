@@ -16,6 +16,37 @@ import yaml
 TEMPLATES_DIR = Path(__file__).parent / "catalog"
 
 
+def sanitize_xml_tag_name(name: str) -> str:
+    """
+    Sanitize a string to be a valid XML tag name.
+
+    XML tag names must start with a letter or underscore and can only contain
+    letters, digits, hyphens, underscores, and periods.
+    """
+    if not name:
+        return "unnamed"
+
+    # Replace invalid characters with underscores
+    sanitized = ""
+    for i, char in enumerate(name):
+        if char.isalnum() or char in "-._":
+            sanitized += char
+        else:
+            sanitized += "_"
+
+    # Ensure first character is a letter or underscore
+    if sanitized and sanitized[0].isdigit():
+        sanitized = "n_" + sanitized
+    elif not sanitized or sanitized[0] not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_":
+        sanitized = "_" + sanitized
+
+    # Avoid reserved "xml" prefix
+    if sanitized.lower().startswith("xml"):
+        sanitized = "_" + sanitized
+
+    return sanitized or "unnamed"
+
+
 @dataclass
 class DesignTokens:
     """Design tokens for consistent styling."""
@@ -290,10 +321,11 @@ def generate_app_spec(
     ])
 
     for color_name, color_value in colors.items():
-        # Escape color name (used as tag name) and value
-        safe_name = xml_escape(color_name)
+        # Sanitize color name for use as XML tag name
+        safe_tag_name = sanitize_xml_tag_name(color_name)
+        # Only escape the value, not the tag name (which is already sanitized)
         safe_value = xml_escape(color_value)
-        xml_parts.append(f"      <{safe_name}>{safe_value}</{safe_name}>")
+        xml_parts.append(f"      <{safe_tag_name}>{safe_value}</{safe_tag_name}>")
 
     xml_parts.extend([
         "    </colors>",

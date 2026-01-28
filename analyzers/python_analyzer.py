@@ -158,6 +158,9 @@ class PythonAnalyzer(BaseAnalyzer):
         # Extract components (models, services, etc.)
         components = self._extract_components()
 
+        # Routes is the same as endpoints for Python analyzers
+        routes = endpoints
+
         return {
             "stack_name": self._detected_stack,
             "confidence": 0.85,

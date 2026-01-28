@@ -14,12 +14,15 @@ Retry Logic:
 import logging
 import time
 from datetime import datetime, timezone
-from typing import Optional
+from typing import TYPE_CHECKING, Callable, Optional
 
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from .database import Feature
+
+if TYPE_CHECKING:
+    pass
 
 # Module logger
 logger = logging.getLogger(__name__)
@@ -34,15 +37,17 @@ def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _commit_with_retry(session: Session, max_retries: int = MAX_COMMIT_RETRIES) -> None:
+def _commit_with_retry(session: Session, operation: Callable[[], None], max_retries: int = MAX_COMMIT_RETRIES) -> None:
     """
-    Commit a session with retry logic for transient errors.
+    Execute an operation and commit a session with retry logic for transient errors.
 
     Handles SQLITE_BUSY, SQLITE_LOCKED, and similar transient errors
-    with exponential backoff.
+    with exponential backoff. The operation is executed inside the retry loop
+    so mutations are reapplied on each attempt.
 
     Args:
         session: SQLAlchemy session to commit
+        operation: Callable that sets attribute mutations before commit
         max_retries: Maximum number of retry attempts
 
     Raises:
@@ -53,6 +58,7 @@ def _commit_with_retry(session: Session, max_retries: int = MAX_COMMIT_RETRIES) 
 
     for attempt in range(max_retries + 1):
         try:
+            operation()  # Execute mutation before each commit attempt
             session.commit()
             return
         except OperationalError as e:
@@ -216,11 +222,14 @@ class FeatureRepository:
         """
         feature = self.get_by_id(feature_id)
         if feature and not feature.passes and not feature.in_progress:
-            feature.in_progress = True
-            feature.started_at = _utc_now()
-            _commit_with_retry(self.session)
+            _commit_with_retry(self.session, lambda: self._set_in_progress_attrs(feature))
             self.session.refresh(feature)
         return feature
+
+    def _set_in_progress_attrs(self, feature: Feature) -> None:
+        """Set in-progress attributes on a feature."""
+        feature.in_progress = True
+        feature.started_at = _utc_now()
 
     def mark_passing(self, feature_id: int) -> Optional[Feature]:
         """Mark a feature as passing.
@@ -237,12 +246,15 @@ class FeatureRepository:
         """
         feature = self.get_by_id(feature_id)
         if feature:
-            feature.passes = True
-            feature.in_progress = False
-            feature.completed_at = _utc_now()
-            _commit_with_retry(self.session)
+            _commit_with_retry(self.session, lambda: self._set_passing_attrs(feature))
             self.session.refresh(feature)
         return feature
+
+    def _set_passing_attrs(self, feature: Feature) -> None:
+        """Set passing attributes on a feature."""
+        feature.passes = True
+        feature.in_progress = False
+        feature.completed_at = _utc_now()
 
     def mark_failing(self, feature_id: int) -> Optional[Feature]:
         """Mark a feature as failing.
@@ -258,12 +270,15 @@ class FeatureRepository:
         """
         feature = self.get_by_id(feature_id)
         if feature:
-            feature.passes = False
-            feature.in_progress = False
-            feature.last_failed_at = _utc_now()
-            _commit_with_retry(self.session)
+            _commit_with_retry(self.session, lambda: self._set_failing_attrs(feature))
             self.session.refresh(feature)
         return feature
+
+    def _set_failing_attrs(self, feature: Feature) -> None:
+        """Set failing attributes on a feature."""
+        feature.passes = False
+        feature.in_progress = False
+        feature.last_failed_at = _utc_now()
 
     def clear_in_progress(self, feature_id: int) -> Optional[Feature]:
         """Clear the in-progress flag on a feature.
@@ -279,8 +294,7 @@ class FeatureRepository:
         """
         feature = self.get_by_id(feature_id)
         if feature:
-            feature.in_progress = False
-            _commit_with_retry(self.session)
+            _commit_with_retry(self.session, lambda: setattr(feature, 'in_progress', False))
             self.session.refresh(feature)
         return feature
 

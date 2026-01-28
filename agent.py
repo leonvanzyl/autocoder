@@ -225,22 +225,17 @@ async def run_autonomous_agent(
     # there's only one agent at a time and it happens before claiming any features.
     #
     # Only clear if we're NOT in a parallel orchestrator context
-    # (detected by checking if this agent is a subprocess spawned by orchestrator)
-    try:
-        import psutil
-        parent_process = psutil.Process().parent()
-        parent_name = parent_process.name() if parent_process else ""
-
-        # Only clear if parent is NOT python (i.e., we're running manually, not from orchestrator)
-        if "python" not in parent_name.lower():
-            clear_stuck_features(project_dir)
-    except (ImportError, ModuleNotFoundError):
-        # psutil not available - assume single-agent mode and clear
-        clear_stuck_features(project_dir)
-    except Exception:
-        # If parent process check fails, do NOT clear features to avoid race conditions
-        # in parallel mode. The orchestrator handles clearing stuck features safely.
+    # (detected by checking AUTOCODER_PARALLEL_MODE env flag)
+    if os.getenv("AUTOCODER_PARALLEL_MODE") == "1":
+        # In parallel mode, orchestrator handles clearing stuck features
         pass
+    else:
+        # Single-agent mode - clear stuck features
+        try:
+            clear_stuck_features(project_dir)
+        except Exception as e:
+            # If clearing fails, log a warning and continue to avoid blocking agent startup
+            logger.warning("Failed to clear stuck features", error=str(e), exc_info=True)
 
     # Determine agent type if not explicitly set
     if agent_type is None:

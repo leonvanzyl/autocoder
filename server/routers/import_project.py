@@ -11,6 +11,7 @@ The import flow:
 """
 
 import logging
+import os
 import re
 import sys
 from pathlib import Path
@@ -38,10 +39,46 @@ def _get_project_path(project_name: str) -> Path | None:
 
 
 def validate_path(path: str) -> bool:
-    """Validate path to prevent traversal attacks."""
-    # Allow absolute paths but check for common attack patterns
-    if ".." in path or "\x00" in path:
+    """Validate path to prevent traversal attacks and access to sensitive locations."""
+    from pathlib import Path
+
+    # Check for null bytes and basic traversal patterns
+    if "\x00" in path:
         return False
+
+    try:
+        resolved_path = Path(path).resolve()
+    except (OSError, ValueError):
+        return False
+
+    # Blocklist of sensitive system locations
+    blocked_paths = [
+        Path("/etc").resolve(),
+        Path("/root").resolve(),
+        Path("/var").resolve(),
+        Path("/sys").resolve(),
+        Path("/proc").resolve(),
+    ]
+
+    # Windows paths to block (if on Windows)
+    if os.name == 'nt':
+        blocked_paths.extend([
+            Path(r"C:\Windows").resolve(),
+            Path(r"C:\Windows\System32").resolve(),
+            Path(r"C:\Program Files").resolve(),
+        ])
+
+    # Check if path is a subpath of any blocked location
+    for blocked in blocked_paths:
+        try:
+            resolved_path.relative_to(blocked)
+            return False  # Path is under a blocked location
+        except ValueError:
+            pass  # Not under this blocked location, continue checking
+
+    # For now, allow absolute paths but they will be validated further by callers
+    # You could add an allowlist here: e.g., only allow paths under /home/user or /data
+
     return True
 
 

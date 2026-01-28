@@ -43,7 +43,7 @@ prompt_required() {
 
   # Allow pre-seeding via environment variables in automated runs.
   if [[ -n "${!var_name:-}" ]]; then
-    export "${var_name}"
+    export "${var_name?}"
     return
   fi
 

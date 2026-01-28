@@ -153,9 +153,10 @@ def _validate_project_path(path: Path) -> None:
 
     # Ensure the path exists and is a directory
     if not path.exists() or not path.is_dir():
+        logger.warning(f"Project not found at path: {path}")
         raise HTTPException(
             status_code=404,
-            detail=f"Project not found: {path}"
+            detail="Project not found"
         )
 
 

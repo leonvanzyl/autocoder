@@ -25,10 +25,11 @@ router = APIRouter(prefix="/api/git", tags=["git-workflow"])
 
 
 def _get_project_path(project_name: str) -> Path | None:
-    """Get project path from registry."""
-    from registry import get_project_path
+    """Get project path from registry with validation."""
+    from server.routers.design_tokens import validate_and_get_project_path
 
-    return get_project_path(project_name)
+    # Use the validated path from design_tokens to prevent security issues
+    return validate_and_get_project_path(project_name)
 
 
 # ============================================================================

@@ -193,8 +193,8 @@ async def generate_docs(request: GenerateDocsRequest):
         logger.error(f"Invalid output directory: {e}")
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.error(f"Documentation generation failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Documentation generation failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Documentation generation failed. Check server logs for details.")
 
 
 @router.get("/{project_name}", response_model=ListDocsResponse)
@@ -272,7 +272,8 @@ async def get_doc_content(project_name: str, filename: str):
         content = resolved_file_path.read_text()
         return {"filename": filename, "content": content}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error reading file: {e}")
+        logger.error(f"Error reading file {resolved_file_path}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Error reading file. Check server logs for details.")
 
 
 @router.post("/preview", response_model=PreviewResponse)
@@ -322,8 +323,8 @@ async def preview_readme(request: PreviewRequest):
         )
 
     except Exception as e:
-        logger.error(f"Preview failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Preview failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Preview failed. Check server logs for details.")
 
 
 @router.delete("/{project_name}/{filename:path}")
@@ -359,4 +360,5 @@ async def delete_doc(project_name: str, filename: str):
         resolved_file_path.unlink()
         return {"deleted": True, "filename": filename}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error deleting file: {e}")
+        logger.error(f"Error deleting file {resolved_file_path}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Error deleting file. Check server logs for details.")

@@ -6,11 +6,15 @@ Centralized configuration using Pydantic BaseSettings.
 Loads settings from environment variables and .env files.
 """
 
+from pathlib import Path
 from typing import Optional
 from urllib.parse import urlparse
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Compute base directory relative to this file
+BASE_DIR = Path(__file__).resolve().parent.parent
 
 
 class AutocoderConfig(BaseSettings):
@@ -27,7 +31,7 @@ class AutocoderConfig(BaseSettings):
     """
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=str(BASE_DIR / ".env"),
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",  # Ignore extra env vars

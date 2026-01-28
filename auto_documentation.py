@@ -325,6 +325,10 @@ class DocumentationGenerator:
             self.project_dir.glob("**/routes/**/*.ts"),
         )
         for route_file in js_ts_routes:
+            # Skip unwanted directories
+            route_file_str = str(route_file)
+            if "node_modules" in route_file_str or "venv" in route_file_str or ".git" in route_file_str:
+                continue
             try:
                 content = route_file.read_text()
                 # Match router.get/post/put/delete

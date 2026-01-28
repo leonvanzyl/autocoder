@@ -58,9 +58,8 @@ class VueAnalyzer(BaseAnalyzer):
                     if "vite" in deps:
                         self._detected_stack = "vue-vite"
                         confidence = 0.9
-
-                    # Check for Vue CLI
-                    if "@vue/cli-service" in deps:
+                    # Check for Vue CLI (elif to avoid overwriting vite detection)
+                    elif "@vue/cli-service" in deps:
                         self._detected_stack = "vue-cli"
                         confidence = 0.9
 
@@ -168,7 +167,7 @@ class VueAnalyzer(BaseAnalyzer):
 
         for page_file in pages_dir.rglob("*.vue"):
             rel_path = page_file.relative_to(pages_dir)
-            route_path = "/" + str(rel_path.with_suffix(""))
+            route_path = "/" + rel_path.with_suffix("").as_posix()
 
             # Handle index files
             route_path = route_path.replace("/index", "")
@@ -204,7 +203,7 @@ class VueAnalyzer(BaseAnalyzer):
 
             for api_file in api_dir.rglob("*.ts"):
                 rel_path = api_file.relative_to(api_dir)
-                route_path = "/api/" + str(rel_path.with_suffix(""))
+                route_path = "/api/" + rel_path.with_suffix("").as_posix()
 
                 # Handle index files
                 route_path = route_path.replace("/index", "")

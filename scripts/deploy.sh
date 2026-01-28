@@ -63,19 +63,52 @@ fi
 
 ensure_packages() {
   echo "Installing Docker & prerequisites..."
-  apt-get update -y
-  apt-get install -y ca-certificates curl git gnupg
-  install -m 0755 -d /etc/apt/keyrings
-  if [[ ! -f /etc/apt/keyrings/docker.gpg ]]; then
-    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-    chmod a+r /etc/apt/keyrings/docker.gpg
-    echo \
-      "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
-      $(. /etc/os-release && echo "$VERSION_CODENAME") stable" > /etc/apt/sources.list.d/docker.list
-    apt-get update -y
+
+  # Detect OS type
+  if [[ -f /etc/os-release ]]; then
+    . /etc/os-release
+    OS_ID="$ID"
+    OS_LIKE="${ID_LIKE:-}"
+  else
+    echo "ERROR: Cannot detect OS type. /etc/os-release not found."
+    exit 1
   fi
-  apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-  systemctl enable --now docker
+
+  # Detect Docker distribution for repository URL
+  if [[ "$OS_ID" == "debian" ]]; then
+    DOCKER_DIST="debian"
+  elif [[ "$OS_ID" == "ubuntu" ]]; then
+    DOCKER_DIST="ubuntu"
+  elif [[ "$OS_LIKE" == *"ubuntu"* ]]; then
+    DOCKER_DIST="ubuntu"
+  elif [[ "$OS_LIKE" == *"debian"* ]]; then
+    DOCKER_DIST="debian"
+  else
+    DOCKER_DIST="ubuntu"
+  fi
+
+  # Check for Debian/Ubuntu family
+  if [[ "$OS_ID" == "debian" || "$OS_ID" == "ubuntu" ]] || [[ "$OS_LIKE" == *"debian"* || "$OS_LIKE" == *"ubuntu"* ]]; then
+    echo "Detected Debian/Ubuntu-based system, using apt-get..."
+    apt-get update -y
+    apt-get install -y ca-certificates curl git gnupg
+    install -m 0755 -d /etc/apt/keyrings
+    if [[ ! -f /etc/apt/keyrings/docker.gpg ]]; then
+      curl -fsSL https://download.docker.com/linux/$DOCKER_DIST/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+      chmod a+r /etc/apt/keyrings/docker.gpg
+      echo \
+        "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/$DOCKER_DIST \
+        $(. /etc/os-release && echo "$VERSION_CODENAME") stable" > /etc/apt/sources.list.d/docker.list
+      apt-get update -y
+    fi
+    apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+    systemctl enable --now docker
+  else
+    echo "ERROR: Unsupported OS: $OS_ID"
+    echo "This script currently supports Debian/Ubuntu-based systems only."
+    echo "Please install Docker manually or add support for your distribution."
+    exit 1
+  fi
 }
 
 configure_duckdns() {

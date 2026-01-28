@@ -93,8 +93,8 @@ This fork regularly syncs with upstream. To get latest upstream changes:
 
 ```bash
 git fetch upstream
-git checkout master && git merge upstream/master
-git checkout my-features && git merge master
+git checkout main && git merge upstream/main
+git checkout my-features && git merge main
 ```
 
 ## Reverting Changes
@@ -104,8 +104,15 @@ git checkout my-features && git merge master
 ```bash
 # Option 1: Full reset to upstream
 git checkout my-features
-git reset --hard upstream/master
+git reset --hard upstream/main
 git push origin my-features --force
+
+# WARNING: The forced push (git push --force) can permanently overwrite remote history
+# and cause data loss for collaborators. Recommended alternatives:
+# - Use --force-with-lease instead of --force to prevent overwriting others' work
+# - Inform your team before force-pushing
+# - Consider creating a new branch instead (e.g., git checkout -b my-features-v2)
+# - Backup your branch before force-pushing (git tag backup-branch && git push origin --tags)
 
 # Option 2: Revert specific commits
 git log --oneline  # find commit to revert

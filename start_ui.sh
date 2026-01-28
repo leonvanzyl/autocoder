@@ -32,8 +32,7 @@ fi
 echo ""
 
 # Activate virtual environment if it exists
-if [ -d "$SCRIPT_DIR/venv" ]; then
-    echo "Activating virtual environment..."
+if [ -f "$SCRIPT_DIR/venv/bin/activate" ]; then
     source "$SCRIPT_DIR/venv/bin/activate"
 fi
 

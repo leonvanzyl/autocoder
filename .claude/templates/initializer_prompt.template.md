@@ -42,7 +42,7 @@ which is the single source of truth for what needs to be built.
 
 Use the feature_create_bulk tool to add all features at once. You can create features in batches if there are many (e.g., 50 at a time).
 
-```
+```text
 Use the feature_create_bulk tool with features=[
   {
     "category": "functional",

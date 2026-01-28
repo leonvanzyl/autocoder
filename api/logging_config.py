@@ -17,6 +17,7 @@ Usage:
 
 import logging
 import sys
+import threading
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Optional
@@ -37,6 +38,7 @@ DEBUG_FILE_FORMAT = "%(asctime)s [%(levelname)s] %(name)s (%(filename)s:%(lineno
 
 # Track if logging has been configured
 _logging_configured = False
+_logging_lock = threading.Lock()
 
 
 def setup_logging(
@@ -62,8 +64,12 @@ def setup_logging(
     """
     global _logging_configured
 
-    if _logging_configured:
-        return
+    with _logging_lock:
+        # Re-check inside lock for proper double-checked locking pattern
+        if _logging_configured:
+            return
+
+        _logging_configured = True
 
     # Use default log directory if not specified
     if log_dir is None:
