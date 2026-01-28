@@ -143,9 +143,14 @@ class StructuredLogHandler(logging.Handler):
         """Store a log record in the database."""
         try:
             # Extract structured data from record
+            # Normalize level: Python's logging uses 'warning' but our LogLevel type uses 'warn'
+            level = record.levelname.lower()
+            if level == "warning":
+                level = "warn"
+            
             entry = StructuredLogEntry(
                 timestamp=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-                level=record.levelname.lower(),
+                level=level,
                 message=self.format(record),
                 agent_id=getattr(record, "agent_id", self.agent_id),
                 feature_id=getattr(record, "feature_id", None),

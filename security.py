@@ -372,7 +372,13 @@ def extract_commands(command_string: str) -> list[str]:
             tokens = shlex.split(segment)
         except ValueError:
             # Malformed command (unclosed quotes, etc.)
-            # Try fallback extraction instead of blocking entirely
+            # Security: Only use fallback if segment contains no chaining operators
+            # This prevents allowlist bypass via malformed commands hiding chained operators
+            if re.search(r'\s*(\|\||&&|\||&)\s*', segment):
+                # Segment has operators but shlex failed - refuse to parse for safety
+                continue
+            
+            # Try fallback extraction for single-command segments
             fallback_cmd = _extract_primary_command(segment)
             if fallback_cmd:
                 logger.debug(
