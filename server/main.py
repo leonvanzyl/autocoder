@@ -32,6 +32,11 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from slowapi.util import get_remote_address
 
+try:
+    from ..api.logging_config import get_logger
+except ImportError:
+    from api.logging_config import get_logger
+
 from .routers import (
     agent_router,
     assistant_chat_router,
@@ -72,6 +77,9 @@ from .websocket import project_websocket
 ROOT_DIR = Path(__file__).parent.parent
 UI_DIST_DIR = ROOT_DIR / "ui" / "dist"
 
+# Logger
+logger = get_logger(__name__)
+
 # Rate limiting configuration
 # Using in-memory storage (appropriate for single-instance development server)
 limiter = Limiter(key_func=get_remote_address, default_limits=["200/minute"])
@@ -80,7 +88,14 @@ limiter = Limiter(key_func=get_remote_address, default_limits=["200/minute"])
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager for startup and shutdown."""
-    # Startup - clean up orphaned processes from previous runs (Windows)
+    # Startup - warn if TEST_MODE is enabled
+    if TEST_MODE:
+        logger.warning(
+            "TEST_MODE is enabled - localhost restriction is bypassed. "
+            "Requests from testclient host are also allowed."
+        )
+
+    # Clean up orphaned processes from previous runs (Windows)
     cleanup_orphaned_agent_processes()
 
     # Clean up orphaned lock files from previous runs
