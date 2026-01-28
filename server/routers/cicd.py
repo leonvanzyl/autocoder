@@ -201,6 +201,9 @@ async def list_workflows(project_name: str):
     if not project_dir:
         raise HTTPException(status_code=404, detail="Project not found")
 
+    if not project_dir.exists():
+        raise HTTPException(status_code=404, detail="Project directory not found")
+
     workflows_dir = project_dir / ".github" / "workflows"
     if not workflows_dir.exists():
         return WorkflowListResponse(workflows=[], count=0)
