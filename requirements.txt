@@ -11,7 +11,7 @@ python-multipart>=0.0.22,<0.1
 psutil~=6.0
 aiofiles~=24.1
 apscheduler>=3.10.0,<4.0.0
-pywinpty~=2.1; sys_platform == "win32"
+pywinpty~=3.0; sys_platform == "win32"
 pyyaml~=6.0
 slowapi~=0.1.9
 pydantic-settings~=2.0
