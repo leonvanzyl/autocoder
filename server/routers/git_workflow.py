@@ -26,7 +26,7 @@ router = APIRouter(prefix="/api/git", tags=["git-workflow"])
 
 def _get_project_path(project_name: str) -> Path | None:
     """Get project path from registry."""
-    from ..registry import get_project_path
+    from registry import get_project_path
     return get_project_path(project_name)
 
 
