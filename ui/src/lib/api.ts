@@ -41,6 +41,11 @@ import type {
   UsageRecord,
   FeatureAttempt,
   CostEstimate,
+  PRStatus,
+  PRCreateRequest,
+  PullRequest,
+  PRListResponse,
+  PRChecksResponse,
 } from './types'
 
 const API_BASE = '/api'
@@ -600,4 +605,110 @@ export async function getFeatureAttempts(
 
 export async function getCostEstimate(projectName: string, days: number = 30): Promise<CostEstimate> {
   return fetchJSON(`/usage/${encodeURIComponent(projectName)}/cost-estimate?days=${days}`)
+}
+
+// ============================================================================
+// Pull Request API (Chance Edition Phase 4)
+// ============================================================================
+
+export async function getPRStatus(projectName: string): Promise<PRStatus> {
+  return fetchJSON(`/pr/${encodeURIComponent(projectName)}/status`)
+}
+
+export async function createPR(
+  projectName: string,
+  request: PRCreateRequest
+): Promise<{ success: boolean; pr?: PullRequest; url?: string; message: string }> {
+  return fetchJSON(`/pr/${encodeURIComponent(projectName)}/create`, {
+    method: 'POST',
+    body: JSON.stringify(request),
+  })
+}
+
+export async function listPRs(projectName: string, state: string = 'open'): Promise<PRListResponse> {
+  return fetchJSON(`/pr/${encodeURIComponent(projectName)}/list?state=${state}`)
+}
+
+export async function pushBranch(
+  projectName: string,
+  force: boolean = false
+): Promise<{ success: boolean; branch: string; message: string }> {
+  return fetchJSON(`/pr/${encodeURIComponent(projectName)}/push?force=${force}`, {
+    method: 'POST',
+  })
+}
+
+export async function getPRChecks(projectName: string): Promise<PRChecksResponse> {
+  return fetchJSON(`/pr/${encodeURIComponent(projectName)}/checks`)
+}
+
+// ============================================================================
+// Deploy API (Chance Edition Phase 4)
+// ============================================================================
+
+import type {
+  DeployRequest,
+  DeployResponse,
+  Deployment,
+  DeploymentListResponse,
+  DeploymentCheck,
+  EnvironmentStatusResponse,
+} from './types'
+
+export async function startDeployment(
+  projectName: string,
+  request: DeployRequest
+): Promise<DeployResponse> {
+  return fetchJSON(`/deploy/${encodeURIComponent(projectName)}/start`, {
+    method: 'POST',
+    body: JSON.stringify(request),
+  })
+}
+
+export async function listDeployments(
+  projectName: string,
+  environment?: string,
+  status?: string,
+  limit: number = 20
+): Promise<DeploymentListResponse> {
+  const params = new URLSearchParams({ limit: String(limit) })
+  if (environment) params.append('environment', environment)
+  if (status) params.append('status', status)
+  return fetchJSON(`/deploy/${encodeURIComponent(projectName)}/deployments?${params}`)
+}
+
+export async function getDeployment(
+  projectName: string,
+  deploymentId: number
+): Promise<Deployment> {
+  return fetchJSON(`/deploy/${encodeURIComponent(projectName)}/deployments/${deploymentId}`)
+}
+
+export async function getDeploymentChecks(
+  projectName: string,
+  deploymentId: number
+): Promise<{ checks: DeploymentCheck[] }> {
+  return fetchJSON(`/deploy/${encodeURIComponent(projectName)}/deployments/${deploymentId}/checks`)
+}
+
+export async function rollbackDeployment(
+  projectName: string,
+  deploymentId: number
+): Promise<DeployResponse> {
+  return fetchJSON(`/deploy/${encodeURIComponent(projectName)}/deployments/${deploymentId}/rollback`, {
+    method: 'POST',
+  })
+}
+
+export async function cancelDeployment(
+  projectName: string,
+  deploymentId: number
+): Promise<DeployResponse> {
+  return fetchJSON(`/deploy/${encodeURIComponent(projectName)}/deployments/${deploymentId}/cancel`, {
+    method: 'POST',
+  })
+}
+
+export async function getEnvironmentStatus(projectName: string): Promise<EnvironmentStatusResponse> {
+  return fetchJSON(`/deploy/${encodeURIComponent(projectName)}/environments`)
 }
