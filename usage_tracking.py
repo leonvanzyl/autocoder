@@ -68,7 +68,7 @@ class UsageRecord(Base):
     duration_ms = Column(Integer, nullable=True)  # API call duration
 
     # Additional metadata
-    metadata = Column(JSON, nullable=True)
+    call_metadata = Column(JSON, nullable=True)
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
@@ -86,7 +86,7 @@ class UsageRecord(Base):
             "estimatedCost": self.estimated_cost,
             "timestamp": self.timestamp.isoformat() if self.timestamp else None,
             "durationMs": self.duration_ms,
-            "metadata": self.metadata,
+            "metadata": self.call_metadata,
         }
 
 
@@ -300,7 +300,7 @@ class UsageTracker:
             cache_write_tokens=cache_write_tokens,
             estimated_cost=estimated_cost,
             duration_ms=duration_ms,
-            metadata=metadata,
+            call_metadata=metadata,
         )
 
         with self._get_session() as session:
