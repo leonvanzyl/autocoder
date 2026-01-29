@@ -231,7 +231,7 @@ export function UsageDashboard({ projectName, className = '' }: UsageDashboardPr
             <div className="bg-card border-2 border-border rounded-lg p-4">
               <h4 className="font-medium mb-3">Daily Cost Trend</h4>
               <div className="flex items-end gap-1 h-24">
-                {dailyUsage.slice(-14).map((day, i) => {
+                {dailyUsage.slice(-14).map((day) => {
                   const maxCost = Math.max(...dailyUsage.map(d => d.cost), 0.01)
                   const height = (day.cost / maxCost) * 100
                   return (

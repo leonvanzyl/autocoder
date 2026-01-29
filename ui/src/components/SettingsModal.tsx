@@ -174,16 +174,16 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             {/* Model Selection */}
             <div className="space-y-2">
               <Label className="font-medium">Model</Label>
-              <div className="flex rounded-lg border overflow-hidden">
+              <div className="grid grid-cols-2 gap-1.5">
                 {models.map((model) => (
                   <button
                     key={model.id}
                     onClick={() => handleModelChange(model.id)}
                     disabled={isSaving}
-                    className={`flex-1 py-2 px-3 text-sm font-medium transition-colors ${
+                    className={`py-2 px-2 text-xs font-medium transition-colors rounded-md border ${
                       settings.model === model.id
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-background text-foreground hover:bg-muted'
+                        ? 'bg-primary text-primary-foreground border-primary'
+                        : 'bg-background text-foreground border-border hover:bg-muted hover:border-primary/50'
                     } ${isSaving ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
                     {model.name}

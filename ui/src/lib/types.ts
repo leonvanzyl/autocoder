@@ -785,6 +785,140 @@ export interface ModelStats {
 }
 
 // ============================================================================
+// Pull Request Types (Chance Edition Phase 4)
+// ============================================================================
+
+export interface PullRequest {
+  number: number
+  title: string
+  state: string
+  url: string
+  head_branch: string
+  base_branch: string
+  author: string | null
+  created_at: string | null
+  updated_at: string | null
+  mergeable: boolean | null
+  additions: number | null
+  deletions: number | null
+  changed_files: number | null
+}
+
+export interface PRStatus {
+  hasPR: boolean
+  authenticated: boolean
+  currentBranch: string | null
+  pr?: PullRequest
+  message?: string
+}
+
+export interface PRCreateRequest {
+  title: string
+  body?: string
+  base_branch?: string
+  draft?: boolean
+}
+
+export interface PRCheck {
+  name: string
+  state: string
+  conclusion: string | null
+  startedAt: string | null
+  completedAt: string | null
+  detailsUrl: string | null
+}
+
+export interface PRChecksResponse {
+  hasChecks: boolean
+  checks: PRCheck[]
+  summary?: {
+    total: number
+    passing: number
+    failing: number
+    pending: number
+  }
+  message?: string
+}
+
+export interface PRListResponse {
+  prs: PullRequest[]
+  state: string
+}
+
+// ============================================================================
+// Deployment Types (Chance Edition Phase 4)
+// ============================================================================
+
+export type DeploymentStatus = 'pending' | 'in_progress' | 'success' | 'failed' | 'rolled_back' | 'cancelled'
+export type DeploymentEnvironment = 'development' | 'staging' | 'production' | 'preview'
+export type DeploymentStrategy = 'direct' | 'blue_green' | 'canary' | 'rolling'
+
+export interface Deployment {
+  id: number
+  projectName: string
+  environment: DeploymentEnvironment
+  status: DeploymentStatus
+  strategy: DeploymentStrategy
+  branch: string | null
+  commitSha: string | null
+  commitMessage: string | null
+  deployUrl: string | null
+  logs: string | null
+  errorMessage: string | null
+  durationMs: number | null
+  artifactCount: number | null
+  metadata: Record<string, unknown> | null
+  startedAt: string | null
+  completedAt: string | null
+  createdAt: string | null
+}
+
+export interface DeploymentCheck {
+  id: number
+  deploymentId: number
+  checkType: 'pre' | 'post'
+  name: string
+  status: string
+  output: string | null
+  durationMs: number | null
+  createdAt: string | null
+}
+
+export interface DeployRequest {
+  environment: DeploymentEnvironment
+  strategy?: DeploymentStrategy
+  branch?: string
+  commit_sha?: string
+  deploy_command?: string
+  pre_deploy_checks?: string[]
+  post_deploy_checks?: string[]
+  rollback_command?: string
+  metadata?: Record<string, unknown>
+}
+
+export interface DeployResponse {
+  success: boolean
+  deployment_id: number | null
+  message: string
+  duration_ms: number
+  logs: string[]
+}
+
+export interface DeploymentListResponse {
+  deployments: Deployment[]
+}
+
+export interface EnvironmentStatus {
+  environment: DeploymentEnvironment
+  latestDeployment: Deployment | null
+  status: string
+}
+
+export interface EnvironmentStatusResponse {
+  [key: string]: EnvironmentStatus
+}
+
+// ============================================================================
 // Schedule Types
 // ============================================================================
 
