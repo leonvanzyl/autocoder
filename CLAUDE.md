@@ -211,6 +211,46 @@ Defense-in-depth approach configured in `client.py`:
 2. Filesystem restricted to project directory only
 3. Bash commands validated using hierarchical allowlist system
 
+#### Extra Read Paths (Cross-Project File Access)
+
+The agent can optionally read files from directories outside the project folder via the `EXTRA_READ_PATHS` environment variable. This enables referencing documentation, shared libraries, or other projects.
+
+**Configuration:**
+
+```bash
+# Single path
+EXTRA_READ_PATHS=/Users/me/docs
+
+# Multiple paths (comma-separated)
+EXTRA_READ_PATHS=/Users/me/docs,/opt/shared-libs,/Volumes/Data/reference
+```
+
+**Security Controls:**
+
+All paths are validated before being granted read access:
+- Must be absolute paths (not relative)
+- Must exist and be directories
+- Paths are canonicalized via `Path.resolve()` to prevent `..` traversal attacks
+- Sensitive directories are blocked (see blocklist below)
+- Only Read, Glob, and Grep operations are allowed (no Write/Edit)
+
+**Blocked Sensitive Directories:**
+
+The following directories (relative to home) are always blocked:
+- `.ssh`, `.aws`, `.azure`, `.kube` - Cloud/SSH credentials
+- `.gnupg`, `.gpg`, `.password-store` - Encryption keys
+- `.docker`, `.config/gcloud` - Container/cloud configs
+- `.npmrc`, `.pypirc`, `.netrc` - Package manager credentials
+
+**Example Output:**
+
+```
+Created security settings at /path/to/project/.claude_settings.json
+   - Sandbox enabled (OS-level bash isolation)
+   - Filesystem restricted to: /path/to/project
+   - Extra read paths (validated): /Users/me/docs, /opt/shared-libs
+```
+
 #### Per-Project Allowed Commands
 
 The agent's bash command access is controlled through a hierarchical configuration system:

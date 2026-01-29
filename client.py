@@ -47,6 +47,23 @@ API_ENV_VARS = [
 # Example: EXTRA_READ_PATHS=/Volumes/Data/dev,/Users/shared/libs
 EXTRA_READ_PATHS_VAR = "EXTRA_READ_PATHS"
 
+# Sensitive directories that should never be allowed via EXTRA_READ_PATHS
+# These contain credentials, keys, or system-critical files
+EXTRA_READ_PATHS_BLOCKLIST = {
+    ".ssh",
+    ".aws",
+    ".azure",
+    ".kube",
+    ".gnupg",
+    ".gpg",
+    ".password-store",
+    ".docker",
+    ".config/gcloud",
+    ".npmrc",
+    ".pypirc",
+    ".netrc",
+}
+
 
 def get_playwright_headless() -> bool:
     """
@@ -83,6 +100,79 @@ def get_playwright_browser() -> str:
               f"Defaulting to {DEFAULT_PLAYWRIGHT_BROWSER}")
         return DEFAULT_PLAYWRIGHT_BROWSER
     return value
+
+
+def get_extra_read_paths() -> list[Path]:
+    """
+    Get extra read-only paths from EXTRA_READ_PATHS environment variable.
+
+    Parses comma-separated absolute paths and validates each one:
+    - Must be an absolute path
+    - Must exist and be a directory
+    - Cannot be or contain sensitive directories (e.g., .ssh, .aws)
+
+    Returns:
+        List of validated, canonicalized Path objects.
+    """
+    raw_value = os.getenv(EXTRA_READ_PATHS_VAR, "").strip()
+    if not raw_value:
+        return []
+
+    validated_paths: list[Path] = []
+    home_dir = Path.home()
+
+    for path_str in raw_value.split(","):
+        path_str = path_str.strip()
+        if not path_str:
+            continue
+
+        # Parse and canonicalize the path
+        try:
+            path = Path(path_str).resolve()
+        except (OSError, ValueError) as e:
+            print(f"   - Warning: Invalid EXTRA_READ_PATHS path '{path_str}': {e}")
+            continue
+
+        # Must be absolute (resolve() makes it absolute, but check original input)
+        if not Path(path_str).is_absolute():
+            print(f"   - Warning: EXTRA_READ_PATHS requires absolute paths, skipping: {path_str}")
+            continue
+
+        # Must exist
+        if not path.exists():
+            print(f"   - Warning: EXTRA_READ_PATHS path does not exist, skipping: {path_str}")
+            continue
+
+        # Must be a directory
+        if not path.is_dir():
+            print(f"   - Warning: EXTRA_READ_PATHS path is not a directory, skipping: {path_str}")
+            continue
+
+        # Check against sensitive directory blocklist
+        is_blocked = False
+        for sensitive in EXTRA_READ_PATHS_BLOCKLIST:
+            sensitive_path = (home_dir / sensitive).resolve()
+            try:
+                # Block if path IS the sensitive dir or is INSIDE it
+                if path == sensitive_path or path.is_relative_to(sensitive_path):
+                    print(f"   - Warning: EXTRA_READ_PATHS blocked sensitive path: {path_str}")
+                    is_blocked = True
+                    break
+                # Also block if sensitive dir is INSIDE the requested path
+                if sensitive_path.is_relative_to(path):
+                    print(f"   - Warning: EXTRA_READ_PATHS path contains sensitive directory ({sensitive}): {path_str}")
+                    is_blocked = True
+                    break
+            except (OSError, ValueError):
+                # is_relative_to can raise on some edge cases
+                continue
+
+        if is_blocked:
+            continue
+
+        validated_paths.append(path)
+
+    return validated_paths
 
 
 # Feature MCP tools for feature/test management
@@ -209,15 +299,13 @@ def create_client(
     ]
 
     # Add extra read paths from environment variable (read-only access)
-    extra_read_paths = os.getenv(EXTRA_READ_PATHS_VAR, "")
-    if extra_read_paths:
-        for path in extra_read_paths.split(","):
-            path = path.strip()
-            if path:
-                # Add read-only permissions for each extra path
-                permissions_list.append(f"Read({path}/**)")
-                permissions_list.append(f"Glob({path}/**)")
-                permissions_list.append(f"Grep({path}/**)")
+    # Paths are validated, canonicalized, and checked against sensitive blocklist
+    extra_read_paths = get_extra_read_paths()
+    for path in extra_read_paths:
+        # Add read-only permissions for each validated path
+        permissions_list.append(f"Read({path}/**)")
+        permissions_list.append(f"Glob({path}/**)")
+        permissions_list.append(f"Grep({path}/**)")
 
     if not yolo_mode:
         # Allow Playwright MCP tools for browser automation (standard mode only)
@@ -246,7 +334,7 @@ def create_client(
     print("   - Sandbox enabled (OS-level bash isolation)")
     print(f"   - Filesystem restricted to: {project_dir.resolve()}")
     if extra_read_paths:
-        print(f"   - Extra read paths: {extra_read_paths}")
+        print(f"   - Extra read paths (validated): {', '.join(str(p) for p in extra_read_paths)}")
     print("   - Bash commands restricted to allowlist (see security.py)")
     if yolo_mode:
         print("   - MCP servers: features (database) - YOLO MODE (no Playwright)")
