@@ -42,6 +42,11 @@ API_ENV_VARS = [
     "ANTHROPIC_DEFAULT_HAIKU_MODEL",   # Model override for Haiku
 ]
 
+# Extra read paths for cross-project file access (read-only)
+# Set EXTRA_READ_PATHS environment variable with comma-separated absolute paths
+# Example: EXTRA_READ_PATHS=/Volumes/Data/dev,/Users/shared/libs
+EXTRA_READ_PATHS_VAR = "EXTRA_READ_PATHS"
+
 
 def get_playwright_headless() -> bool:
     """
@@ -202,6 +207,18 @@ def create_client(
         # Allow Feature MCP tools for feature management
         *FEATURE_MCP_TOOLS,
     ]
+
+    # Add extra read paths from environment variable (read-only access)
+    extra_read_paths = os.getenv(EXTRA_READ_PATHS_VAR, "")
+    if extra_read_paths:
+        for path in extra_read_paths.split(","):
+            path = path.strip()
+            if path:
+                # Add read-only permissions for each extra path
+                permissions_list.append(f"Read({path}/**)")
+                permissions_list.append(f"Glob({path}/**)")
+                permissions_list.append(f"Grep({path}/**)")
+
     if not yolo_mode:
         # Allow Playwright MCP tools for browser automation (standard mode only)
         permissions_list.extend(PLAYWRIGHT_TOOLS)
@@ -228,6 +245,8 @@ def create_client(
     print(f"Created security settings at {settings_file}")
     print("   - Sandbox enabled (OS-level bash isolation)")
     print(f"   - Filesystem restricted to: {project_dir.resolve()}")
+    if extra_read_paths:
+        print(f"   - Extra read paths: {extra_read_paths}")
     print("   - Bash commands restricted to allowlist (see security.py)")
     if yolo_mode:
         print("   - MCP servers: features (database) - YOLO MODE (no Playwright)")
