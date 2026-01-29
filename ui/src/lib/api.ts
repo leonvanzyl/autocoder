@@ -32,6 +32,10 @@ import type {
   ScheduleUpdate,
   ScheduleListResponse,
   NextRunResponse,
+  ModelListResponse,
+  ProfileListResponse,
+  VersionInfo,
+  GitStatus,
 } from './types'
 
 const API_BASE = '/api'
@@ -525,4 +529,38 @@ export async function deleteSchedule(
 
 export async function getNextScheduledRun(projectName: string): Promise<NextRunResponse> {
   return fetchJSON(`/projects/${encodeURIComponent(projectName)}/schedules/next`)
+}
+
+// ============================================================================
+// Models API (Chance Edition)
+// ============================================================================
+
+export async function getModels(): Promise<ModelListResponse> {
+  return fetchJSON('/models')
+}
+
+export async function getProfiles(): Promise<ProfileListResponse> {
+  return fetchJSON('/models/profiles')
+}
+
+// ============================================================================
+// Version API (Chance Edition)
+// ============================================================================
+
+export async function getVersion(): Promise<VersionInfo> {
+  return fetchJSON('/version')
+}
+
+// ============================================================================
+// Git API (Chance Edition)
+// ============================================================================
+
+export async function getGitStatus(projectName: string): Promise<GitStatus> {
+  return fetchJSON(`/git/status/${encodeURIComponent(projectName)}`)
+}
+
+export async function refreshGitStatus(projectName: string): Promise<GitStatus> {
+  return fetchJSON(`/git/status/${encodeURIComponent(projectName)}/refresh`, {
+    method: 'POST',
+  })
 }

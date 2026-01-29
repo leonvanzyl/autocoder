@@ -542,6 +542,110 @@ export interface ProjectSettingsUpdate {
 }
 
 // ============================================================================
+// Multi-Model Configuration Types (Chance Edition)
+// ============================================================================
+
+export type ModelTier = 'opus' | 'sonnet' | 'haiku'
+
+export interface ModelConfig {
+  id: string
+  name: string
+  tier: ModelTier
+  contextWindow: number
+  maxOutputTokens: number
+  supportsVision: boolean
+  supportsExtendedThinking: boolean
+  costPer1kInput: number
+  costPer1kOutput: number
+  description: string
+}
+
+export interface ModelProfile {
+  name: string
+  description: string
+  initializerModel: string
+  coderModel: string
+  testerModel: string
+  reviewerModel: string | null
+  plannerModel: string | null
+}
+
+export interface ModelListResponse {
+  models: ModelConfig[]
+  tiers: Record<string, string[]>
+  defaultModel: string
+}
+
+export interface ProfileListResponse {
+  profiles: ModelProfile[]
+  defaultProfile: string
+}
+
+// Project-level settings with multi-model support
+export interface ProjectModelSettings {
+  defaultModel?: string
+  coderModel?: string
+  testerModel?: string
+  initializerModel?: string
+  defaultProfile?: string
+  maxConcurrency?: number
+  yoloMode?: boolean
+  testingDirectory?: string
+  autoCommit?: boolean
+}
+
+// App-level settings
+export interface AppModelSettings {
+  defaultModel: string
+  coderModel: string
+  testerModel: string
+  initializerModel: string
+  defaultProfile: string
+  maxConcurrency: number
+  yoloMode: boolean
+  autoResume: boolean
+  pauseOnError: boolean
+  theme: 'system' | 'light' | 'dark'
+  showDebugPanel: boolean
+  celebrateOnComplete: boolean
+  autoCommit: boolean
+  commitMessagePrefix: string
+}
+
+export interface EffectiveSettingsResponse {
+  settings: Record<string, unknown>
+  sources: Record<string, 'project' | 'app' | 'default'>
+}
+
+// Version information
+export interface VersionInfo {
+  version: string
+  edition: string
+  year: number
+  major: number
+  minor: number
+  patch: number
+  buildDate: string
+  description: string
+  fullVersion: string
+  shortVersion: string
+}
+
+// Git status types
+export interface GitStatus {
+  isRepo: boolean
+  branch: string | null
+  ahead: number
+  behind: number
+  modified: number
+  staged: number
+  untracked: number
+  hasUncommittedChanges: boolean
+  lastCommitMessage: string | null
+  lastCommitDate: string | null
+}
+
+// ============================================================================
 // Schedule Types
 // ============================================================================
 
