@@ -335,7 +335,7 @@ export function ScheduleModal({ projectName, isOpen, onClose }: ScheduleModalPro
               <Checkbox
                 id="yolo-mode"
                 checked={newSchedule.yolo_mode}
-                onCheckedChange={(checked) =>
+                onCheckedChange={(checked: boolean | 'indeterminate') =>
                   setNewSchedule((prev) => ({ ...prev, yolo_mode: checked === true }))
                 }
               />
