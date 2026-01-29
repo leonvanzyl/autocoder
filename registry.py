@@ -28,19 +28,33 @@ logger = logging.getLogger(__name__)
 # Model Configuration (Single Source of Truth)
 # =============================================================================
 
-# Available models with display names
-# To add a new model: add an entry here with {"id": "model-id", "name": "Display Name"}
+# Available models with display names and tiers
+# To add a new model: add an entry here with {"id": "model-id", "name": "Display Name", "tier": "opus|sonnet|haiku"}
 AVAILABLE_MODELS = [
-    {"id": "claude-opus-4-5-20251101", "name": "Claude Opus 4.5"},
-    {"id": "claude-sonnet-4-5-20250929", "name": "Claude Sonnet 4.5"},
+    {"id": "claude-opus-4-5-20251101", "name": "Claude Opus 4.5", "tier": "opus"},
+    {"id": "claude-sonnet-4-5-20250929", "name": "Claude Sonnet 4.5", "tier": "sonnet"},
+    {"id": "claude-sonnet-4-20250514", "name": "Claude Sonnet 4", "tier": "sonnet"},
+    {"id": "claude-3-5-sonnet-20241022", "name": "Claude 3.5 Sonnet", "tier": "sonnet"},
+    {"id": "claude-3-5-haiku-20241022", "name": "Claude 3.5 Haiku", "tier": "haiku"},
+    {"id": "claude-3-haiku-20240307", "name": "Claude 3 Haiku", "tier": "haiku"},
 ]
 
 # List of valid model IDs (derived from AVAILABLE_MODELS)
 VALID_MODELS = [m["id"] for m in AVAILABLE_MODELS]
 
+# Model tiers for capability classification
+MODEL_TIERS = {
+    "opus": ["claude-opus-4-5-20251101"],
+    "sonnet": ["claude-sonnet-4-5-20250929", "claude-sonnet-4-20250514", "claude-3-5-sonnet-20241022"],
+    "haiku": ["claude-3-5-haiku-20241022", "claude-3-haiku-20240307"],
+}
+
 # Default model and settings
 DEFAULT_MODEL = "claude-opus-4-5-20251101"
 DEFAULT_YOLO_MODE = False
+
+# Default testing directory (empty string means use project directory)
+DEFAULT_TESTING_DIRECTORY = ""
 
 # SQLite connection settings
 SQLITE_TIMEOUT = 30  # seconds to wait for database lock

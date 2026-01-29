@@ -580,3 +580,137 @@ class NextRunResponse(BaseModel):
     next_end: datetime | None  # UTC (latest end if overlapping)
     is_currently_running: bool
     active_schedule_count: int
+
+
+# ============================================================================
+# Model Configuration Schemas (Chance Edition)
+# ============================================================================
+
+
+class ModelConfigSchema(BaseModel):
+    """Schema for model configuration details."""
+    id: str
+    name: str
+    tier: Literal["opus", "sonnet", "haiku"]
+    contextWindow: int = 200000
+    maxOutputTokens: int = 16384
+    supportsVision: bool = True
+    supportsExtendedThinking: bool = False
+    costPer1kInput: float = 0.0
+    costPer1kOutput: float = 0.0
+    description: str = ""
+
+
+class ModelProfileSchema(BaseModel):
+    """Schema for a model profile (predefined model combinations)."""
+    name: str
+    description: str
+    initializerModel: str
+    coderModel: str
+    testerModel: str
+    reviewerModel: str | None = None
+    plannerModel: str | None = None
+
+
+class ModelListResponse(BaseModel):
+    """Response for listing all available models."""
+    models: list[ModelConfigSchema]
+    tiers: dict[str, list[str]]
+    defaultModel: str
+
+
+class ProfileListResponse(BaseModel):
+    """Response for listing all available profiles."""
+    profiles: list[ModelProfileSchema]
+    defaultProfile: str
+
+
+# ============================================================================
+# Project Settings Schemas (Chance Edition)
+# ============================================================================
+
+
+class ProjectSettingsSchema(BaseModel):
+    """Schema for project-level settings."""
+    defaultModel: str | None = None
+    coderModel: str | None = None
+    testerModel: str | None = None
+    initializerModel: str | None = None
+    defaultProfile: str | None = None
+    maxConcurrency: int | None = None
+    yoloMode: bool | None = None
+    testingDirectory: str | None = None
+    autoCommit: bool | None = None
+
+    @field_validator('coderModel', 'testerModel', 'initializerModel', 'defaultModel')
+    @classmethod
+    def validate_model_ids(cls, v: str | None) -> str | None:
+        """Validate model IDs are valid."""
+        if v is not None and v not in VALID_MODELS:
+            raise ValueError(f"Invalid model. Must be one of: {VALID_MODELS}")
+        return v
+
+    @field_validator('maxConcurrency')
+    @classmethod
+    def validate_concurrency(cls, v: int | None) -> int | None:
+        """Validate concurrency is 1-5."""
+        if v is not None and (v < 1 or v > 5):
+            raise ValueError("maxConcurrency must be between 1 and 5")
+        return v
+
+
+class AppSettingsSchema(BaseModel):
+    """Schema for application-level settings."""
+    defaultModel: str = DEFAULT_MODEL
+    coderModel: str = DEFAULT_MODEL
+    testerModel: str = "claude-sonnet-4-5-20250929"
+    initializerModel: str = DEFAULT_MODEL
+    defaultProfile: str = "default"
+    maxConcurrency: int = 3
+    yoloMode: bool = False
+    autoResume: bool = True
+    pauseOnError: bool = True
+    theme: Literal["system", "light", "dark"] = "system"
+    showDebugPanel: bool = False
+    celebrateOnComplete: bool = True
+    autoCommit: bool = False
+    commitMessagePrefix: str = "[autocoder]"
+
+    @field_validator('coderModel', 'testerModel', 'initializerModel', 'defaultModel')
+    @classmethod
+    def validate_model_ids(cls, v: str | None) -> str | None:
+        """Validate model IDs are valid."""
+        if v is not None and v not in VALID_MODELS:
+            raise ValueError(f"Invalid model. Must be one of: {VALID_MODELS}")
+        return v
+
+
+class EffectiveSettingsResponse(BaseModel):
+    """Response for effective settings (merged from all levels)."""
+    settings: dict
+    sources: dict  # Key -> "project" | "app" | "default"
+
+
+class SettingsUpdateRequest(BaseModel):
+    """Request for updating settings at a specific level."""
+    level: Literal["project", "app"]
+    settings: dict
+
+
+# ============================================================================
+# Version Schema (Chance Edition)
+# ============================================================================
+
+
+class VersionResponse(BaseModel):
+    """Response for version information."""
+    version: str
+    edition: str
+    year: int
+    major: int
+    minor: int
+    patch: int
+    buildDate: str
+    description: str
+    fullVersion: str
+    shortVersion: str

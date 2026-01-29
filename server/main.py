@@ -39,6 +39,7 @@ from .routers import (
     settings_router,
     spec_creation_router,
     terminal_router,
+    version_router,
 )
 from .schemas import SetupStatus
 from .services.assistant_chat_session import cleanup_all_sessions as cleanup_assistant_sessions
@@ -54,6 +55,13 @@ from .websocket import project_websocket
 
 # Paths
 ROOT_DIR = Path(__file__).parent.parent
+
+# Import version info from root directory
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
+from version import get_version  # noqa: E402
+
 UI_DIST_DIR = ROOT_DIR / "ui" / "dist"
 
 
@@ -80,11 +88,14 @@ async def lifespan(app: FastAPI):
     await cleanup_all_devservers()
 
 
+# Get version info
+version_info = get_version()
+
 # Create FastAPI app
 app = FastAPI(
-    title="Autonomous Coding UI",
+    title=f"Autonomous Coding UI - {version_info.edition}",
     description="Web UI for the Autonomous Coding Agent",
-    version="1.0.0",
+    version=version_info.version,
     lifespan=lifespan,
 )
 
@@ -148,6 +159,7 @@ app.include_router(filesystem_router)
 app.include_router(assistant_chat_router)
 app.include_router(settings_router)
 app.include_router(terminal_router)
+app.include_router(version_router)
 
 
 # ============================================================================

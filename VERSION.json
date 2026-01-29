@@ -1,0 +1,10 @@
+{
+  "version": "2026.1.0.0",
+  "edition": "Chance Edition",
+  "year": 2026,
+  "major": 1,
+  "minor": 0,
+  "patch": 0,
+  "buildDate": "2026-01-29",
+  "description": "Autonomous coding agent with multi-model support and enhanced orchestration"
+}
