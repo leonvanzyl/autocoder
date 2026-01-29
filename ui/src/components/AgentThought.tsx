@@ -103,12 +103,12 @@ export function AgentThought({ logs, agentStatus }: AgentThoughtProps) {
     <div
       className={`
         transition-all duration-300 ease-out overflow-hidden
-        ${shouldShow ? 'opacity-100 max-h-20' : 'opacity-0 max-h-0'}
+        ${shouldShow ? 'opacity-100 max-h-32' : 'opacity-0 max-h-0'}
       `}
     >
-      <Card className={`relative px-4 py-3 flex items-center gap-3 ${isRunning ? 'animate-pulse' : ''}`}>
+      <Card className={`relative px-4 py-3 flex items-start gap-3 ${isRunning ? 'animate-pulse' : ''}`}>
         {/* Brain Icon with subtle glow */}
-        <div className="relative shrink-0">
+        <div className="relative shrink-0 mt-0.5">
           <Brain
             size={22}
             className="text-primary"
@@ -122,13 +122,14 @@ export function AgentThought({ logs, agentStatus }: AgentThoughtProps) {
           )}
         </div>
 
-        {/* Thought text with fade transition */}
+        {/* Thought text with fade transition - wraps instead of truncating */}
         <p
-          className="font-mono text-sm truncate transition-all duration-150 ease-out text-foreground"
+          className="font-mono text-sm transition-all duration-150 ease-out text-foreground leading-relaxed break-words"
           style={{
             opacity: textVisible ? 1 : 0,
             transform: textVisible ? 'translateY(0)' : 'translateY(-4px)',
           }}
+          title={displayedThought || ''}
         >
           {displayedThought?.replace(/:$/, '')}
         </p>

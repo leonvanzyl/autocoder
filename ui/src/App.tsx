@@ -28,6 +28,9 @@ import { KeyboardShortcutsHelp } from './components/KeyboardShortcutsHelp'
 import { ThemeSelector } from './components/ThemeSelector'
 import { ResetProjectModal } from './components/ResetProjectModal'
 import { ProjectSetupRequired } from './components/ProjectSetupRequired'
+import { GitStatusBar } from './components/GitStatusBar'
+import { PRWorkflowPanel } from './components/PRWorkflowPanel'
+import { DeployPanel } from './components/DeployPanel'
 import { VersionBadgeDetailed } from './components/VersionBadge'
 import { getDependencyGraph } from './lib/api'
 import { Loader2, Settings, Moon, Sun, RotateCcw } from 'lucide-react'
@@ -333,6 +336,9 @@ function App() {
                       GLM
                     </Badge>
                   )}
+
+                  {/* Git Status */}
+                  <GitStatusBar projectName={selectedProject} />
                 </>
               )}
 
@@ -407,6 +413,12 @@ function App() {
                 agentStatus={wsState.agentStatus}
               />
             )}
+
+            {/* PR Workflow and Deploy Panels - side by side on larger screens */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <PRWorkflowPanel projectName={selectedProject} />
+              <DeployPanel projectName={selectedProject} />
+            </div>
 
             {/* Initializing Features State - show when agent is running but no features yet */}
             {features &&

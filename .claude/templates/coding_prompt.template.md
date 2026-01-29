@@ -285,9 +285,25 @@ Use the feature_mark_passing tool with feature_id=42
 
 **ONLY MARK A FEATURE AS PASSING AFTER VERIFICATION WITH SCREENSHOTS.**
 
-### STEP 7: COMMIT YOUR PROGRESS
+### STEP 7: COMMIT AND PUSH YOUR PROGRESS
 
-Make a descriptive git commit.
+Make a descriptive git commit and push to remote.
+
+**Git Workflow:**
+
+```bash
+# 1. Check git status first
+git status
+
+# 2. Stage your changes
+git add .
+
+# 3. Commit with a descriptive message
+git commit -m "feat: implement [feature name] with browser verification"
+
+# 4. Push to remote (if working on a feature branch)
+git push origin HEAD
+```
 
 **Git Commit Rules:**
 - ALWAYS use simple `-m` flag for commit messages
@@ -299,12 +315,15 @@ git add .
 git commit -m "Implement [feature name] - verified end-to-end" -m "- Added [specific changes]" -m "- Tested with browser automation" -m "- Marked feature #X as passing"
 ```
 
-Or use a single descriptive message:
+**When to Push:**
+- Push after completing each feature (keeps remote up to date)
+- Push before ending your session (ensures work is backed up)
+- If push fails due to conflicts, pull first: `git pull --rebase origin HEAD`
 
-```bash
-git add .
-git commit -m "feat: implement [feature name] with browser verification"
-```
+**Branch Strategy:**
+- Check current branch: `git branch`
+- If on main/master, consider creating a feature branch
+- Use `git push -u origin <branch-name>` for new branches
 
 ### STEP 8: UPDATE PROGRESS NOTES
 
