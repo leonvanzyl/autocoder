@@ -9,23 +9,20 @@ Your job is to ensure that features marked as "passing" still work correctly. If
 Start by orienting yourself:
 
 ```bash
-# 1. See your working directory
-pwd
+# 1. See your working directory and project structure
+pwd && ls -la
 
-# 2. List files to understand project structure
-ls -la
+# 2. Read recent progress notes (last 100 lines)
+tail -100 claude-progress.txt
 
-# 3. Read progress notes from previous sessions (last 200 lines)
-tail -200 claude-progress.txt
-
-# 4. Check recent git history
+# 3. Check recent git history
 git log --oneline -10
 ```
 
-Then use MCP tools to check feature status:
+Then use MCP tools:
 
-```
-# 5. Get progress statistics
+```text
+# 4. Get progress statistics
 Use the feature_get_stats tool
 ```
 
@@ -173,6 +170,17 @@ All interaction tools have **built-in auto-wait** - no manual timeouts needed.
 - `browser_press_key` - Keyboard input
 - `browser_console_messages` - Check for JS errors
 - `browser_network_requests` - Monitor API calls
+
+---
+
+## TOKEN EFFICIENCY
+
+To maximize context window usage:
+
+- **Don't read files unnecessarily** - Feature details from `feature_get_by_id` contain everything you need
+- **Be concise** - Short, focused responses save tokens for actual work
+- **Use `feature_get_summary`** for status checks (lighter than `feature_get_by_id`)
+- **Avoid re-reading large files** - Read once, remember the content
 
 ---
 

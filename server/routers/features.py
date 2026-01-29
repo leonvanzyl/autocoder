@@ -65,12 +65,16 @@ def get_db_session(project_dir: Path):
     """
     Context manager for database sessions.
     Ensures session is always closed, even on exceptions.
+    Properly rolls back on error to prevent PendingRollbackError.
     """
     create_database, _ = _get_db_classes()
     _, SessionLocal = create_database(project_dir)
     session = SessionLocal()
     try:
         yield session
+    except Exception:
+        session.rollback()
+        raise
     finally:
         session.close()
 

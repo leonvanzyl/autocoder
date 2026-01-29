@@ -28,18 +28,32 @@ logger = logging.getLogger(__name__)
 # Model Configuration (Single Source of Truth)
 # =============================================================================
 
-# Available models with display names
+# Available models with display names (Claude models)
 # To add a new model: add an entry here with {"id": "model-id", "name": "Display Name"}
-AVAILABLE_MODELS = [
+CLAUDE_MODELS = [
     {"id": "claude-opus-4-5-20251101", "name": "Claude Opus 4.5"},
     {"id": "claude-sonnet-4-5-20250929", "name": "Claude Sonnet 4.5"},
 ]
 
-# List of valid model IDs (derived from AVAILABLE_MODELS)
-VALID_MODELS = [m["id"] for m in AVAILABLE_MODELS]
+# Common Ollama models for local inference
+OLLAMA_MODELS = [
+    {"id": "llama3.3:70b", "name": "Llama 3.3 70B"},
+    {"id": "llama3.2:latest", "name": "Llama 3.2"},
+    {"id": "codellama:34b", "name": "Code Llama 34B"},
+    {"id": "deepseek-coder:33b", "name": "DeepSeek Coder 33B"},
+    {"id": "qwen2.5:72b", "name": "Qwen 2.5 72B"},
+    {"id": "mistral:latest", "name": "Mistral"},
+]
+
+# Default to Claude models (will be overridden if Ollama is detected)
+AVAILABLE_MODELS = CLAUDE_MODELS
+
+# List of valid model IDs (includes both Claude and Ollama models)
+VALID_MODELS = [m["id"] for m in CLAUDE_MODELS] + [m["id"] for m in OLLAMA_MODELS]
 
 # Default model and settings
 DEFAULT_MODEL = "claude-opus-4-5-20251101"
+DEFAULT_OLLAMA_MODEL = "llama3.3:70b"
 DEFAULT_YOLO_MODE = False
 
 # SQLite connection settings

@@ -4,10 +4,10 @@
 
 // Project types
 export interface ProjectStats {
-  passing: number
-  in_progress: number
-  total: number
-  percentage: number
+  passing: number;
+  in_progress: number;
+  total: number;
+  percentage: number;
 }
 
 export interface ProjectSummary {
@@ -19,42 +19,42 @@ export interface ProjectSummary {
 }
 
 export interface ProjectDetail extends ProjectSummary {
-  prompts_dir: string
+  prompts_dir: string;
 }
 
 // Filesystem types
 export interface DriveInfo {
-  letter: string
-  label: string
-  available?: boolean
+  letter: string;
+  label: string;
+  available?: boolean;
 }
 
 export interface DirectoryEntry {
-  name: string
-  path: string
-  is_directory: boolean
-  has_children: boolean
+  name: string;
+  path: string;
+  is_directory: boolean;
+  has_children: boolean;
 }
 
 export interface DirectoryListResponse {
-  current_path: string
-  parent_path: string | null
-  entries: DirectoryEntry[]
-  drives: DriveInfo[] | null
+  current_path: string;
+  parent_path: string | null;
+  entries: DirectoryEntry[];
+  drives: DriveInfo[] | null;
 }
 
 export interface PathValidationResponse {
-  valid: boolean
-  exists: boolean
-  is_directory: boolean
-  can_write: boolean
-  message: string
+  valid: boolean;
+  exists: boolean;
+  is_directory: boolean;
+  can_write: boolean;
+  message: string;
 }
 
 export interface ProjectPrompts {
-  app_spec: string
-  initializer_prompt: string
-  coding_prompt: string
+  app_spec: string;
+  initializer_prompt: string;
+  coding_prompt: string;
 }
 
 // Feature types
@@ -96,9 +96,9 @@ export interface DependencyGraph {
 }
 
 export interface FeatureListResponse {
-  pending: Feature[]
-  in_progress: Feature[]
-  done: Feature[]
+  pending: Feature[];
+  in_progress: Feature[];
+  done: Feature[];
 }
 
 export interface FeatureCreate {
@@ -134,17 +134,17 @@ export interface AgentStatusResponse {
 }
 
 export interface AgentActionResponse {
-  success: boolean
-  status: AgentStatus
-  message: string
+  success: boolean;
+  status: AgentStatus;
+  message: string;
 }
 
 // Setup types
 export interface SetupStatus {
-  claude_cli: boolean
-  credentials: boolean
-  node: boolean
-  npm: boolean
+  claude_cli: boolean;
+  credentials: boolean;
+  node: boolean;
+  npm: boolean;
 }
 
 // Dev Server types
@@ -242,17 +242,17 @@ export interface OrchestratorStatus {
 export type WSMessageType = 'progress' | 'feature_update' | 'log' | 'agent_status' | 'pong' | 'dev_log' | 'dev_server_status' | 'agent_update' | 'orchestrator_update'
 
 export interface WSProgressMessage {
-  type: 'progress'
-  passing: number
-  in_progress: number
-  total: number
-  percentage: number
+  type: "progress";
+  passing: number;
+  in_progress: number;
+  total: number;
+  percentage: number;
 }
 
 export interface WSFeatureUpdateMessage {
-  type: 'feature_update'
-  feature_id: number
-  passes: boolean
+  type: "feature_update";
+  feature_id: number;
+  passes: boolean;
 }
 
 export interface WSLogMessage {
@@ -278,12 +278,12 @@ export interface WSAgentUpdateMessage {
 }
 
 export interface WSAgentStatusMessage {
-  type: 'agent_status'
-  status: AgentStatus
+  type: "agent_status";
+  status: AgentStatus;
 }
 
 export interface WSPongMessage {
-  type: 'pong'
+  type: "pong";
 }
 
 export interface WSDevLogMessage {
@@ -329,53 +329,53 @@ export type WSMessage =
 // ============================================================================
 
 export interface SpecQuestionOption {
-  label: string
-  description: string
+  label: string;
+  description: string;
 }
 
 export interface SpecQuestion {
-  question: string
-  header: string
-  options: SpecQuestionOption[]
-  multiSelect: boolean
+  question: string;
+  header: string;
+  options: SpecQuestionOption[];
+  multiSelect: boolean;
 }
 
 export interface SpecChatTextMessage {
-  type: 'text'
-  content: string
+  type: "text";
+  content: string;
 }
 
 export interface SpecChatQuestionMessage {
-  type: 'question'
-  questions: SpecQuestion[]
-  tool_id?: string
+  type: "question";
+  questions: SpecQuestion[];
+  tool_id?: string;
 }
 
 export interface SpecChatCompleteMessage {
-  type: 'spec_complete'
-  path: string
+  type: "spec_complete";
+  path: string;
 }
 
 export interface SpecChatFileWrittenMessage {
-  type: 'file_written'
-  path: string
+  type: "file_written";
+  path: string;
 }
 
 export interface SpecChatSessionCompleteMessage {
-  type: 'complete'
+  type: "complete";
 }
 
 export interface SpecChatErrorMessage {
-  type: 'error'
-  content: string
+  type: "error";
+  content: string;
 }
 
 export interface SpecChatPongMessage {
-  type: 'pong'
+  type: "pong";
 }
 
 export interface SpecChatResponseDoneMessage {
-  type: 'response_done'
+  type: "response_done";
 }
 
 export type SpecChatServerMessage =
@@ -386,27 +386,27 @@ export type SpecChatServerMessage =
   | SpecChatSessionCompleteMessage
   | SpecChatErrorMessage
   | SpecChatPongMessage
-  | SpecChatResponseDoneMessage
+  | SpecChatResponseDoneMessage;
 
 // Image attachment for chat messages
 export interface ImageAttachment {
-  id: string
-  filename: string
-  mimeType: 'image/jpeg' | 'image/png'
-  base64Data: string    // Raw base64 (without data: prefix)
-  previewUrl: string    // data: URL for display
-  size: number          // File size in bytes
+  id: string;
+  filename: string;
+  mimeType: "image/jpeg" | "image/png";
+  base64Data: string; // Raw base64 (without data: prefix)
+  previewUrl: string; // data: URL for display
+  size: number; // File size in bytes
 }
 
 // UI chat message for display
 export interface ChatMessage {
-  id: string
-  role: 'user' | 'assistant' | 'system'
-  content: string
-  attachments?: ImageAttachment[]
-  timestamp: Date
-  questions?: SpecQuestion[]
-  isStreaming?: boolean
+  id: string;
+  role: "user" | "assistant" | "system";
+  content: string;
+  attachments?: ImageAttachment[];
+  timestamp: Date;
+  questions?: SpecQuestion[];
+  isStreaming?: boolean;
 }
 
 // ============================================================================
@@ -414,57 +414,57 @@ export interface ChatMessage {
 // ============================================================================
 
 export interface AssistantConversation {
-  id: number
-  project_name: string
-  title: string | null
-  created_at: string | null
-  updated_at: string | null
-  message_count: number
+  id: number;
+  project_name: string;
+  title: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+  message_count: number;
 }
 
 export interface AssistantMessage {
-  id: number
-  role: 'user' | 'assistant' | 'system'
-  content: string
-  timestamp: string | null
+  id: number;
+  role: "user" | "assistant" | "system";
+  content: string;
+  timestamp: string | null;
 }
 
 export interface AssistantConversationDetail {
-  id: number
-  project_name: string
-  title: string | null
-  created_at: string | null
-  updated_at: string | null
-  messages: AssistantMessage[]
+  id: number;
+  project_name: string;
+  title: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+  messages: AssistantMessage[];
 }
 
 export interface AssistantChatTextMessage {
-  type: 'text'
-  content: string
+  type: "text";
+  content: string;
 }
 
 export interface AssistantChatToolCallMessage {
-  type: 'tool_call'
-  tool: string
-  input: Record<string, unknown>
+  type: "tool_call";
+  tool: string;
+  input: Record<string, unknown>;
 }
 
 export interface AssistantChatResponseDoneMessage {
-  type: 'response_done'
+  type: "response_done";
 }
 
 export interface AssistantChatErrorMessage {
-  type: 'error'
-  content: string
+  type: "error";
+  content: string;
 }
 
 export interface AssistantChatConversationCreatedMessage {
-  type: 'conversation_created'
-  conversation_id: number
+  type: "conversation_created";
+  conversation_id: number;
 }
 
 export interface AssistantChatPongMessage {
-  type: 'pong'
+  type: "pong";
 }
 
 export type AssistantChatServerMessage =
@@ -473,7 +473,7 @@ export type AssistantChatServerMessage =
   | AssistantChatResponseDoneMessage
   | AssistantChatErrorMessage
   | AssistantChatConversationCreatedMessage
-  | AssistantChatPongMessage
+  | AssistantChatPongMessage;
 
 // ============================================================================
 // Expand Chat Types
@@ -514,14 +514,17 @@ export interface FeatureBulkCreateResponse {
 // ============================================================================
 
 export interface ModelInfo {
-  id: string
-  name: string
+  id: string;
+  name: string;
 }
 
 export interface ModelsResponse {
-  models: ModelInfo[]
-  default: string
+  models: ModelInfo[];
+  default: string;
 }
+
+// IDE type for opening projects in external editors
+export type IDEType = 'vscode' | 'cursor' | 'antigravity'
 
 export interface Settings {
   yolo_mode: boolean
@@ -529,12 +532,14 @@ export interface Settings {
   glm_mode: boolean
   ollama_mode: boolean
   testing_agent_ratio: number  // Regression testing agents (0-3)
+  preferred_ide: IDEType | null  // Preferred IDE for opening projects
 }
 
 export interface SettingsUpdate {
   yolo_mode?: boolean
   model?: string
   testing_agent_ratio?: number
+  preferred_ide?: IDEType | null
 }
 
 export interface ProjectSettingsUpdate {

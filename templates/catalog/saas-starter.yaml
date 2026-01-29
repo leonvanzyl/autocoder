@@ -1,0 +1,74 @@
+name: "SaaS Starter"
+description: "Multi-tenant SaaS application with authentication, billing, and dashboard"
+
+tech_stack:
+  frontend: "Next.js"
+  backend: "Node.js/Express"
+  database: "PostgreSQL"
+  auth: "NextAuth.js"
+  styling: "Tailwind CSS"
+  hosting: "Vercel"
+
+feature_categories:
+  authentication:
+    - "User registration"
+    - "User login"
+    - "Password reset"
+    - "Email verification"
+    - "OAuth login (Google, GitHub)"
+    - "Two-factor authentication"
+    - "Session management"
+
+  multi_tenancy:
+    - "Organization creation"
+    - "Team member invitations"
+    - "Role management (Admin, Member)"
+    - "Organization settings"
+    - "Switch between organizations"
+
+  billing:
+    - "Subscription plans display"
+    - "Stripe integration"
+    - "Payment method management"
+    - "Invoice history"
+    - "Usage tracking"
+    - "Plan upgrades/downgrades"
+
+  dashboard:
+    - "Overview page with metrics"
+    - "Usage statistics charts"
+    - "Recent activity feed"
+    - "Quick actions"
+
+  user_profile:
+    - "Profile settings"
+    - "Avatar upload"
+    - "Notification preferences"
+    - "API key management"
+
+  admin:
+    - "User management"
+    - "Organization management"
+    - "System health dashboard"
+    - "Audit logs"
+
+design_tokens:
+  colors:
+    primary: "#6366F1"
+    secondary: "#10B981"
+    accent: "#F59E0B"
+    background: "#F9FAFB"
+    text: "#111827"
+    muted: "#6B7280"
+  spacing: [4, 8, 12, 16, 24, 32, 48]
+  fonts:
+    heading: "Inter"
+    body: "Inter"
+  border_radius:
+    small: "4px"
+    medium: "8px"
+    large: "12px"
+
+estimated_features: 45
+tags: ["saas", "subscription", "multi-tenant", "billing"]
+difficulty: "advanced"

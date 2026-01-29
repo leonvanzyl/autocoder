@@ -6,6 +6,7 @@ Functions for creating and configuring the Claude Agent SDK client.
 """
 
 import json
+import logging
 import os
 import shutil
 import sys
@@ -16,6 +17,10 @@ from claude_agent_sdk.types import HookContext, HookInput, HookMatcher, SyncHook
 from dotenv import load_dotenv
 
 from security import bash_security_hook
+from structured_logging import get_logger
+
+# Module logger
+logger = logging.getLogger(__name__)
 
 # Load environment variables from .env file if present
 load_dotenv()
@@ -40,6 +45,7 @@ API_ENV_VARS = [
     "ANTHROPIC_DEFAULT_SONNET_MODEL",  # Model override for Sonnet
     "ANTHROPIC_DEFAULT_OPUS_MODEL",    # Model override for Opus
     "ANTHROPIC_DEFAULT_HAIKU_MODEL",   # Model override for Haiku
+    "CLAUDE_CODE_MAX_OUTPUT_TOKENS",   # Max output tokens (default 32000, GLM 4.7 supports 131072)
 ]
 
 # Extra read paths for cross-project file access (read-only)
@@ -76,7 +82,7 @@ def get_playwright_headless() -> bool:
     truthy = {"true", "1", "yes", "on"}
     falsy = {"false", "0", "no", "off"}
     if value not in truthy | falsy:
-        print(f"   - Warning: Invalid PLAYWRIGHT_HEADLESS='{value}', defaulting to {DEFAULT_PLAYWRIGHT_HEADLESS}")
+        logger.warning(f"Invalid PLAYWRIGHT_HEADLESS='{value}', defaulting to {DEFAULT_PLAYWRIGHT_HEADLESS}")
         return DEFAULT_PLAYWRIGHT_HEADLESS
     return value in truthy
 
@@ -175,6 +181,17 @@ def get_extra_read_paths() -> list[Path]:
     return validated_paths
 
 
+def get_playwright_browser() -> str:
+    """
+    Get the browser to use for Playwright.
+
+    Reads from PLAYWRIGHT_BROWSER environment variable, defaults to firefox.
+    Options: chrome, firefox, webkit, msedge
+    Firefox is recommended for lower CPU usage.
+    """
+    return os.getenv("PLAYWRIGHT_BROWSER", DEFAULT_PLAYWRIGHT_BROWSER).lower()
+
+
 # Feature MCP tools for feature/test management
 FEATURE_MCP_TOOLS = [
     # Core feature operations
@@ -189,7 +206,7 @@ FEATURE_MCP_TOOLS = [
     "mcp__features__feature_create_bulk",
     "mcp__features__feature_create",
     "mcp__features__feature_clear_in_progress",
-    "mcp__features__feature_release_testing",  # Release testing claim
+    "mcp__features__feature_verify_quality",  # Run quality checks (lint, type-check)
     # Dependency management
     "mcp__features__feature_add_dependency",
     "mcp__features__feature_remove_dependency",
@@ -274,6 +291,9 @@ def create_client(
     Note: Authentication is handled by start.bat/start.sh before this runs.
     The Claude SDK auto-detects credentials from the Claude CLI configuration
     """
+    # Initialize logger for client configuration events
+    logger = get_logger(project_dir, agent_id="client", console_output=False)
+
     # Build allowed tools list based on mode
     # In YOLO mode, exclude Playwright tools for faster prototyping
     allowed_tools = [*BUILTIN_TOOLS, *FEATURE_MCP_TOOLS]
@@ -330,6 +350,7 @@ def create_client(
     with open(settings_file, "w") as f:
         json.dump(security_settings, f, indent=2)
 
+    logger.info("Settings file written", file_path=str(settings_file))
     print(f"Created security settings at {settings_file}")
     print("   - Sandbox enabled (OS-level bash isolation)")
     print(f"   - Filesystem restricted to: {project_dir.resolve()}")
@@ -337,18 +358,17 @@ def create_client(
         print(f"   - Extra read paths (validated): {', '.join(str(p) for p in extra_read_paths)}")
     print("   - Bash commands restricted to allowlist (see security.py)")
     if yolo_mode:
-        print("   - MCP servers: features (database) - YOLO MODE (no Playwright)")
+        logger.info("  MCP servers: features (database) - YOLO MODE (no Playwright)")
     else:
-        print("   - MCP servers: playwright (browser), features (database)")
-    print("   - Project settings enabled (skills, commands, CLAUDE.md)")
-    print()
+        logger.debug("  MCP servers: playwright (browser), features (database)")
+    logger.debug("  Project settings enabled (skills, commands, CLAUDE.md)")
 
     # Use system Claude CLI instead of bundled one (avoids Bun runtime crash on Windows)
     system_cli = shutil.which("claude")
     if system_cli:
-        print(f"   - Using system CLI: {system_cli}")
+        logger.debug(f"Using system CLI: {system_cli}")
     else:
-        print("   - Warning: System 'claude' CLI not found, using bundled CLI")
+        logger.warning("System 'claude' CLI not found, using bundled CLI")
 
     # Build MCP servers config - features is always included, playwright only in standard mode
     mcp_servers = {
@@ -374,7 +394,7 @@ def create_client(
         ]
         if get_playwright_headless():
             playwright_args.append("--headless")
-        print(f"   - Browser: {browser} (headless={get_playwright_headless()})")
+        logger.debug(f"Browser: {browser} (headless={get_playwright_headless()})")
 
         # Browser isolation for parallel execution
         # Each agent gets its own isolated browser context to prevent tab conflicts
@@ -383,7 +403,7 @@ def create_client(
             # This creates a fresh, isolated context without persistent state
             # Note: --isolated and --user-data-dir are mutually exclusive
             playwright_args.append("--isolated")
-            print(f"   - Browser isolation enabled for agent: {agent_id}")
+            logger.debug(f"Browser isolation enabled for agent: {agent_id}")
 
         mcp_servers["playwright"] = {
             "command": "npx",
@@ -405,12 +425,16 @@ def create_client(
     is_alternative_api = bool(base_url)
     is_ollama = "localhost:11434" in base_url or "127.0.0.1:11434" in base_url
 
+    # Set default max output tokens for GLM 4.7 compatibility if not already set, but only for alternative APIs
+    if is_alternative_api and "CLAUDE_CODE_MAX_OUTPUT_TOKENS" not in sdk_env:
+        sdk_env["CLAUDE_CODE_MAX_OUTPUT_TOKENS"] = DEFAULT_MAX_OUTPUT_TOKENS
+
     if sdk_env:
-        print(f"   - API overrides: {', '.join(sdk_env.keys())}")
+        logger.info(f"API overrides: {', '.join(sdk_env.keys())}")
         if is_ollama:
-            print("   - Ollama Mode: Using local models")
+            logger.info("Ollama Mode: Using local models")
         elif "ANTHROPIC_BASE_URL" in sdk_env:
-            print(f"   - GLM Mode: Using {sdk_env['ANTHROPIC_BASE_URL']}")
+            logger.info(f"GLM Mode: Using {sdk_env['ANTHROPIC_BASE_URL']}")
 
     # Create a wrapper for bash_security_hook that passes project_dir via context
     async def bash_hook_with_context(input_data, tool_use_id=None, context=None):
@@ -442,12 +466,12 @@ def create_client(
         custom_instructions = input_data.get("custom_instructions")
 
         if trigger == "auto":
-            print("[Context] Auto-compaction triggered (context approaching limit)")
+            logger.info("Auto-compaction triggered (context approaching limit)")
         else:
-            print("[Context] Manual compaction requested")
+            logger.info("Manual compaction requested")
 
         if custom_instructions:
-            print(f"[Context] Custom instructions: {custom_instructions}")
+            logger.info(f"Custom instructions provided for compaction, length={len(custom_instructions)} chars")
 
         # Return empty dict to allow compaction to proceed with default behavior
         # To customize, return:
@@ -458,6 +482,16 @@ def create_client(
         #     }
         # }
         return SyncHookJSONOutput()
+
+    # Log client creation
+    logger.info(
+        "Client created",
+        model=model,
+        yolo_mode=yolo_mode,
+        agent_id=agent_id,
+        is_alternative_api=is_alternative_api,
+        max_turns=1000,
+    )
 
     return ClaudeSDKClient(
         options=ClaudeAgentOptions(

@@ -33,7 +33,12 @@ API_ENV_VARS = [
     "ANTHROPIC_DEFAULT_SONNET_MODEL",
     "ANTHROPIC_DEFAULT_OPUS_MODEL",
     "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+    "CLAUDE_CODE_MAX_OUTPUT_TOKENS",  # Max output tokens (default 32000, GLM 4.7 supports 131072)
 ]
+
+# Default max output tokens - use 131k only for alternative APIs (like GLM), otherwise use 32k for Anthropic
+import os
+DEFAULT_MAX_OUTPUT_TOKENS = "131072" if os.getenv("ANTHROPIC_BASE_URL") else "32000"
 
 
 async def _make_multimodal_message(content_blocks: list[dict]) -> AsyncGenerator[dict, None]:
@@ -168,6 +173,14 @@ class SpecChatSession:
 
         # Build environment overrides for API configuration
         sdk_env = {var: os.getenv(var) for var in API_ENV_VARS if os.getenv(var)}
+
+        # Detect alternative API mode (Ollama or GLM)
+        base_url = sdk_env.get("ANTHROPIC_BASE_URL", "")
+        is_alternative_api = bool(base_url)
+
+        # Set default max output tokens for GLM 4.7 compatibility if not already set, but only for alternative APIs
+        if is_alternative_api and "CLAUDE_CODE_MAX_OUTPUT_TOKENS" not in sdk_env:
+            sdk_env["CLAUDE_CODE_MAX_OUTPUT_TOKENS"] = DEFAULT_MAX_OUTPUT_TOKENS
 
         # Determine model from environment or use default
         # This allows using alternative APIs (e.g., GLM via z.ai) that may not support Claude model names

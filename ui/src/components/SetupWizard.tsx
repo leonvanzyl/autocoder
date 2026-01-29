@@ -98,6 +98,24 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
               helpText="Install Node.js"
               optional
             />
+
+            {/* Gemini (chat-only) */}
+            <SetupItem
+              label="Gemini (assistant chat only)"
+              description="Optional: set GEMINI_API_KEY to use Gemini for the read-only assistant. Coding agents still use Claude/Anthropic."
+              status={
+                setupLoading
+                  ? 'loading'
+                  : setupError
+                  ? 'warning'
+                  : setupStatus?.gemini
+                  ? 'success'
+                  : 'warning'
+              }
+              helpLink="https://ai.google.dev/gemini-api/docs/openai-compatibility"
+              helpText="Configure Gemini"
+              optional
+            />
           </div>
 
           {/* Continue Button */}

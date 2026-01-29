@@ -36,6 +36,7 @@ API_ENV_VARS = [
     "ANTHROPIC_DEFAULT_SONNET_MODEL",
     "ANTHROPIC_DEFAULT_OPUS_MODEL",
     "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+    "CLAUDE_CODE_MAX_OUTPUT_TOKENS",  # Max output tokens (default 32000, GLM 4.7 supports 131072)
 ]
 
 # Feature MCP tools needed for expand session
@@ -44,6 +45,16 @@ EXPAND_FEATURE_TOOLS = [
     "mcp__features__feature_create_bulk",
     "mcp__features__feature_get_stats",
 ]
+
+# Feature creation tools for expand session
+EXPAND_FEATURE_TOOLS = [
+    "mcp__features__feature_create",
+    "mcp__features__feature_create_bulk",
+    "mcp__features__feature_get_stats",
+]
+
+# Default max output tokens for GLM 4.7 compatibility (131k output limit)
+DEFAULT_MAX_OUTPUT_TOKENS = "131072"
 
 
 async def _make_multimodal_message(content_blocks: list[dict]) -> AsyncGenerator[dict, None]:
@@ -60,6 +71,16 @@ async def _make_multimodal_message(content_blocks: list[dict]) -> AsyncGenerator
 
 # Root directory of the project
 ROOT_DIR = Path(__file__).parent.parent.parent
+
+# Feature MCP tools for creating features
+FEATURE_MCP_TOOLS = [
+    "mcp__features__feature_create",
+    "mcp__features__feature_create_bulk",
+    "mcp__features__feature_get_stats",
+    "mcp__features__feature_get_next",
+    "mcp__features__feature_add_dependency",
+    "mcp__features__feature_remove_dependency",
+]
 
 
 class ExpandChatSession:
@@ -91,6 +112,7 @@ class ExpandChatSession:
         self.features_created: int = 0
         self.created_feature_ids: list[int] = []
         self._settings_file: Optional[Path] = None
+        self._mcp_config_file: Optional[Path] = None
         self._query_lock = asyncio.Lock()
 
     async def close(self) -> None:
@@ -110,6 +132,13 @@ class ExpandChatSession:
                 self._settings_file.unlink()
             except Exception as e:
                 logger.warning(f"Error removing settings file: {e}")
+
+        # Clean up temporary MCP config file
+        if self._mcp_config_file and self._mcp_config_file.exists():
+            try:
+                self._mcp_config_file.unlink()
+            except Exception as e:
+                logger.warning(f"Error removing MCP config file: {e}")
 
     async def start(self) -> AsyncGenerator[dict, None]:
         """
@@ -162,6 +191,7 @@ class ExpandChatSession:
                 "allow": [
                     "Read(./**)",
                     "Glob(./**)",
+                    *FEATURE_MCP_TOOLS,
                 ],
             },
         }
@@ -170,12 +200,39 @@ class ExpandChatSession:
         with open(settings_file, "w", encoding="utf-8") as f:
             json.dump(security_settings, f, indent=2)
 
+        # Build MCP servers config for feature creation
+        mcp_config = {
+            "mcpServers": {
+                "features": {
+                    "command": sys.executable,
+                    "args": ["-m", "mcp_server.feature_mcp"],
+                    "env": {
+                        "PROJECT_DIR": str(self.project_dir.resolve()),
+                        "PYTHONPATH": str(ROOT_DIR.resolve()),
+                    },
+                },
+            },
+        }
+        mcp_config_file = self.project_dir / f".claude_mcp_config.expand.{uuid.uuid4().hex}.json"
+        self._mcp_config_file = mcp_config_file
+        with open(mcp_config_file, "w", encoding="utf-8") as f:
+            json.dump(mcp_config, f, indent=2)
+        logger.info(f"Wrote MCP config to {mcp_config_file}")
+
         # Replace $ARGUMENTS with absolute project path
         project_path = str(self.project_dir.resolve())
         system_prompt = skill_content.replace("$ARGUMENTS", project_path)
 
         # Build environment overrides for API configuration
         sdk_env = {var: os.getenv(var) for var in API_ENV_VARS if os.getenv(var)}
+
+        # Detect alternative API mode (Ollama or GLM)
+        base_url = sdk_env.get("ANTHROPIC_BASE_URL", "")
+        is_alternative_api = bool(base_url)
+
+        # Set default max output tokens for GLM 4.7 compatibility if not already set, but only for alternative APIs
+        if is_alternative_api and "CLAUDE_CODE_MAX_OUTPUT_TOKENS" not in sdk_env:
+            sdk_env["CLAUDE_CODE_MAX_OUTPUT_TOKENS"] = DEFAULT_MAX_OUTPUT_TOKENS
 
         # Determine model from environment or use default
         # This allows using alternative APIs (e.g., GLM via z.ai) that may not support Claude model names
@@ -217,6 +274,21 @@ class ExpandChatSession:
             self._client_entered = True
         except Exception:
             logger.exception("Failed to create Claude client")
+            # Clean up temp files created earlier in start()
+            if self._settings_file and self._settings_file.exists():
+                try:
+                    self._settings_file.unlink()
+                except Exception as e:
+                    logger.warning(f"Error removing settings file: {e}")
+                finally:
+                    self._settings_file = None
+            if self._mcp_config_file and self._mcp_config_file.exists():
+                try:
+                    self._mcp_config_file.unlink()
+                except Exception as e:
+                    logger.warning(f"Error removing MCP config file: {e}")
+                finally:
+                    self._mcp_config_file = None
             yield {
                 "type": "error",
                 "content": "Failed to initialize Claude"

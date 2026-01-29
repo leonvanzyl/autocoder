@@ -44,8 +44,8 @@ export function AssistantChat({
 
   // Memoize the error handler to prevent infinite re-renders
   const handleError = useCallback((error: string) => {
-    console.error('Assistant error:', error)
-  }, [])
+    console.error("Assistant error:", error);
+  }, []);
 
   const {
     messages,
@@ -58,7 +58,7 @@ export function AssistantChat({
   } = useAssistantChat({
     projectName,
     onError: handleError,
-  })
+  });
 
   // Notify parent when a NEW conversation is created (not when switching to existing)
   // Track activeConversationId to fire callback only once when it transitions from null to a value
@@ -122,24 +122,24 @@ export function AssistantChat({
   // Focus input when not loading
   useEffect(() => {
     if (!isLoading) {
-      inputRef.current?.focus()
+      inputRef.current?.focus();
     }
-  }, [isLoading])
+  }, [isLoading]);
 
   const handleSend = () => {
     const content = inputValue.trim()
     if (!content || isLoading || isLoadingConversation) return
 
-    sendMessage(content)
-    setInputValue('')
-  }
+    sendMessage(content);
+    setInputValue("");
+  };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (isSubmitEnter(e)) {
       e.preventDefault()
       handleSend()
     }
-  }
+  };
 
   // Combine initial messages (from resumed conversation) with live messages
   // Merge both arrays with deduplication by message ID to prevent history loss
@@ -298,5 +298,5 @@ export function AssistantChat({
         </p>
       </div>
     </div>
-  )
+  );
 }

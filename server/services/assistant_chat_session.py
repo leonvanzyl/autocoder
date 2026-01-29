@@ -20,6 +20,7 @@ from typing import AsyncGenerator, Optional
 from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
 from dotenv import load_dotenv
 
+from ..gemini_client import is_gemini_configured, stream_chat
 from .assistant_database import (
     add_message,
     create_conversation,
@@ -42,7 +43,12 @@ API_ENV_VARS = [
     "ANTHROPIC_DEFAULT_SONNET_MODEL",
     "ANTHROPIC_DEFAULT_OPUS_MODEL",
     "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+    "CLAUDE_CODE_MAX_OUTPUT_TOKENS",  # Max output tokens (default 32000, GLM 4.7 supports 131072)
 ]
+
+# Default max output tokens - use 131k only for alternative APIs (like GLM), otherwise use 32k for Anthropic
+import os
+DEFAULT_MAX_OUTPUT_TOKENS = "131072" if os.getenv("ANTHROPIC_BASE_URL") else "32000"
 
 # Read-only feature MCP tools
 READONLY_FEATURE_MCP_TOOLS = [
@@ -52,11 +58,13 @@ READONLY_FEATURE_MCP_TOOLS = [
     "mcp__features__feature_get_blocked",
 ]
 
-# Feature management tools (create/skip but not mark_passing)
+# Feature management tools (create/skip/update/delete but not mark_passing)
 FEATURE_MANAGEMENT_TOOLS = [
     "mcp__features__feature_create",
     "mcp__features__feature_create_bulk",
     "mcp__features__feature_skip",
+    "mcp__features__feature_update",
+    "mcp__features__feature_delete",
 ]
 
 # Combined list for assistant
@@ -90,6 +98,8 @@ def get_system_prompt(project_name: str, project_dir: Path) -> str:
 
 Your role is to help users understand the codebase, answer questions about features, and manage the project backlog. You can READ files and CREATE/MANAGE features, but you cannot modify source code.
 
+**CRITICAL: You have MCP tools available for feature management. Use them directly by calling the tool - do NOT suggest CLI commands, bash commands, or npm commands. You can create features yourself using the feature_create and feature_create_bulk tools.**
+
 ## What You CAN Do
 
 **Codebase Analysis (Read-Only):**
@@ -100,7 +110,9 @@ Your role is to help users understand the codebase, answer questions about featu
 
 **Feature Management:**
 - Create new features/test cases in the backlog
+- Update existing features (name, description, category, steps)
 - Skip features to deprioritize them (move to end of queue)
+- Delete features from the backlog (removes tracking only, code remains)
 - View feature statistics and progress
 
 ## What You CANNOT Do
@@ -131,22 +143,35 @@ If the user asks you to modify code, explain that you're a project assistant and
 - **feature_create**: Create a single feature in the backlog
 - **feature_create_bulk**: Create multiple features at once
 - **feature_skip**: Move a feature to the end of the queue
+- **feature_update**: Update a feature's category, name, description, or steps
+- **feature_delete**: Remove a feature from the backlog (code remains)
 
 ## Creating Features
 
-When a user asks to add a feature, gather the following information:
-1. **Category**: A grouping like "Authentication", "API", "UI", "Database"
-2. **Name**: A concise, descriptive name
-3. **Description**: What the feature should do
-4. **Steps**: How to verify/implement the feature (as a list)
+**IMPORTANT: You have MCP tools available. Use them directly - do NOT suggest bash commands, npm commands, or curl commands. You can call the tools yourself.**
 
-You can ask clarifying questions if the user's request is vague, or make reasonable assumptions for simple requests.
+When a user asks to add a feature, use the `feature_create` or `feature_create_bulk` MCP tools directly:
+
+For a **single feature**, call the `feature_create` tool with:
+- category: A grouping like "Authentication", "API", "UI", "Database"
+- name: A concise, descriptive name
+- description: What the feature should do
+- steps: List of verification/implementation steps
+
+For **multiple features**, call the `feature_create_bulk` tool with:
+- features: Array of feature objects, each with category, name, description, steps
 
 **Example interaction:**
 User: "Add a feature for S3 sync"
-You: I'll create that feature. Let me add it to the backlog...
-[calls feature_create with appropriate parameters]
-You: Done! I've added "S3 Sync Integration" to your backlog. It's now visible on the kanban board.
+You: I'll create that feature now.
+[YOU MUST CALL the feature_create tool directly - do NOT write bash commands]
+You: Done! I've added "S3 Sync Integration" to your backlog (ID: 123). It's now visible on the kanban board.
+
+**NEVER do any of these:**
+- Do NOT run `npx` commands
+- Do NOT suggest `curl` commands
+- Do NOT ask the user to run commands
+- Do NOT say you can't create features - you CAN, using the MCP tools
 
 ## Guidelines
 
@@ -154,7 +179,7 @@ You: Done! I've added "S3 Sync Integration" to your backlog. It's now visible on
 2. When explaining code, reference specific file paths and line numbers
 3. Use the feature tools to answer questions about project progress
 4. Search the codebase to find relevant information before answering
-5. When creating features, confirm what was created
+5. When creating or updating features, confirm what was done
 6. If you're unsure about details, ask for clarification"""
 
 
@@ -182,6 +207,8 @@ class AssistantChatSession:
         self._client_entered: bool = False
         self.created_at = datetime.now()
         self._history_loaded: bool = False  # Track if we've loaded history for resumed conversations
+        self.provider: str = "gemini" if is_gemini_configured() else "claude"
+        self._system_prompt: str | None = None
 
     async def close(self) -> None:
         """Clean up resources and close the Claude client."""
@@ -194,12 +221,23 @@ class AssistantChatSession:
                 self._client_entered = False
                 self.client = None
 
-    async def start(self) -> AsyncGenerator[dict, None]:
+        # Clean up MCP config file
+        if self._mcp_config_file and self._mcp_config_file.exists():
+            try:
+                self._mcp_config_file.unlink()
+            except Exception as e:
+                logger.warning(f"Error removing MCP config file: {e}")
+
+    async def start(self, skip_greeting: bool = False) -> AsyncGenerator[dict, None]:
         """
         Initialize session with the Claude client.
 
         Creates a new conversation if none exists, then sends an initial greeting.
         For resumed conversations, skips the greeting since history is loaded from DB.
+
+        Args:
+            skip_greeting: If True, skip sending the greeting (for resuming conversations)
+
         Yields message chunks as they stream in.
         """
         # Track if this is a new conversation (for greeting decision)
@@ -234,21 +272,33 @@ class AssistantChatSession:
             json.dump(security_settings, f, indent=2)
 
         # Build MCP servers config - only features MCP for read-only access
-        mcp_servers = {
-            "features": {
-                "command": sys.executable,
-                "args": ["-m", "mcp_server.feature_mcp"],
-                "env": {
-                    # Only specify variables the MCP server needs
-                    # (subprocess inherits parent environment automatically)
-                    "PROJECT_DIR": str(self.project_dir.resolve()),
-                    "PYTHONPATH": str(ROOT_DIR.resolve()),
+        # Note: We write to a JSON file because the SDK/CLI handles file paths
+        # more reliably than dict objects for MCP config
+        mcp_config = {
+            "mcpServers": {
+                "features": {
+                    "command": sys.executable,
+                    "args": ["-m", "mcp_server.feature_mcp"],
+                    "env": {
+                        # Only specify variables the MCP server needs
+                        "PROJECT_DIR": str(self.project_dir.resolve()),
+                        "PYTHONPATH": str(ROOT_DIR.resolve()),
+                    },
                 },
             },
         }
+        mcp_config_file = self.project_dir / f".claude_mcp_config.assistant.{uuid.uuid4().hex}.json"
+        self._mcp_config_file = mcp_config_file
+        with open(mcp_config_file, "w") as f:
+            json.dump(mcp_config, f, indent=2)
+        logger.info(f"Wrote MCP config to {mcp_config_file}")
+
+        # Use file path for mcp_servers - more reliable than dict
+        mcp_servers = str(mcp_config_file)
 
         # Get system prompt with project context
         system_prompt = get_system_prompt(self.project_name, self.project_dir)
+        self._system_prompt = system_prompt
 
         # Write system prompt to CLAUDE.md file to avoid Windows command line length limit
         # The SDK will read this via setting_sources=["project"]
@@ -257,11 +307,19 @@ class AssistantChatSession:
             f.write(system_prompt)
         logger.info(f"Wrote assistant system prompt to {claude_md_path}")
 
-        # Use system Claude CLI
-        system_cli = shutil.which("claude")
+        if self.provider == "gemini":
+            logger.info("Assistant session using Gemini provider (no tools).")
+            self.client = None
+        else:
+            # Use system Claude CLI
+            system_cli = shutil.which("claude")
 
-        # Build environment overrides for API configuration
-        sdk_env = {var: os.getenv(var) for var in API_ENV_VARS if os.getenv(var)}
+            # Build environment overrides for API configuration
+            sdk_env = {var: os.getenv(var) for var in API_ENV_VARS if os.getenv(var)}
+
+        # Set default max output tokens for GLM 4.7 compatibility if not already set
+        if "CLAUDE_CODE_MAX_OUTPUT_TOKENS" not in sdk_env:
+            sdk_env["CLAUDE_CODE_MAX_OUTPUT_TOKENS"] = DEFAULT_MAX_OUTPUT_TOKENS
 
         # Determine model from environment or use default
         # This allows using alternative APIs (e.g., GLM via z.ai) that may not support Claude model names
@@ -269,6 +327,10 @@ class AssistantChatSession:
 
         try:
             logger.info("Creating ClaudeSDKClient...")
+            logger.info(f"MCP servers config: {mcp_servers}")
+            logger.info(f"Allowed tools: {[*READONLY_BUILTIN_TOOLS, *ASSISTANT_FEATURE_TOOLS]}")
+            logger.info(f"Using CLI: {system_cli}")
+            logger.info(f"Working dir: {self.project_dir.resolve()}")
             self.client = ClaudeSDKClient(
                 options=ClaudeAgentOptions(
                     model=model,
@@ -284,36 +346,30 @@ class AssistantChatSession:
                     settings=str(settings_file.resolve()),
                     env=sdk_env,
                 )
-            )
-            logger.info("Entering Claude client context...")
-            await self.client.__aenter__()
-            self._client_entered = True
-            logger.info("Claude client ready")
-        except Exception as e:
-            logger.exception("Failed to create Claude client")
-            yield {"type": "error", "content": f"Failed to initialize assistant: {str(e)}"}
-            return
+                logger.info("Entering Claude client context...")
+                await self.client.__aenter__()
+                self._client_entered = True
+                logger.info("Claude client ready")
+            except Exception as e:
+                logger.exception("Failed to create Claude client")
+                yield {"type": "error", "content": f"Failed to initialize assistant: {str(e)}"}
+                return
 
-        # Send initial greeting only for NEW conversations
+        # Send initial greeting only for NEW conversations (unless skip_greeting is True)
         # Resumed conversations already have history loaded from the database
-        if is_new_conversation:
+        if is_new_conversation and not skip_greeting:
             # New conversations don't need history loading
             self._history_loaded = True
-            try:
-                greeting = f"Hello! I'm your project assistant for **{self.project_name}**. I can help you understand the codebase, explain features, and answer questions about the project. What would you like to know?"
-
-                # Store the greeting in the database
-                add_message(self.project_dir, self.conversation_id, "assistant", greeting)
-
-                yield {"type": "text", "content": greeting}
+            if skip_greeting:
                 yield {"type": "response_done"}
             except Exception as e:
                 logger.exception("Failed to send greeting")
                 yield {"type": "error", "content": f"Failed to start conversation: {str(e)}"}
-        else:
+        elif not skip_greeting:
             # For resumed conversations, history will be loaded on first message
             # _history_loaded stays False so send_message() will include history
             yield {"type": "response_done"}
+        # If skip_greeting is True, we don't send any greeting and let the user start immediately
 
     async def send_message(self, user_message: str) -> AsyncGenerator[dict, None]:
         """
@@ -329,7 +385,7 @@ class AssistantChatSession:
             - {"type": "response_done"}
             - {"type": "error", "content": str}
         """
-        if not self.client:
+        if self.provider != "gemini" and not self.client:
             yield {"type": "error", "content": "Session not initialized. Call start() first."}
             return
 
@@ -365,11 +421,15 @@ class AssistantChatSession:
                 logger.info(f"Loaded {len(history)} messages from conversation history")
 
         try:
-            async for chunk in self._query_claude(message_to_send):
-                yield chunk
+            if self.provider == "gemini":
+                async for chunk in self._query_gemini(message_to_send):
+                    yield chunk
+            else:
+                async for chunk in self._query_claude(message_to_send):
+                    yield chunk
             yield {"type": "response_done"}
         except Exception as e:
-            logger.exception("Error during Claude query")
+            logger.exception("Error during assistant query")
             yield {"type": "error", "content": f"Error: {str(e)}"}
 
     async def _query_claude(self, message: str) -> AsyncGenerator[dict, None]:
@@ -410,6 +470,27 @@ class AssistantChatSession:
                         }
 
         # Store the complete response in the database
+        if full_response and self.conversation_id:
+            add_message(self.project_dir, self.conversation_id, "assistant", full_response)
+
+    async def _query_gemini(self, message: str) -> AsyncGenerator[dict, None]:
+        """
+        Query Gemini and stream plain-text responses (no tool calls).
+        """
+        full_response = ""
+        try:
+            async for text in stream_chat(
+                message,
+                system_prompt=self._system_prompt,
+                model=os.getenv("GEMINI_MODEL"),
+            ):
+                full_response += text
+                yield {"type": "text", "content": text}
+        except Exception as e:
+            logger.exception("Gemini query failed")
+            yield {"type": "error", "content": f"Gemini error: {e}"}
+            return
+
         if full_response and self.conversation_id:
             add_message(self.project_dir, self.conversation_id, "assistant", full_response)
 

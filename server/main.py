@@ -7,6 +7,8 @@ Provides REST API, WebSocket, and static file serving.
 """
 
 import asyncio
+import base64
+import binascii
 import os
 import shutil
 import sys
@@ -24,21 +26,38 @@ load_dotenv()
 
 from fastapi import FastAPI, HTTPException, Request, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+from slowapi.util import get_remote_address
+
+try:
+    from ..api.logging_config import get_logger
+except ImportError:
+    from api.logging_config import get_logger
 
 from .routers import (
     agent_router,
     assistant_chat_router,
+    cicd_router,
+    design_tokens_router,
     devserver_router,
+    documentation_router,
     expand_project_router,
     features_router,
     filesystem_router,
+    git_workflow_router,
+    import_project_router,
+    logs_router,
     projects_router,
     schedules_router,
     settings_router,
     spec_creation_router,
+    templates_router,
     terminal_router,
+    visual_regression_router,
 )
 from .schemas import SetupStatus
 from .services.assistant_chat_session import cleanup_all_sessions as cleanup_assistant_sessions
@@ -50,17 +69,35 @@ from .services.expand_chat_session import cleanup_all_expand_sessions
 from .services.process_manager import cleanup_all_managers, cleanup_orphaned_locks
 from .services.scheduler_service import cleanup_scheduler, get_scheduler
 from .services.terminal_manager import cleanup_all_terminals
+from .utils.process_utils import cleanup_orphaned_agent_processes
 from .websocket import project_websocket
 
 # Paths
 ROOT_DIR = Path(__file__).parent.parent
 UI_DIST_DIR = ROOT_DIR / "ui" / "dist"
 
+# Logger
+logger = get_logger(__name__)
+
+# Rate limiting configuration
+# Using in-memory storage (appropriate for single-instance development server)
+limiter = Limiter(key_func=get_remote_address, default_limits=["200/minute"])
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager for startup and shutdown."""
-    # Startup - clean up orphaned lock files from previous runs
+    # Startup - warn if TEST_MODE is enabled
+    if TEST_MODE:
+        logger.warning(
+            "TEST_MODE is enabled - localhost restriction is bypassed. "
+            "Requests from testclient host are also allowed."
+        )
+
+    # Clean up orphaned processes from previous runs (Windows)
+    cleanup_orphaned_agent_processes()
+
+    # Clean up orphaned lock files from previous runs
     cleanup_orphaned_locks()
     cleanup_orphaned_devserver_locks()
 
@@ -88,9 +125,19 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Add rate limiter state and exception handler
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
+
 # Check if remote access is enabled via environment variable
 # Set by start_ui.py when --host is not 127.0.0.1
 ALLOW_REMOTE = os.environ.get("AUTOCODER_ALLOW_REMOTE", "").lower() in ("1", "true", "yes")
+
+# Build-time constant for test mode.
+# Only evaluated once at module import (build/start time) - not overridable at runtime.
+# Set to True during deployment for testing environments; requires code change to modify.
+TEST_MODE = os.environ.get("AUTOCODER_TEST_MODE", "").lower() in ("1", "true", "yes")
 
 # CORS - allow all origins when remote access is enabled, otherwise localhost only
 if ALLOW_REMOTE:
@@ -117,8 +164,78 @@ else:
 
 
 # ============================================================================
+# Health Endpoint
+# ============================================================================
+
+@app.get("/health")
+async def health():
+    """Lightweight liveness probe used by deploy smoke tests."""
+    return {"status": "ok"}
+
+
+@app.get("/readiness")
+async def readiness():
+    """
+    Readiness probe placeholder.
+
+    Add dependency checks (DB, external APIs, queues) here when introduced.
+    """
+    return {"status": "ready"}
+
+
+# ============================================================================
 # Security Middleware
 # ============================================================================
+
+# Import auth utilities
+from .utils.auth import is_basic_auth_enabled, verify_basic_auth
+
+if is_basic_auth_enabled():
+    @app.middleware("http")
+    async def basic_auth_middleware(request: Request, call_next):
+        """
+        HTTP Basic Auth middleware.
+
+        Enabled when both BASIC_AUTH_USERNAME and BASIC_AUTH_PASSWORD
+        environment variables are set.
+
+        For WebSocket endpoints, auth is checked in the WebSocket handler.
+        """
+        # Skip auth for WebSocket upgrade requests (handled separately)
+        if request.headers.get("upgrade", "").lower() == "websocket":
+            return await call_next(request)
+
+        # Check Authorization header
+        auth_header = request.headers.get("Authorization")
+        if not auth_header or not auth_header.startswith("Basic "):
+            return Response(
+                status_code=401,
+                content="Authentication required",
+                headers={"WWW-Authenticate": 'Basic realm="Autocoder"'},
+            )
+
+        try:
+            # Decode credentials
+            encoded_credentials = auth_header[6:]  # Remove "Basic "
+            decoded = base64.b64decode(encoded_credentials, validate=True).decode("utf-8")
+            username, password = decoded.split(":", 1)
+
+            # Verify using constant-time comparison
+            if not verify_basic_auth(username, password):
+                return Response(
+                    status_code=401,
+                    content="Invalid credentials",
+                    headers={"WWW-Authenticate": 'Basic realm="Autocoder"'},
+                )
+        except (ValueError, UnicodeDecodeError, binascii.Error):
+            return Response(
+                status_code=401,
+                content="Invalid authorization header",
+                headers={"WWW-Authenticate": 'Basic realm="Autocoder"'},
+            )
+
+        return await call_next(request)
+
 
 if not ALLOW_REMOTE:
     @app.middleware("http")
@@ -126,8 +243,11 @@ if not ALLOW_REMOTE:
         """Only allow requests from localhost (disabled when AUTOCODER_ALLOW_REMOTE=1)."""
         client_host = request.client.host if request.client else None
 
-        # Allow localhost connections
-        if client_host not in ("127.0.0.1", "::1", "localhost", None):
+        # Allow localhost connections and testclient for testing.
+        # Use build-time TEST_MODE constant (non-overridable at runtime) and testclient host.
+        is_test_mode = TEST_MODE or client_host == "testclient"
+
+        if not is_test_mode and client_host not in ("127.0.0.1", "::1", "localhost", None):
             raise HTTPException(status_code=403, detail="Localhost access only")
 
         return await call_next(request)
@@ -148,6 +268,16 @@ app.include_router(filesystem_router)
 app.include_router(assistant_chat_router)
 app.include_router(settings_router)
 app.include_router(terminal_router)
+app.include_router(import_project_router)
+app.include_router(logs_router)
+app.include_router(security_router)
+app.include_router(git_workflow_router)
+app.include_router(cicd_router)
+app.include_router(templates_router)
+app.include_router(review_router)
+app.include_router(documentation_router)
+app.include_router(design_tokens_router)
+app.include_router(visual_regression_router)
 
 
 # ============================================================================
@@ -184,7 +314,11 @@ async def setup_status():
 
     # If GLM mode is configured via .env, we have alternative credentials
     glm_configured = bool(os.getenv("ANTHROPIC_BASE_URL") and os.getenv("ANTHROPIC_AUTH_TOKEN"))
-    credentials = has_claude_config or glm_configured
+
+    # Gemini configuration (OpenAI-compatible Gemini API)
+    gemini_configured = bool(os.getenv("GEMINI_API_KEY"))
+
+    credentials = has_claude_config or glm_configured or gemini_configured
 
     # Check for Node.js and npm
     node = shutil.which("node") is not None
@@ -195,6 +329,7 @@ async def setup_status():
         credentials=credentials,
         node=node,
         npm=npm,
+        gemini=gemini_configured,
     )
 
 

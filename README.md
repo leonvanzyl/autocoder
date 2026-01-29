@@ -35,6 +35,13 @@ You need one of the following:
 - **Claude Pro/Max Subscription** - Use `claude login` to authenticate (recommended)
 - **Anthropic API Key** - Pay-per-use from https://console.anthropic.com/
 
+### Optional: Gemini API (assistant chat only)
+- `GEMINI_API_KEY` (required)
+- `GEMINI_MODEL` (optional, default `gemini-1.5-flash`)
+- `GEMINI_BASE_URL` (optional, default `https://generativelanguage.googleapis.com/v1beta/openai`)
+
+Notes: Gemini is used for assistant chat when configured; coding agents still run on Claude/Anthropic (tools are not available in Gemini mode).
+
 ---
 
 ## Quick Start
@@ -56,6 +63,7 @@ This launches the React-based web UI at `http://localhost:5173` with:
 - Kanban board view of features
 - Real-time agent output streaming
 - Start/pause/stop controls
+- **Project Assistant** - AI chat for managing features and exploring the codebase
 
 ### Option 2: CLI Mode
 
@@ -103,6 +111,22 @@ Features are stored in SQLite via SQLAlchemy and managed through an MCP server t
 - `feature_mark_passing` - Mark feature complete
 - `feature_skip` - Move feature to end of queue
 - `feature_create_bulk` - Initialize all features (used by initializer)
+- `feature_create` - Create a single feature
+- `feature_update` - Update a feature's fields
+- `feature_delete` - Delete a feature from the backlog
+
+### Project Assistant
+
+The Web UI includes a **Project Assistant** - an AI-powered chat interface for each project. Click the chat button in the bottom-right corner to open it.
+
+**Capabilities:**
+- **Explore the codebase** - Ask questions about files, architecture, and implementation details
+- **Manage features** - Create, edit, delete, and deprioritize features via natural language
+- **Get feature details** - Ask about specific features, their status, and test steps
+
+**Conversation Persistence:**
+- Conversations are automatically saved to `assistant.db` in the registered project directory
+- When you navigate away and return, your conversation resumes where you left off
 
 ### Session Management
 
@@ -143,6 +167,7 @@ autonomous-coding/
 ├── security.py               # Bash command allowlist and validation
 ├── progress.py               # Progress tracking utilities
 ├── prompts.py                # Prompt loading utilities
+├── registry.py               # Project registry (maps names to paths)
 ├── api/
 │   └── database.py           # SQLAlchemy models (Feature table)
 ├── mcp_server/
@@ -151,8 +176,8 @@ autonomous-coding/
 │   ├── main.py               # FastAPI REST API server
 │   ├── websocket.py          # WebSocket handler for real-time updates
 │   ├── schemas.py            # Pydantic schemas
-│   ├── routers/              # API route handlers
-│   └── services/             # Business logic services
+│   ├── routers/              # API route handlers (projects, features, agent, assistant)
+│   └── services/             # Business logic (assistant chat sessions, database)
 ├── ui/                       # React frontend
 │   ├── src/
 │   │   ├── App.tsx           # Main app component
@@ -165,20 +190,25 @@ autonomous-coding/
 │   │   └── create-spec.md    # /create-spec slash command
 │   ├── skills/               # Claude Code skills
 │   └── templates/            # Prompt templates
-├── generations/              # Generated projects go here
+├── generations/              # Default location for new projects (can be anywhere)
 ├── requirements.txt          # Python dependencies
 └── .env                      # Optional configuration (N8N webhook)
 ```
 
 ---
 
-## Generated Project Structure
+## Project Registry and Structure
 
-After the agent runs, your project directory will contain:
+Projects can be stored in any directory on your filesystem. The **project registry** (`registry.py`) maps project names to their paths, stored in `~/.autocoder/registry.db` (SQLite).
 
-```
-generations/my_project/
+When you create or register a project, the registry tracks its location. This allows projects to live anywhere - in `generations/`, your home directory, or any other path.
+
+Each registered project directory will contain:
+
+```text
+<registered_project_path>/
 ├── features.db               # SQLite database (feature test cases)
+├── assistant.db              # SQLite database (assistant chat history)
 ├── prompts/
 │   ├── app_spec.txt          # Your app specification
 │   ├── initializer_prompt.md # First session prompt
@@ -192,10 +222,10 @@ generations/my_project/
 
 ## Running the Generated Application
 
-After the agent completes (or pauses), you can run the generated application:
+After the agent completes (or pauses), you can run the generated application. Navigate to your project's registered path (the directory you selected or created when setting up the project):
 
 ```bash
-cd generations/my_project
+cd /path/to/your/registered/project
 
 # Run the setup script created by the agent
 ./init.sh
@@ -248,7 +278,7 @@ npm run build    # Builds to ui/dist/
 
 ### Tech Stack
 
-- React 18 with TypeScript
+- React 19 with TypeScript
 - TanStack Query for data fetching
 - Tailwind CSS v4 with neobrutalism design
 - Radix UI components
@@ -265,6 +295,47 @@ The UI receives live updates via WebSocket (`/ws/projects/{project_name}`):
 ---
 
 ## Configuration (Optional)
+
+### Web UI Authentication
+
+For deployments where the Web UI is exposed beyond localhost, you can enable HTTP Basic Authentication. Add these to your `.env` file:
+
+```bash
+# Both variables required to enable authentication
+BASIC_AUTH_USERNAME=admin
+BASIC_AUTH_PASSWORD=your-secure-password
+
+# Also enable remote access
+AUTOCODER_ALLOW_REMOTE=1
+```
+
+When enabled:
+- All HTTP requests require the `Authorization: Basic <credentials>` header
+- WebSocket connections support auth via header or `?token=base64(user:pass)` query parameter
+- The browser will prompt for username/password automatically
+
+> ⚠️ **CRITICAL SECURITY WARNINGS**
+>
+> **HTTPS Required:** `BASIC_AUTH_USERNAME` and `BASIC_AUTH_PASSWORD` must **only** be used over HTTPS connections. Basic Authentication transmits credentials as base64-encoded text (not encrypted), making them trivially readable by anyone intercepting plain HTTP traffic. **Never use Basic Auth over unencrypted HTTP.**
+>
+> **WebSocket Query Parameter is Insecure:** The `?token=base64(user:pass)` query parameter method for WebSocket authentication should be **avoided or disabled** whenever possible. Risks include:
+> - **Browser history exposure** – URLs with tokens are saved in browsing history
+> - **Server log leakage** – Query strings are often logged by web servers, proxies, and CDNs
+> - **Referer header leakage** – The token may be sent to third-party sites via the Referer header
+> - **Shoulder surfing** – Credentials visible in the address bar can be observed by others
+>
+> Prefer using the `Authorization` header for WebSocket connections when your client supports it.
+
+#### Securing Your `.env` File
+
+- **Restrict filesystem permissions** – Ensure only the application user can read the `.env` file (e.g., `chmod 600 .env` on Unix systems)
+- **Never commit credentials to version control** – Add `.env` to your `.gitignore` and never commit `BASIC_AUTH_USERNAME` or `BASIC_AUTH_PASSWORD` values
+- **Use a secrets manager for production** – For production deployments, prefer environment variables injected via a secrets manager (e.g., HashiCorp Vault, AWS Secrets Manager, Docker secrets) rather than a plaintext `.env` file
+
+#### Configuration Notes
+
+- `AUTOCODER_ALLOW_REMOTE=1` explicitly enables remote access (binding to `0.0.0.0` instead of `127.0.0.1`). Without this, the server only accepts local connections.
+- **For localhost development, authentication is not required.** Basic Auth is only enforced when both username and password are set, so local development workflows remain frictionless.
 
 ### N8N Webhook Integration
 
@@ -334,6 +405,29 @@ This is normal. The initializer agent is generating detailed test cases, which t
 
 **"Command blocked by security hook"**
 The agent tried to run a command not in the allowlist. This is the security system working as intended. If needed, add the command to `ALLOWED_COMMANDS` in `security.py`.
+
+---
+
+## CI/CD and Deployment
+
+- PR Check workflow (`.github/workflows/pr-check.yml`) runs Python lint/security tests and UI lint/build on every PR to `main` or `master`.
+- Push CI (`.github/workflows/ci.yml`) runs the same validations on direct pushes to `main` and `master`, then builds and pushes a Docker image to GHCR (`ghcr.io/<owner>/<repo>:latest` and `:sha`).
+- Deploy to VPS (`.github/workflows/deploy.yml`) runs after Push CI succeeds, SSHes into your VPS, prunes old Docker artifacts, pulls the target branch, pulls the GHCR `:sha` image (falls back to `:latest`), restarts with `docker compose up -d`, and leaves any existing `.env` untouched. It finishes with an HTTP smoke check on `http://127.0.0.1:8888/health`.
+- Repo secrets required: `VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY`, `VPS_DEPLOY_PATH` (use an absolute path like `/opt/autocoder`); optional `VPS_BRANCH` (defaults to `master`) and `VPS_PORT` (defaults to `22`). The VPS needs git, Docker + Compose plugin installed, and the repo cloned at `VPS_DEPLOY_PATH` with your `.env` present.
+- Local Docker run: `docker compose up -d --build` exposes the app on `http://localhost:8888`; data under `~/.autocoder` persists via the `autocoder-data` volume.
+
+### Branch protection
+To require the “PR Check” workflow before merging:
+- GitHub UI: Settings → Branches → Add rule for `main` (and `master` if used) → enable **Require status checks to pass before merging** → select `PR Check` → save.
+- GitHub CLI:  
+  ```bash
+  gh api -X PUT repos/<owner>/<repo>/branches/main/protection \
+    -F required_status_checks.strict=true \
+    -F required_status_checks.contexts[]="PR Check" \
+    -F enforce_admins=true \
+    -F required_pull_request_reviews.dismiss_stale_reviews=true \
+    -F restrictions=
+  ```
 
 ---
 

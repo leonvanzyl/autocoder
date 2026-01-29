@@ -1,0 +1,80 @@
+name: "Blog & CMS"
+description: "Content management system with blog posts, categories, and comments"
+
+tech_stack:
+  frontend: "Next.js"
+  backend: "Node.js/Express"
+  database: "PostgreSQL"
+  auth: "NextAuth.js"
+  styling: "Tailwind CSS"
+
+feature_categories:
+  public_pages:
+    - "Home page with featured posts"
+    - "Blog listing page"
+    - "Blog post detail page"
+    - "Category pages"
+    - "Tag pages"
+    - "Author pages"
+    - "Search results page"
+    - "About page"
+    - "Contact page"
+
+  blog_features:
+    - "Post search"
+    - "Category filtering"
+    - "Tag filtering"
+    - "Related posts"
+    - "Social sharing"
+    - "Reading time estimate"
+    - "Table of contents"
+
+  comments:
+    - "Comment submission"
+    - "Comment moderation"
+    - "Reply to comments"
+    - "Like comments"
+    - "Comment notifications"
+
+  admin_content:
+    - "Post editor (rich text)"
+    - "Post preview"
+    - "Draft management"
+    - "Schedule posts"
+    - "Post categories"
+    - "Post tags"
+    - "Media library"
+
+  admin_settings:
+    - "Site settings"
+    - "SEO settings"
+    - "Social media links"
+    - "Analytics integration"
+
+  user_features:
+    - "Author registration"
+    - "Author login"
+    - "Author profile"
+    - "Author dashboard"
+    - "Newsletter subscription"
+
+design_tokens:
+  colors:
+    primary: "#0F172A"
+    secondary: "#3B82F6"
+    accent: "#F97316"
+    background: "#FFFFFF"
+    text: "#334155"
+    muted: "#94A3B8"
+  spacing: [4, 8, 12, 16, 24, 32, 48, 64]
+  fonts:
+    heading: "Merriweather"
+    body: "Source Sans Pro"
+  border_radius:
+    small: "2px"
+    medium: "4px"
+    large: "8px"
+
+estimated_features: 35
+tags: ["blog", "cms", "content", "publishing"]
+difficulty: "intermediate"

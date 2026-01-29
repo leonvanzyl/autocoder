@@ -34,20 +34,25 @@ import type {
   NextRunResponse,
 } from './types'
 
-const API_BASE = '/api'
+const API_BASE = "/api";
+
+// Export for hooks that make direct fetch calls with full paths
+export const API_BASE_URL = ''
 
 async function fetchJSON<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${url}`, {
     ...options,
     headers: {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
       ...options?.headers,
     },
-  })
+  });
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ detail: 'Unknown error' }))
-    throw new Error(error.detail || `HTTP ${response.status}`)
+    const error = await response
+      .json()
+      .catch(() => ({ detail: "Unknown error" }));
+    throw new Error(error.detail || `HTTP ${response.status}`);
   }
 
   // Handle 204 No Content responses
@@ -63,42 +68,77 @@ async function fetchJSON<T>(url: string, options?: RequestInit): Promise<T> {
 // ============================================================================
 
 export async function listProjects(): Promise<ProjectSummary[]> {
-  return fetchJSON('/projects')
+  return fetchJSON("/projects");
 }
 
 export async function createProject(
   name: string,
   path: string,
-  specMethod: 'claude' | 'manual' = 'manual'
+  specMethod: "claude" | "manual" = "manual",
 ): Promise<ProjectSummary> {
-  return fetchJSON('/projects', {
-    method: 'POST',
+  return fetchJSON("/projects", {
+    method: "POST",
     body: JSON.stringify({ name, path, spec_method: specMethod }),
-  })
+  });
 }
 
 export async function getProject(name: string): Promise<ProjectDetail> {
-  return fetchJSON(`/projects/${encodeURIComponent(name)}`)
+  return fetchJSON(`/projects/${encodeURIComponent(name)}`);
 }
 
 export async function deleteProject(name: string): Promise<void> {
   await fetchJSON(`/projects/${encodeURIComponent(name)}`, {
-    method: 'DELETE',
+    method: "DELETE",
+  });
+}
+
+export async function openProjectInIDE(name: string, ide: string): Promise<{ status: string; message: string }> {
+  return fetchJSON(`/projects/${encodeURIComponent(name)}/open-in-ide?ide=${encodeURIComponent(ide)}`, {
+    method: 'POST',
+  })
+}
+
+export interface ResetProjectResponse {
+  success: boolean
+  message: string
+  deleted_files: string[]
+}
+
+export async function resetProject(name: string): Promise<ResetProjectResponse> {
+  return fetchJSON(`/projects/${encodeURIComponent(name)}/reset`, {
+    method: 'POST',
+  })
+}
+
+export async function resetProject(name: string, fullReset: boolean = false): Promise<{
+  success: boolean
+  message: string
+  deleted_files: string[]
+  full_reset: boolean
+}> {
+  return fetchJSON(`/projects/${encodeURIComponent(name)}/reset?full_reset=${fullReset}`, {
+    method: 'POST',
+  })
+}
+
+export async function openProjectInIDE(name: string, ide: string): Promise<{ status: string; message: string }> {
+  return fetchJSON(`/projects/${encodeURIComponent(name)}/open-in-ide?ide=${encodeURIComponent(ide)}`, {
+    method: 'POST',
   })
 }
 
 export async function getProjectPrompts(name: string): Promise<ProjectPrompts> {
-  return fetchJSON(`/projects/${encodeURIComponent(name)}/prompts`)
+  return fetchJSON(`/projects/${encodeURIComponent(name)}/prompts`);
 }
 
 export async function updateProjectPrompts(
   name: string,
-  prompts: Partial<ProjectPrompts>
+  prompts: Partial<ProjectPrompts>,
 ): Promise<void> {
   await fetchJSON(`/projects/${encodeURIComponent(name)}/prompts`, {
-    method: 'PUT',
+    method: "PUT",
     body: JSON.stringify(prompts),
-  })
+  });
 }
 
 export async function updateProjectSettings(
@@ -115,31 +155,67 @@ export async function updateProjectSettings(
 // Features API
 // ============================================================================
 
-export async function listFeatures(projectName: string): Promise<FeatureListResponse> {
-  return fetchJSON(`/projects/${encodeURIComponent(projectName)}/features`)
+export async function listFeatures(
+  projectName: string,
+): Promise<FeatureListResponse> {
+  return fetchJSON(`/projects/${encodeURIComponent(projectName)}/features`);
 }
 
-export async function createFeature(projectName: string, feature: FeatureCreate): Promise<Feature> {
+export async function createFeature(
+  projectName: string,
+  feature: FeatureCreate,
+): Promise<Feature> {
   return fetchJSON(`/projects/${encodeURIComponent(projectName)}/features`, {
-    method: 'POST',
+    method: "POST",
     body: JSON.stringify(feature),
-  })
+  });
 }
 
-export async function getFeature(projectName: string, featureId: number): Promise<Feature> {
-  return fetchJSON(`/projects/${encodeURIComponent(projectName)}/features/${featureId}`)
+export async function getFeature(
+  projectName: string,
+  featureId: number,
+): Promise<Feature> {
+  return fetchJSON(
+    `/projects/${encodeURIComponent(projectName)}/features/${featureId}`,
+  );
 }
 
-export async function deleteFeature(projectName: string, featureId: number): Promise<void> {
-  await fetchJSON(`/projects/${encodeURIComponent(projectName)}/features/${featureId}`, {
-    method: 'DELETE',
-  })
+export async function deleteFeature(
+  projectName: string,
+  featureId: number,
+): Promise<void> {
+  await fetchJSON(
+    `/projects/${encodeURIComponent(projectName)}/features/${featureId}`,
+    {
+      method: "DELETE",
+    },
+  );
 }
 
-export async function skipFeature(projectName: string, featureId: number): Promise<void> {
-  await fetchJSON(`/projects/${encodeURIComponent(projectName)}/features/${featureId}/skip`, {
-    method: 'PATCH',
-  })
+export async function skipFeature(
+  projectName: string,
+  featureId: number,
+): Promise<void> {
+  await fetchJSON(
+    `/projects/${encodeURIComponent(projectName)}/features/${featureId}/skip`,
+    {
+      method: "PATCH",
+    },
+  );
+}
+
+export async function updateFeature(
+  projectName: string,
+  featureId: number,
+  update: FeatureUpdate,
+): Promise<Feature> {
+  return fetchJSON(
+    `/projects/${encodeURIComponent(projectName)}/features/${featureId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(update),
+    },
+  );
 }
 
 export async function updateFeature(
@@ -211,8 +287,10 @@ export async function setDependencies(
 // Agent API
 // ============================================================================
 
-export async function getAgentStatus(projectName: string): Promise<AgentStatusResponse> {
-  return fetchJSON(`/projects/${encodeURIComponent(projectName)}/agent/status`)
+export async function getAgentStatus(
+  projectName: string,
+): Promise<AgentStatusResponse> {
+  return fetchJSON(`/projects/${encodeURIComponent(projectName)}/agent/status`);
 }
 
 export async function startAgent(
@@ -235,22 +313,31 @@ export async function startAgent(
   })
 }
 
-export async function stopAgent(projectName: string): Promise<AgentActionResponse> {
+export async function stopAgent(
+  projectName: string,
+): Promise<AgentActionResponse> {
   return fetchJSON(`/projects/${encodeURIComponent(projectName)}/agent/stop`, {
-    method: 'POST',
-  })
+    method: "POST",
+  });
 }
 
-export async function pauseAgent(projectName: string): Promise<AgentActionResponse> {
+export async function pauseAgent(
+  projectName: string,
+): Promise<AgentActionResponse> {
   return fetchJSON(`/projects/${encodeURIComponent(projectName)}/agent/pause`, {
-    method: 'POST',
-  })
+    method: "POST",
+  });
 }
 
-export async function resumeAgent(projectName: string): Promise<AgentActionResponse> {
-  return fetchJSON(`/projects/${encodeURIComponent(projectName)}/agent/resume`, {
-    method: 'POST',
-  })
+export async function resumeAgent(
+  projectName: string,
+): Promise<AgentActionResponse> {
+  return fetchJSON(
+    `/projects/${encodeURIComponent(projectName)}/agent/resume`,
+    {
+      method: "POST",
+    },
+  );
 }
 
 // ============================================================================
@@ -258,15 +345,17 @@ export async function resumeAgent(projectName: string): Promise<AgentActionRespo
 // ============================================================================
 
 export interface SpecFileStatus {
-  exists: boolean
-  status: 'complete' | 'in_progress' | 'not_started' | 'error' | 'unknown'
-  feature_count: number | null
-  timestamp: string | null
-  files_written: string[]
+  exists: boolean;
+  status: "complete" | "in_progress" | "not_started" | "error" | "unknown";
+  feature_count: number | null;
+  timestamp: string | null;
+  files_written: string[];
 }
 
-export async function getSpecStatus(projectName: string): Promise<SpecFileStatus> {
-  return fetchJSON(`/spec/status/${encodeURIComponent(projectName)}`)
+export async function getSpecStatus(
+  projectName: string,
+): Promise<SpecFileStatus> {
+  return fetchJSON(`/spec/status/${encodeURIComponent(projectName)}`);
 }
 
 // ============================================================================
@@ -274,67 +363,75 @@ export async function getSpecStatus(projectName: string): Promise<SpecFileStatus
 // ============================================================================
 
 export async function getSetupStatus(): Promise<SetupStatus> {
-  return fetchJSON('/setup/status')
+  return fetchJSON("/setup/status");
 }
 
 export async function healthCheck(): Promise<{ status: string }> {
-  return fetchJSON('/health')
+  return fetchJSON("/health");
 }
 
 // ============================================================================
 // Filesystem API
 // ============================================================================
 
-export async function listDirectory(path?: string): Promise<DirectoryListResponse> {
-  const params = path ? `?path=${encodeURIComponent(path)}` : ''
-  return fetchJSON(`/filesystem/list${params}`)
+export async function listDirectory(
+  path?: string,
+): Promise<DirectoryListResponse> {
+  const params = path ? `?path=${encodeURIComponent(path)}` : "";
+  return fetchJSON(`/filesystem/list${params}`);
 }
 
-export async function createDirectory(fullPath: string): Promise<{ success: boolean; path: string }> {
+export async function createDirectory(
+  fullPath: string,
+): Promise<{ success: boolean; path: string }> {
   // Backend expects { parent_path, name }, not { path }
   // Split the full path into parent directory and folder name
 
   // Remove trailing slash if present
-  const normalizedPath = fullPath.endsWith('/') ? fullPath.slice(0, -1) : fullPath
+  const normalizedPath = fullPath.endsWith("/")
+    ? fullPath.slice(0, -1)
+    : fullPath;
 
   // Find the last path separator
-  const lastSlash = normalizedPath.lastIndexOf('/')
+  const lastSlash = normalizedPath.lastIndexOf("/");
 
-  let parentPath: string
-  let name: string
+  let parentPath: string;
+  let name: string;
 
   // Handle Windows drive root (e.g., "C:/newfolder")
   if (lastSlash === 2 && /^[A-Za-z]:/.test(normalizedPath)) {
     // Path like "C:/newfolder" - parent is "C:/"
-    parentPath = normalizedPath.substring(0, 3) // "C:/"
-    name = normalizedPath.substring(3)
+    parentPath = normalizedPath.substring(0, 3); // "C:/"
+    name = normalizedPath.substring(3);
   } else if (lastSlash > 0) {
-    parentPath = normalizedPath.substring(0, lastSlash)
-    name = normalizedPath.substring(lastSlash + 1)
+    parentPath = normalizedPath.substring(0, lastSlash);
+    name = normalizedPath.substring(lastSlash + 1);
   } else if (lastSlash === 0) {
     // Unix root path like "/newfolder"
-    parentPath = '/'
-    name = normalizedPath.substring(1)
+    parentPath = "/";
+    name = normalizedPath.substring(1);
   } else {
     // No slash - invalid path
-    throw new Error('Invalid path: must be an absolute path')
+    throw new Error("Invalid path: must be an absolute path");
   }
 
   if (!name) {
-    throw new Error('Invalid path: directory name is empty')
+    throw new Error("Invalid path: directory name is empty");
   }
 
-  return fetchJSON('/filesystem/create-directory', {
-    method: 'POST',
+  return fetchJSON("/filesystem/create-directory", {
+    method: "POST",
     body: JSON.stringify({ parent_path: parentPath, name }),
-  })
+  });
 }
 
-export async function validatePath(path: string): Promise<PathValidationResponse> {
-  return fetchJSON('/filesystem/validate', {
-    method: 'POST',
+export async function validatePath(
+  path: string,
+): Promise<PathValidationResponse> {
+  return fetchJSON("/filesystem/validate", {
+    method: "POST",
     body: JSON.stringify({ path }),
-  })
+  });
 }
 
 // ============================================================================
@@ -342,36 +439,41 @@ export async function validatePath(path: string): Promise<PathValidationResponse
 // ============================================================================
 
 export async function listAssistantConversations(
-  projectName: string
+  projectName: string,
 ): Promise<AssistantConversation[]> {
-  return fetchJSON(`/assistant/conversations/${encodeURIComponent(projectName)}`)
+  return fetchJSON(
+    `/assistant/conversations/${encodeURIComponent(projectName)}`,
+  );
 }
 
 export async function getAssistantConversation(
   projectName: string,
-  conversationId: number
+  conversationId: number,
 ): Promise<AssistantConversationDetail> {
   return fetchJSON(
-    `/assistant/conversations/${encodeURIComponent(projectName)}/${conversationId}`
-  )
+    `/assistant/conversations/${encodeURIComponent(projectName)}/${conversationId}`,
+  );
 }
 
 export async function createAssistantConversation(
-  projectName: string
+  projectName: string,
 ): Promise<AssistantConversation> {
-  return fetchJSON(`/assistant/conversations/${encodeURIComponent(projectName)}`, {
-    method: 'POST',
-  })
+  return fetchJSON(
+    `/assistant/conversations/${encodeURIComponent(projectName)}`,
+    {
+      method: "POST",
+    },
+  );
 }
 
 export async function deleteAssistantConversation(
   projectName: string,
-  conversationId: number
+  conversationId: number,
 ): Promise<void> {
   await fetchJSON(
     `/assistant/conversations/${encodeURIComponent(projectName)}/${conversationId}`,
-    { method: 'DELETE' }
-  )
+    { method: "DELETE" },
+  );
 }
 
 // ============================================================================
@@ -379,18 +481,20 @@ export async function deleteAssistantConversation(
 // ============================================================================
 
 export async function getAvailableModels(): Promise<ModelsResponse> {
-  return fetchJSON('/settings/models')
+  return fetchJSON("/settings/models");
 }
 
 export async function getSettings(): Promise<Settings> {
-  return fetchJSON('/settings')
+  return fetchJSON("/settings");
 }
 
-export async function updateSettings(settings: SettingsUpdate): Promise<Settings> {
-  return fetchJSON('/settings', {
-    method: 'PATCH',
+export async function updateSettings(
+  settings: SettingsUpdate,
+): Promise<Settings> {
+  return fetchJSON("/settings", {
+    method: "PATCH",
     body: JSON.stringify(settings),
-  })
+  });
 }
 
 // ============================================================================
@@ -508,4 +612,55 @@ export async function deleteSchedule(
 
 export async function getNextScheduledRun(projectName: string): Promise<NextRunResponse> {
   return fetchJSON(`/projects/${encodeURIComponent(projectName)}/schedules/next`)
+}
+
+// ============================================================================
+// Knowledge Files API
+// ============================================================================
+
+export interface KnowledgeFile {
+  name: string
+  size: number
+  modified: string
+}
+
+export interface KnowledgeFileList {
+  files: KnowledgeFile[]
+  count: number
+}
+
+export interface KnowledgeFileContent {
+  name: string
+  content: string
+}
+
+export async function listKnowledgeFiles(projectName: string): Promise<KnowledgeFileList> {
+  return fetchJSON(`/projects/${encodeURIComponent(projectName)}/knowledge`)
+}
+
+export async function getKnowledgeFile(
+  projectName: string,
+  filename: string
+): Promise<KnowledgeFileContent> {
+  return fetchJSON(`/projects/${encodeURIComponent(projectName)}/knowledge/${encodeURIComponent(filename)}`)
+}
+
+export async function uploadKnowledgeFile(
+  projectName: string,
+  filename: string,
+  content: string
+): Promise<KnowledgeFileContent> {
+  return fetchJSON(`/projects/${encodeURIComponent(projectName)}/knowledge`, {
+    method: 'POST',
+    body: JSON.stringify({ filename, content }),
+  })
+}
+
+export async function deleteKnowledgeFile(
+  projectName: string,
+  filename: string
+): Promise<void> {
+  await fetchJSON(`/projects/${encodeURIComponent(projectName)}/knowledge/${encodeURIComponent(filename)}`, {
+    method: 'DELETE',
+  })
 }

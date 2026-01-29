@@ -20,6 +20,9 @@ if str(_root) not in sys.path:
 
 from registry import DEFAULT_MODEL, VALID_MODELS
 
+# Valid IDE choices for preferred_ide setting
+VALID_IDES = ['vscode', 'cursor', 'antigravity']
+
 # ============================================================================
 # Project Schemas
 # ============================================================================
@@ -37,6 +40,39 @@ class ProjectStats(BaseModel):
     in_progress: int = 0
     total: int = 0
     percentage: float = 0.0
+
+
+class DatabaseHealth(BaseModel):
+    """Database health check response."""
+    healthy: bool
+    journal_mode: str | None = None
+    integrity: str | None = None
+    error: str | None = None
+
+
+class KnowledgeFile(BaseModel):
+    """Information about a knowledge file."""
+    name: str
+    size: int  # Bytes
+    modified: datetime
+
+
+class KnowledgeFileList(BaseModel):
+    """Response containing list of knowledge files."""
+    files: list[KnowledgeFile]
+    count: int
+
+
+class KnowledgeFileContent(BaseModel):
+    """Response containing knowledge file content."""
+    name: str
+    content: str
+
+
+class KnowledgeFileUpload(BaseModel):
+    """Request schema for uploading a knowledge file."""
+    filename: str = Field(..., min_length=1, max_length=255, pattern=r'^[a-zA-Z0-9_\-\.]+\.md$')
+    content: str = Field(..., min_length=1)
 
 
 class ProjectSummary(BaseModel):
@@ -103,11 +139,11 @@ class FeatureCreate(FeatureBase):
 
 
 class FeatureUpdate(BaseModel):
-    """Request schema for updating a feature (partial updates allowed)."""
-    category: str | None = None
-    name: str | None = None
-    description: str | None = None
-    steps: list[str] | None = None
+    """Request schema for updating a feature. All fields optional for partial updates."""
+    category: str | None = Field(None, min_length=1, max_length=100)
+    name: str | None = Field(None, min_length=1, max_length=255)
+    description: str | None = Field(None, min_length=1)
+    steps: list[str] | None = Field(None, min_length=1)
     priority: int | None = None
     dependencies: list[int] | None = None  # Optional - can update dependencies
 
@@ -241,6 +277,7 @@ class SetupStatus(BaseModel):
     credentials: bool
     node: bool
     npm: bool
+    gemini: bool = False
 
 
 # ============================================================================
@@ -398,6 +435,7 @@ class SettingsResponse(BaseModel):
     glm_mode: bool = False  # True if GLM API is configured via .env
     ollama_mode: bool = False  # True if Ollama API is configured via .env
     testing_agent_ratio: int = 1  # Regression testing agents (0-3)
+    preferred_ide: str | None = None  # 'vscode', 'cursor', or 'antigravity'
 
 
 class ModelsResponse(BaseModel):
@@ -406,11 +444,26 @@ class ModelsResponse(BaseModel):
     default: str
 
 
+class DeniedCommandItem(BaseModel):
+    """Schema for a single denied command entry."""
+    command: str
+    reason: str
+    timestamp: str  # ISO format timestamp string
+    project_dir: str | None = None
+
+
+class DeniedCommandsResponse(BaseModel):
+    """Response schema for denied commands list."""
+    commands: list[DeniedCommandItem]
+    count: int
+
+
 class SettingsUpdate(BaseModel):
     """Request schema for updating global settings."""
     yolo_mode: bool | None = None
     model: str | None = None
     testing_agent_ratio: int | None = None  # 0-3
+    preferred_ide: str | None = None
 
     @field_validator('model')
     @classmethod
@@ -424,6 +477,13 @@ class SettingsUpdate(BaseModel):
     def validate_testing_ratio(cls, v: int | None) -> int | None:
         if v is not None and (v < 0 or v > 3):
             raise ValueError("testing_agent_ratio must be between 0 and 3")
+        return v
+
+    @field_validator('preferred_ide')
+    @classmethod
+    def validate_preferred_ide(cls, v: str | None) -> str | None:
+        if v is not None and v not in VALID_IDES:
+            raise ValueError(f"Invalid IDE. Must be one of: {VALID_IDES}")
         return v
 
 

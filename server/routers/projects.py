@@ -6,14 +6,24 @@ API endpoints for project management.
 Uses project registry for path lookups instead of fixed generations/ directory.
 """
 
+import logging
+import os
 import re
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 
+logger = logging.getLogger(__name__)
+
 from ..schemas import (
+    DatabaseHealth,
+    KnowledgeFile,
+    KnowledgeFileContent,
+    KnowledgeFileList,
+    KnowledgeFileUpload,
     ProjectCreate,
     ProjectDetail,
     ProjectPrompts,
@@ -22,6 +32,7 @@ from ..schemas import (
     ProjectStats,
     ProjectSummary,
 )
+from ..utils.validation import validate_project_name
 
 # Lazy imports to avoid circular dependencies
 _imports_initialized = False
@@ -84,16 +95,6 @@ def _get_registry_functions():
 
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
-
-
-def validate_project_name(name: str) -> str:
-    """Validate and sanitize project name to prevent path traversal."""
-    if not re.match(r'^[a-zA-Z0-9_-]{1,50}$', name):
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid project name. Use only letters, numbers, hyphens, and underscores (1-50 chars)."
-        )
-    return name
 
 
 def get_project_stats(project_dir: Path) -> ProjectStats:
@@ -221,6 +222,198 @@ async def create_project(project: ProjectCreate):
     )
 
 
+@router.post("/import", response_model=ProjectSummary)
+async def import_project(project: ProjectCreate):
+    """
+    Import/reconnect to an existing project after reinstallation.
+
+    This endpoint allows reconnecting to a project that exists on disk
+    but is not registered in the current autocoder installation's registry.
+
+    The project path must:
+    - Exist as a directory
+    - Contain a .autocoder folder (indicating it was previously an autocoder project)
+
+    This is useful when:
+    - Reinstalling autocoder
+    - Moving to a new machine
+    - Recovering from registry corruption
+    """
+    _init_imports()
+    register_project, _, get_project_path, list_registered_projects, _ = _get_registry_functions()
+
+    name = validate_project_name(project.name)
+    project_path = Path(project.path).resolve()
+
+    # Check if project name already registered
+    existing = get_project_path(name)
+    if existing:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Project '{name}' already exists at {existing}. Use a different name or delete the existing project first."
+        )
+
+    # Check if path already registered under a different name
+    all_projects = list_registered_projects()
+    for existing_name, info in all_projects.items():
+        existing_path = Path(info["path"]).resolve()
+        if sys.platform == "win32":
+            paths_match = str(existing_path).lower() == str(project_path).lower()
+        else:
+            paths_match = existing_path == project_path
+
+        if paths_match:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Path '{project_path}' is already registered as project '{existing_name}'"
+            )
+
+    # Validate the path exists and is a directory
+    if not project_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail=f"Project path does not exist: {project_path}"
+        )
+
+    if not project_path.is_dir():
+        raise HTTPException(
+            status_code=400,
+            detail="Path exists but is not a directory"
+        )
+
+    # Check for .autocoder folder to confirm it's a valid autocoder project
+    autocoder_dir = project_path / ".autocoder"
+    if not autocoder_dir.exists():
+        raise HTTPException(
+            status_code=400,
+            detail="Path does not appear to be an autocoder project (missing .autocoder folder). Use 'Create Project' instead."
+        )
+
+    # Security check
+    from .filesystem import is_path_blocked
+    if is_path_blocked(project_path):
+        raise HTTPException(
+            status_code=403,
+            detail="Cannot import project from system or sensitive directory"
+        )
+
+    # Register in registry
+    try:
+        register_project(name, project_path)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to register project: {e}"
+        )
+
+    # Get project stats
+    has_spec = _check_spec_exists(project_path)
+    stats = get_project_stats(project_path)
+
+    return ProjectSummary(
+        name=name,
+        path=project_path.as_posix(),
+        has_spec=has_spec,
+        stats=stats,
+    )
+
+
+@router.post("/import", response_model=ProjectSummary)
+async def import_project(project: ProjectCreate):
+    """
+    Import/reconnect to an existing project after reinstallation.
+
+    This endpoint allows reconnecting to a project that exists on disk
+    but is not registered in the current autocoder installation's registry.
+
+    The project path must:
+    - Exist as a directory
+    - Contain a .autocoder folder (indicating it was previously an autocoder project)
+
+    This is useful when:
+    - Reinstalling autocoder
+    - Moving to a new machine
+    - Recovering from registry corruption
+    """
+    _init_imports()
+    register_project, _, get_project_path, list_registered_projects, _ = _get_registry_functions()
+
+    name = validate_project_name(project.name)
+    project_path = Path(project.path).resolve()
+
+    # Check if project name already registered
+    existing = get_project_path(name)
+    if existing:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Project '{name}' already exists at {existing}. Use a different name or delete the existing project first."
+        )
+
+    # Check if path already registered under a different name
+    all_projects = list_registered_projects()
+    for existing_name, info in all_projects.items():
+        existing_path = Path(info["path"]).resolve()
+        if sys.platform == "win32":
+            paths_match = str(existing_path).lower() == str(project_path).lower()
+        else:
+            paths_match = existing_path == project_path
+
+        if paths_match:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Path '{project_path}' is already registered as project '{existing_name}'"
+            )
+
+    # Validate the path exists and is a directory
+    if not project_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail=f"Project path does not exist: {project_path}"
+        )
+
+    if not project_path.is_dir():
+        raise HTTPException(
+            status_code=400,
+            detail="Path exists but is not a directory"
+        )
+
+    # Check for .autocoder folder to confirm it's a valid autocoder project
+    autocoder_dir = project_path / ".autocoder"
+    if not autocoder_dir.exists():
+        raise HTTPException(
+            status_code=400,
+            detail="Path does not appear to be an autocoder project (missing .autocoder folder). Use 'Create Project' instead."
+        )
+
+    # Security check
+    from .filesystem import is_path_blocked
+    if is_path_blocked(project_path):
+        raise HTTPException(
+            status_code=403,
+            detail="Cannot import project from system or sensitive directory"
+        )
+
+    # Register in registry
+    try:
+        register_project(name, project_path)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to register project: {e}"
+        )
+
+    # Get project stats
+    has_spec = _check_spec_exists(project_path)
+    stats = get_project_stats(project_path)
+
+    return ProjectSummary(
+        name=name,
+        path=project_path.as_posix(),
+        has_spec=has_spec,
+        stats=stats,
+    )
+
+
 @router.get("/{name}", response_model=ProjectDetail)
 async def get_project(name: str):
     """Get detailed information about a project."""
@@ -253,11 +446,18 @@ async def get_project(name: str):
 @router.delete("/{name}")
 async def delete_project(name: str, delete_files: bool = False):
     """
-    Delete a project from the registry.
+    Delete a project from the registry and perform comprehensive cleanup.
+
+    This removes the project from:
+    - Registry (project registration)
+    - Database (features.db file)
+    - WebSocket connections (all active connections)
+    - Agent processes (stop and cleanup)
+    - Dev servers (stop if running)
 
     Args:
         name: Project name to delete
-        delete_files: If True, also delete the project directory and files
+        delete_files: If True, also delete the project directory and all files
     """
     _init_imports()
     (_, unregister_project, get_project_path, _, _, _, _) = _get_registry_functions()
@@ -276,20 +476,124 @@ async def delete_project(name: str, delete_files: bool = False):
             detail="Cannot delete project while agent is running. Stop the agent first."
         )
 
-    # Optionally delete files
+    # Step 1: Disconnect all WebSocket connections for this project
+    from .websocket import manager as websocket_manager
+    try:
+        disconnected = await websocket_manager.disconnect_all_for_project(name)
+        logger.info(f"Disconnected {disconnected} WebSocket connection(s) for project '{name}'")
+    except Exception as e:
+        logger.warning(f"Error disconnecting WebSocket connections for project '{name}': {e}")
+
+    # Step 2: Stop agent process manager for this project
+    from .services.dev_server_manager import get_devserver_manager
+    from .services.process_manager import cleanup_manager as cleanup_process_manager
+    try:
+        await cleanup_process_manager(name, project_dir)
+        logger.info(f"Stopped agent process manager for project '{name}'")
+    except Exception as e:
+        logger.warning(f"Error stopping agent process manager for project '{name}': {e}")
+
+    # Step 3: Stop dev server if running for this project
+    try:
+        devserver_mgr = get_devserver_manager()
+        await devserver_mgr.stop_server(name)
+        logger.info(f"Stopped dev server for project '{name}'")
+    except Exception as e:
+        logger.warning(f"Error stopping dev server for project '{name}': {e}")
+
+    # Step 4: Delete database files (features.db, assistant.db)
+    db_files = ["features.db", "assistant.db"]
+    deleted_dbs = []
+    for db_file in db_files:
+        db_path = project_dir / db_file
+        if db_path.exists():
+            try:
+                db_path.unlink()
+                deleted_dbs.append(db_file)
+                logger.info(f"Deleted {db_file} for project '{name}'")
+            except Exception as e:
+                logger.warning(f"Error deleting {db_file} for project '{name}': {e}")
+
+    # Step 5: Optionally delete the entire project directory
     if delete_files and project_dir.exists():
         try:
             shutil.rmtree(project_dir)
+            logger.info(f"Deleted project directory for '{name}'")
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to delete project files: {e}")
 
-    # Unregister from registry
+    # Step 6: Unregister from registry (do this last)
     unregister_project(name)
+    logger.info(f"Unregistered project '{name}' from registry")
 
     return {
         "success": True,
-        "message": f"Project '{name}' deleted" + (" (files removed)" if delete_files else " (files preserved)")
+        "message": f"Project '{name}' deleted completely" + (" (including files)" if delete_files else " (files preserved)"),
+        "details": {
+            "databases_deleted": deleted_dbs,
+            "files_deleted": delete_files
+        }
     }
+
+
+@router.post("/{name}/open-in-ide")
+async def open_project_in_ide(name: str, ide: str):
+    """Open a project in the specified IDE.
+
+    Args:
+        name: Project name
+        ide: IDE to use ('vscode', 'cursor', or 'antigravity')
+    """
+    _init_imports()
+    _, _, get_project_path, _, _ = _get_registry_functions()
+
+    name = validate_project_name(name)
+    project_dir = get_project_path(name)
+
+    if not project_dir:
+        raise HTTPException(status_code=404, detail=f"Project '{name}' not found")
+
+    if not project_dir.exists():
+        raise HTTPException(status_code=404, detail=f"Project directory not found: {project_dir}")
+
+    # Validate IDE parameter
+    ide_commands = {
+        'vscode': 'code',
+        'cursor': 'cursor',
+        'antigravity': 'antigravity',
+    }
+
+    if ide not in ide_commands:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid IDE. Must be one of: {list(ide_commands.keys())}"
+        )
+
+    cmd = ide_commands[ide]
+    project_path = str(project_dir)
+
+    try:
+        if sys.platform == "win32":
+            # Try to find the command in PATH first
+            cmd_path = shutil.which(cmd)
+            if cmd_path:
+                subprocess.Popen([cmd_path, project_path])
+            else:
+                # Fall back to cmd /c which uses shell PATH
+                subprocess.Popen(
+                    ["cmd", "/c", cmd, project_path],
+                    creationflags=subprocess.CREATE_NO_WINDOW,
+                )
+        else:
+            # Unix-like systems
+            subprocess.Popen([cmd_path, project_path], start_new_session=True)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to open IDE: {e}"
+        )
+
+    return {"status": "success", "message": f"Opening {project_path} in {ide}"}
 
 
 @router.get("/{name}/prompts", response_model=ProjectPrompts)

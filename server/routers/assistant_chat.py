@@ -7,7 +7,6 @@ WebSocket and REST endpoints for the read-only project assistant.
 
 import json
 import logging
-import re
 from pathlib import Path
 from typing import Optional
 
@@ -27,6 +26,8 @@ from ..services.assistant_database import (
     get_conversation,
     get_conversations,
 )
+from ..utils.auth import reject_unauthenticated_websocket
+from ..utils.validation import is_valid_project_name
 
 logger = logging.getLogger(__name__)
 
@@ -45,11 +46,6 @@ def _get_project_path(project_name: str) -> Optional[Path]:
 
     from registry import get_project_path
     return get_project_path(project_name)
-
-
-def validate_project_name(name: str) -> bool:
-    """Validate project name to prevent path traversal."""
-    return bool(re.match(r'^[a-zA-Z0-9_-]{1,50}$', name))
 
 
 # ============================================================================
@@ -98,7 +94,7 @@ class SessionInfo(BaseModel):
 @router.get("/conversations/{project_name}", response_model=list[ConversationSummary])
 async def list_project_conversations(project_name: str):
     """List all conversations for a project."""
-    if not validate_project_name(project_name):
+    if not is_valid_project_name(project_name):
         raise HTTPException(status_code=400, detail="Invalid project name")
 
     project_dir = _get_project_path(project_name)
@@ -112,7 +108,7 @@ async def list_project_conversations(project_name: str):
 @router.get("/conversations/{project_name}/{conversation_id}", response_model=ConversationDetail)
 async def get_project_conversation(project_name: str, conversation_id: int):
     """Get a specific conversation with all messages."""
-    if not validate_project_name(project_name):
+    if not is_valid_project_name(project_name):
         raise HTTPException(status_code=400, detail="Invalid project name")
 
     project_dir = _get_project_path(project_name)
@@ -136,7 +132,7 @@ async def get_project_conversation(project_name: str, conversation_id: int):
 @router.post("/conversations/{project_name}", response_model=ConversationSummary)
 async def create_project_conversation(project_name: str):
     """Create a new conversation for a project."""
-    if not validate_project_name(project_name):
+    if not is_valid_project_name(project_name):
         raise HTTPException(status_code=400, detail="Invalid project name")
 
     project_dir = _get_project_path(project_name)
@@ -157,7 +153,7 @@ async def create_project_conversation(project_name: str):
 @router.delete("/conversations/{project_name}/{conversation_id}")
 async def delete_project_conversation(project_name: str, conversation_id: int):
     """Delete a conversation."""
-    if not validate_project_name(project_name):
+    if not is_valid_project_name(project_name):
         raise HTTPException(status_code=400, detail="Invalid project name")
 
     project_dir = _get_project_path(project_name)
@@ -184,7 +180,7 @@ async def list_active_sessions():
 @router.get("/sessions/{project_name}", response_model=SessionInfo)
 async def get_session_info(project_name: str):
     """Get information about an active session."""
-    if not validate_project_name(project_name):
+    if not is_valid_project_name(project_name):
         raise HTTPException(status_code=400, detail="Invalid project name")
 
     session = get_session(project_name)
@@ -201,7 +197,7 @@ async def get_session_info(project_name: str):
 @router.delete("/sessions/{project_name}")
 async def close_session(project_name: str):
     """Close an active session."""
-    if not validate_project_name(project_name):
+    if not is_valid_project_name(project_name):
         raise HTTPException(status_code=400, detail="Invalid project name")
 
     session = get_session(project_name)
@@ -224,7 +220,8 @@ async def assistant_chat_websocket(websocket: WebSocket, project_name: str):
     Message protocol:
 
     Client -> Server:
-    - {"type": "start", "conversation_id": int | null} - Start/resume session
+    - {"type": "start", "conversation_id": int | null} - Start session
+    - {"type": "resume", "conversation_id": int} - Resume session without greeting
     - {"type": "message", "content": "..."} - Send user message
     - {"type": "ping"} - Keep-alive ping
 
@@ -236,7 +233,11 @@ async def assistant_chat_websocket(websocket: WebSocket, project_name: str):
     - {"type": "error", "content": "..."} - Error message
     - {"type": "pong"} - Keep-alive pong
     """
-    if not validate_project_name(project_name):
+    # Check authentication if Basic Auth is enabled
+    if not await reject_unauthenticated_websocket(websocket):
+        return
+
+    if not is_valid_project_name(project_name):
         await websocket.close(code=4000, reason="Invalid project name")
         return
 
@@ -292,6 +293,41 @@ async def assistant_chat_websocket(websocket: WebSocket, project_name: str):
                         await websocket.send_json({
                             "type": "error",
                             "content": f"Failed to start session: {str(e)}"
+                        })
+
+                elif msg_type == "resume":
+                    # Resume an existing conversation without sending greeting
+                    conversation_id = message.get("conversation_id")
+
+                    # Validate conversation_id is present and valid
+                    if not conversation_id or not isinstance(conversation_id, int):
+                        logger.warning(f"Invalid resume request for {project_name}: missing or invalid conversation_id")
+                        await websocket.send_json({
+                            "type": "error",
+                            "content": "Missing or invalid conversation_id for resume"
+                        })
+                        continue
+
+                    try:
+                        # Create session
+                        session = await create_session(
+                            project_name,
+                            project_dir,
+                            conversation_id=conversation_id,
+                        )
+                        # Initialize but skip the greeting
+                        async for chunk in session.start(skip_greeting=True):
+                            await websocket.send_json(chunk)
+                        # Confirm we're ready
+                        await websocket.send_json({
+                            "type": "conversation_created",
+                            "conversation_id": conversation_id,
+                        })
+                    except Exception as e:
+                        logger.exception(f"Error resuming assistant session for {project_name}")
+                        await websocket.send_json({
+                            "type": "error",
+                            "content": f"Failed to resume session: {str(e)}"
                         })
 
                 elif msg_type == "message":

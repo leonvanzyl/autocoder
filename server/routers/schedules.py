@@ -6,7 +6,6 @@ API endpoints for managing agent schedules.
 Provides CRUD operations for time-based schedule configuration.
 """
 
-import re
 import sys
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
@@ -26,6 +25,7 @@ from ..schemas import (
     ScheduleResponse,
     ScheduleUpdate,
 )
+from ..utils.validation import validate_project_name
 
 
 def _get_project_path(project_name: str) -> Path:
@@ -44,16 +44,6 @@ router = APIRouter(
 )
 
 
-def validate_project_name(name: str) -> str:
-    """Validate and sanitize project name to prevent path traversal."""
-    if not re.match(r'^[a-zA-Z0-9_-]{1,50}$', name):
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid project name"
-        )
-    return name
-
-
 @contextmanager
 def _get_db_session(project_name: str) -> Generator[Tuple[Session, Path], None, None]:
     """Get database session for a project as a context manager.
@@ -62,6 +52,8 @@ def _get_db_session(project_name: str) -> Generator[Tuple[Session, Path], None, 
         with _get_db_session(project_name) as (db, project_path):
             # ... use db ...
         # db is automatically closed
+
+    Properly rolls back on error to prevent PendingRollbackError.
     """
     from api.database import create_database
 
@@ -84,6 +76,9 @@ def _get_db_session(project_name: str) -> Generator[Tuple[Session, Path], None, 
     db = SessionLocal()
     try:
         yield db, project_path
+    except Exception:
+        db.rollback()
+        raise
     finally:
         db.close()
 
@@ -109,6 +104,7 @@ async def list_schedules(project_name: str):
                     enabled=s.enabled,
                     yolo_mode=s.yolo_mode,
                     model=s.model,
+                    max_concurrency=s.max_concurrency,
                     crash_count=s.crash_count,
                     created_at=s.created_at,
                 )
@@ -145,6 +141,7 @@ async def create_schedule(project_name: str, data: ScheduleCreate):
             enabled=data.enabled,
             yolo_mode=data.yolo_mode,
             model=data.model,
+            max_concurrency=data.max_concurrency,
         )
         db.add(schedule)
         db.commit()
@@ -196,6 +193,7 @@ async def create_schedule(project_name: str, data: ScheduleCreate):
             enabled=schedule.enabled,
             yolo_mode=schedule.yolo_mode,
             model=schedule.model,
+            max_concurrency=schedule.max_concurrency,
             crash_count=schedule.crash_count,
             created_at=schedule.created_at,
         )
@@ -286,6 +284,7 @@ async def get_schedule(project_name: str, schedule_id: int):
             enabled=schedule.enabled,
             yolo_mode=schedule.yolo_mode,
             model=schedule.model,
+            max_concurrency=schedule.max_concurrency,
             crash_count=schedule.crash_count,
             created_at=schedule.created_at,
         )
@@ -340,6 +339,7 @@ async def update_schedule(
             enabled=schedule.enabled,
             yolo_mode=schedule.yolo_mode,
             model=schedule.model,
+            max_concurrency=schedule.max_concurrency,
             crash_count=schedule.crash_count,
             created_at=schedule.created_at,
         )

@@ -14,6 +14,7 @@ import { Bot, FileEdit, ArrowRight, ArrowLeft, Loader2, CheckCircle2, Folder } f
 import { useCreateProject } from '../hooks/useProjects'
 import { SpecCreationChat } from './SpecCreationChat'
 import { FolderBrowser } from './FolderBrowser'
+import { ImportProjectModal } from './ImportProjectModal'
 import { startAgent } from '../lib/api'
 import {
   Dialog,
@@ -32,7 +33,8 @@ import { Card, CardContent } from '@/components/ui/card'
 
 type InitializerStatus = 'idle' | 'starting' | 'error'
 
-type Step = 'name' | 'folder' | 'method' | 'chat' | 'complete'
+type Step = 'choose' | 'name' | 'folder' | 'method' | 'chat' | 'complete' | 'import'
+type ProjectType = 'new' | 'import'
 type SpecMethod = 'claude' | 'manual'
 
 interface NewProjectModalProps {
@@ -48,17 +50,15 @@ export function NewProjectModal({
   onProjectCreated,
   onStepChange,
 }: NewProjectModalProps) {
-  const [step, setStep] = useState<Step>('name')
+  const [step, setStep] = useState<Step>('choose')
+  const [, setProjectType] = useState<ProjectType | null>(null)
   const [projectName, setProjectName] = useState('')
   const [projectPath, setProjectPath] = useState<string | null>(null)
-  const [_specMethod, setSpecMethod] = useState<SpecMethod | null>(null)
+  const [, setSpecMethod] = useState<SpecMethod | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [initializerStatus, setInitializerStatus] = useState<InitializerStatus>('idle')
   const [initializerError, setInitializerError] = useState<string | null>(null)
   const [yoloModeSelected, setYoloModeSelected] = useState(false)
-
-  // Suppress unused variable warning - specMethod may be used in future
-  void _specMethod
 
   const createProject = useCreateProject()
 
@@ -179,7 +179,8 @@ export function NewProjectModal({
   }
 
   const handleClose = () => {
-    changeStep('name')
+    changeStep('choose')
+    setProjectType(null)
     setProjectName('')
     setProjectPath(null)
     setSpecMethod(null)
@@ -197,7 +198,35 @@ export function NewProjectModal({
     } else if (step === 'folder') {
       changeStep('name')
       setProjectPath(null)
+    } else if (step === 'name') {
+      changeStep('choose')
+      setProjectType(null)
     }
+  }
+
+  const handleProjectTypeSelect = (type: ProjectType) => {
+    setProjectType(type)
+    if (type === 'new') {
+      changeStep('name')
+    } else {
+      changeStep('import')
+    }
+  }
+
+  const handleImportComplete = (importedProjectName: string) => {
+    onProjectCreated(importedProjectName)
+    handleClose()
+  }
+
+  // Import project view
+  if (step === 'import') {
+    return (
+      <ImportProjectModal
+        isOpen={true}
+        onClose={handleClose}
+        onProjectImported={handleImportComplete}
+      />
+    )
   }
 
   // Full-screen chat view

@@ -46,7 +46,7 @@
     "@tailwindcss/vite": "^4.1.0",
     "@types/canvas-confetti": "^1.9.0",
     "@types/dagre": "^0.7.53",
-    "@types/node": "^22.12.0",
+    "@types/node": "^22.19.7",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.4.0",

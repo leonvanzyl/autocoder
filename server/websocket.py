@@ -18,6 +18,8 @@ from fastapi import WebSocket, WebSocketDisconnect
 from .schemas import AGENT_MASCOTS
 from .services.dev_server_manager import get_devserver_manager
 from .services.process_manager import get_manager
+from .utils.auth import reject_unauthenticated_websocket
+from .utils.validation import is_valid_project_name
 
 # Lazy imports
 _count_passing_tests = None
@@ -76,13 +78,22 @@ class AgentTracker:
     Both coding and testing agents are tracked using a composite key of
     (feature_id, agent_type) to allow simultaneous tracking of both agent
     types for the same feature.
+
+    Memory Leak Prevention:
+    - Agents have a TTL (time-to-live) after which they're considered stale
+    - Periodic cleanup removes stale agents to prevent memory leaks
+    - This handles cases where agent completion messages are missed
     """
 
+    # Maximum age (in seconds) before an agent is considered stale
+    AGENT_TTL_SECONDS = 3600  # 1 hour
+
     def __init__(self):
-        # (feature_id, agent_type) -> {name, state, last_thought, agent_index, agent_type}
+        # (feature_id, agent_type) -> {name, state, last_thought, agent_index, agent_type, last_activity}
         self.active_agents: dict[tuple[int, str], dict] = {}
         self._next_agent_index = 0
         self._lock = asyncio.Lock()
+        self._last_cleanup = datetime.now()
 
     async def process_line(self, line: str) -> dict | None:
         """
@@ -97,6 +108,7 @@ class AgentTracker:
         if line.startswith("Started coding agent for feature #"):
             try:
                 feature_id = int(re.search(r'#(\d+)', line).group(1))
+                self._schedule_cleanup()
                 return await self._handle_agent_start(feature_id, line, agent_type="coding")
             except (AttributeError, ValueError):
                 pass
@@ -105,6 +117,7 @@ class AgentTracker:
         testing_start_match = TESTING_AGENT_START_PATTERN.match(line)
         if testing_start_match:
             feature_id = int(testing_start_match.group(1))
+            self._schedule_cleanup()
             return await self._handle_agent_start(feature_id, line, agent_type="testing")
 
         # Testing agent complete: "Feature #X testing completed/failed"
@@ -112,6 +125,7 @@ class AgentTracker:
         if testing_complete_match:
             feature_id = int(testing_complete_match.group(1))
             is_success = testing_complete_match.group(2) == "completed"
+            self._schedule_cleanup()
             return await self._handle_agent_complete(feature_id, is_success, agent_type="testing")
 
         # Coding agent complete: "Feature #X completed/failed" (without "testing" keyword)
@@ -119,6 +133,7 @@ class AgentTracker:
             try:
                 feature_id = int(re.search(r'#(\d+)', line).group(1))
                 is_success = "completed" in line
+                self._schedule_cleanup()
                 return await self._handle_agent_complete(feature_id, is_success, agent_type="coding")
             except (AttributeError, ValueError):
                 pass
@@ -154,9 +169,13 @@ class AgentTracker:
                     'state': 'thinking',
                     'feature_name': f'Feature #{feature_id}',
                     'last_thought': None,
+                    'last_activity': datetime.now(),  # Track for TTL cleanup
                 }
 
             agent = self.active_agents[key]
+
+            # Update last activity timestamp for TTL tracking
+            agent['last_activity'] = datetime.now()
 
             # Detect state and thought from content
             state = 'working'
@@ -175,6 +194,7 @@ class AgentTracker:
                 if thought:
                     agent['last_thought'] = thought
 
+                self._schedule_cleanup()
                 return {
                     'type': 'agent_update',
                     'agentIndex': agent['agent_index'],
@@ -219,6 +239,42 @@ class AgentTracker:
         async with self._lock:
             self.active_agents.clear()
             self._next_agent_index = 0
+            self._last_cleanup = datetime.now()
+
+    async def cleanup_stale_agents(self) -> int:
+        """Remove agents that haven't had activity within the TTL.
+
+        Returns the number of agents removed. This method should be called
+        periodically to prevent memory leaks from crashed agents.
+        """
+        async with self._lock:
+            now = datetime.now()
+            stale_keys = []
+
+            for key, agent in self.active_agents.items():
+                last_activity = agent.get('last_activity')
+                if last_activity:
+                    age = (now - last_activity).total_seconds()
+                    if age > self.AGENT_TTL_SECONDS:
+                        stale_keys.append(key)
+
+            for key in stale_keys:
+                del self.active_agents[key]
+                logger.debug(f"Cleaned up stale agent: {key}")
+
+            self._last_cleanup = now
+            return len(stale_keys)
+
+    def _should_cleanup(self) -> bool:
+        """Check if it's time for periodic cleanup."""
+        # Cleanup every 5 minutes
+        return (datetime.now() - self._last_cleanup).total_seconds() > 300
+
+    def _schedule_cleanup(self) -> None:
+        """Schedule cleanup if needed (non-blocking)."""
+        if self._should_cleanup():
+            task = asyncio.create_task(self.cleanup_stale_agents())
+            task.add_done_callback(lambda t: t.exception() if not t.cancelled() else None)
 
     async def _handle_agent_start(self, feature_id: int, line: str, agent_type: str = "coding") -> dict | None:
         """Handle agent start message from orchestrator."""
@@ -240,6 +296,7 @@ class AgentTracker:
                 'state': 'thinking',
                 'feature_name': feature_name,
                 'last_thought': 'Starting work...',
+                'last_activity': datetime.now(),  # Track for TTL cleanup
             }
 
             return {
@@ -560,17 +617,37 @@ class ConnectionManager:
         """Get number of active connections for a project."""
         return len(self.active_connections.get(project_name, set()))
 
+    async def disconnect_all_for_project(self, project_name: str) -> int:
+        """Disconnect all WebSocket connections for a specific project.
+
+        Args:
+            project_name: Name of the project
+
+        Returns:
+            Number of connections that were disconnected
+        """
+        async with self._lock:
+            connections = list(self.active_connections.get(project_name, set()))
+            if project_name in self.active_connections:
+                del self.active_connections[project_name]
+
+        # Close connections outside the lock to avoid deadlock
+        closed_count = 0
+        for connection in connections:
+            try:
+                await connection.close(code=1000, reason="Project deleted")
+                closed_count += 1
+            except Exception as e:
+                logger.warning(f"Error closing WebSocket connection for project {project_name}: {e}")
+
+        return closed_count
+
 
 # Global connection manager
 manager = ConnectionManager()
 
 # Root directory
 ROOT_DIR = Path(__file__).parent.parent
-
-
-def validate_project_name(name: str) -> bool:
-    """Validate project name to prevent path traversal."""
-    return bool(re.match(r'^[a-zA-Z0-9_-]{1,50}$', name))
 
 
 async def poll_progress(websocket: WebSocket, project_name: str, project_dir: Path):
@@ -616,7 +693,11 @@ async def project_websocket(websocket: WebSocket, project_name: str):
     - Agent status changes
     - Agent stdout/stderr lines
     """
-    if not validate_project_name(project_name):
+    # Check authentication if Basic Auth is enabled
+    if not await reject_unauthenticated_websocket(websocket):
+        return
+
+    if not is_valid_project_name(project_name):
         await websocket.close(code=4000, reason="Invalid project name")
         return
 
@@ -674,8 +755,26 @@ async def project_websocket(websocket: WebSocket, project_name: str):
             orch_update = await orchestrator_tracker.process_line(line)
             if orch_update:
                 await websocket.send_json(orch_update)
-        except Exception:
-            pass  # Connection may be closed
+
+            # Emit feature_update when we detect a feature has been marked as passing
+            # Pattern: "Feature #X completed" indicates a successful feature completion
+            if feature_id is not None and "completed" in line.lower() and "testing" not in line.lower():
+                # Check if this is a coding agent completion (feature marked as passing)
+                if line.startswith("Feature #") and "failed" not in line.lower():
+                    await websocket.send_json({
+                        "type": "feature_update",
+                        "feature_id": feature_id,
+                        "passes": True,
+                    })
+        except WebSocketDisconnect:
+            # Client disconnected - this is expected and should be handled silently
+            pass
+        except ConnectionError:
+            # Network error - client connection lost
+            logger.debug("WebSocket connection error in on_output callback")
+        except Exception as e:
+            # Unexpected error - log for debugging but don't crash
+            logger.warning(f"Unexpected error in on_output callback: {type(e).__name__}: {e}")
 
     async def on_status_change(status: str):
         """Handle status change - broadcast to this WebSocket."""
@@ -688,8 +787,15 @@ async def project_websocket(websocket: WebSocket, project_name: str):
             if status in ("stopped", "crashed"):
                 await agent_tracker.reset()
                 await orchestrator_tracker.reset()
-        except Exception:
-            pass  # Connection may be closed
+        except WebSocketDisconnect:
+            # Client disconnected - this is expected and should be handled silently
+            pass
+        except ConnectionError:
+            # Network error - client connection lost
+            logger.debug("WebSocket connection error in on_status_change callback")
+        except Exception as e:
+            # Unexpected error - log for debugging but don't crash
+            logger.warning(f"Unexpected error in on_status_change callback: {type(e).__name__}: {e}")
 
     # Register callbacks
     agent_manager.add_output_callback(on_output)
@@ -706,8 +812,12 @@ async def project_websocket(websocket: WebSocket, project_name: str):
                 "line": line,
                 "timestamp": datetime.now().isoformat(),
             })
-        except Exception:
-            pass  # Connection may be closed
+        except WebSocketDisconnect:
+            pass  # Client disconnected - expected
+        except ConnectionError:
+            logger.debug("WebSocket connection error in on_dev_output callback")
+        except Exception as e:
+            logger.warning(f"Unexpected error in on_dev_output callback: {type(e).__name__}: {e}")
 
     async def on_dev_status_change(status: str):
         """Handle dev server status change - broadcast to this WebSocket."""
@@ -717,8 +827,12 @@ async def project_websocket(websocket: WebSocket, project_name: str):
                 "status": status,
                 "url": devserver_manager.detected_url,
             })
-        except Exception:
-            pass  # Connection may be closed
+        except WebSocketDisconnect:
+            pass  # Client disconnected - expected
+        except ConnectionError:
+            logger.debug("WebSocket connection error in on_dev_status_change callback")
+        except Exception as e:
+            logger.warning(f"Unexpected error in on_dev_status_change callback: {type(e).__name__}: {e}")
 
     # Register dev server callbacks
     devserver_manager.add_output_callback(on_dev_output)

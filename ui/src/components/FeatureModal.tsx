@@ -35,10 +35,9 @@ function getCategoryColor(category: string): string {
   return colors[Math.abs(hash) % colors.length]
 }
 
-interface FeatureModalProps {
-  feature: Feature
-  projectName: string
-  onClose: () => void
+interface Step {
+  id: string;
+  value: string;
 }
 
 export function FeatureModal({ feature, projectName, onClose }: FeatureModalProps) {
@@ -69,24 +68,75 @@ export function FeatureModal({ feature, projectName, onClose }: FeatureModalProp
     .filter((f): f is Feature => f !== undefined)
 
   const handleSkip = async () => {
-    setError(null)
+    setError(null);
     try {
-      await skipFeature.mutateAsync(feature.id)
-      onClose()
+      await skipFeature.mutateAsync(feature.id);
+      onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to skip feature')
+      setError(err instanceof Error ? err.message : "Failed to skip feature");
     }
-  }
+  };
 
   const handleDelete = async () => {
-    setError(null)
+    setError(null);
     try {
-      await deleteFeature.mutateAsync(feature.id)
-      onClose()
+      await deleteFeature.mutateAsync(feature.id);
+      onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete feature')
+      setError(err instanceof Error ? err.message : "Failed to delete feature");
     }
-  }
+  };
+
+  // Edit mode step management
+  const handleAddStep = () => {
+    setEditSteps([
+      ...editSteps,
+      { id: `${formId}-step-${stepCounter}`, value: "" },
+    ]);
+    setStepCounter(stepCounter + 1);
+  };
+
+  const handleRemoveStep = (id: string) => {
+    setEditSteps(editSteps.filter((step) => step.id !== id));
+  };
+
+  const handleStepChange = (id: string, value: string) => {
+    setEditSteps(
+      editSteps.map((step) => (step.id === id ? { ...step, value } : step)),
+    );
+  };
+
+  const handleSaveEdit = async () => {
+    setError(null);
+
+    // Filter out empty steps
+    const filteredSteps = editSteps
+      .map((s) => s.value.trim())
+      .filter((s) => s.length > 0);
+
+    try {
+      await updateFeature.mutateAsync({
+        featureId: feature.id,
+        update: {
+          category: editCategory.trim(),
+          name: editName.trim(),
+          description: editDescription.trim(),
+          steps: filteredSteps.length > 0 ? filteredSteps : undefined,
+        },
+      });
+      setIsEditing(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update feature");
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditing(false);
+    setError(null);
+  };
+
+  const isEditValid =
+    editCategory.trim() && editName.trim() && editDescription.trim();
 
   // Show edit form when in edit mode
   if (showEdit) {

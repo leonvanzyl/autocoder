@@ -167,10 +167,29 @@ MCP tools available to the agent:
 - `feature_claim_next` - Atomically claim next available feature (for parallel mode)
 - `feature_get_for_regression` - Random passing features for regression testing
 - `feature_mark_passing` - Mark feature complete
-- `feature_skip` - Move feature to end of queue
+- `feature_skip` - Move feature to end of queue (for external blockers only)
 - `feature_create_bulk` - Initialize all features (used by initializer)
 - `feature_add_dependency` - Add dependency between features (with cycle detection)
 - `feature_remove_dependency` - Remove a dependency
+
+### Feature Behavior & Precedence
+
+**Important:** After initialization, the feature database becomes the authoritative source of truth for what the agent should build. This has specific implications:
+
+1. **Refactoring features override the original spec.** If a refactoring feature says "migrate to TypeScript" but `app_spec.txt` said "use JavaScript", the feature takes precedence. The original spec is a starting point; features represent evolved requirements.
+
+2. **The current codebase state is not a constraint.** If the code is currently in JavaScript but a feature says "migrate to TypeScript", the agent's job is to change it. The current state is the problem being solved, not an excuse to skip.
+
+3. **All feature categories are mandatory.** Features come in three categories:
+   - `functional` - New functionality to build
+   - `style` - UI/UX requirements
+   - `refactoring` - Code improvements and migrations
+
+   All categories are equally mandatory. Refactoring features are not optional.
+
+4. **Skipping is for external blockers only.** The `feature_skip` tool should only be used for genuine external blockers (missing API credentials, unavailable services, hardware limitations). Internal issues like "code doesn't exist" or "this is a big change" are not valid skip reasons.
+
+**Example:** Adding a feature "Migrate frontend from JavaScript to TypeScript" will cause the agent to convert all `.js`/`.jsx` files to `.ts`/`.tsx`, regardless of what the original spec said about the tech stack.
 
 ### React UI (ui/)
 

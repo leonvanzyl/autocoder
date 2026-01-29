@@ -39,5 +39,3 @@ pip install -r requirements.txt --quiet
 
 REM Run the Python launcher
 python "%~dp0start_ui.py" %*
-
-pause

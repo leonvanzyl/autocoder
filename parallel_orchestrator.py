@@ -19,7 +19,9 @@ Usage:
 """
 
 import asyncio
+import logging
 import os
+import signal
 import subprocess
 import sys
 import threading
@@ -27,56 +29,128 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Literal
 
-from api.database import Feature, create_database
+# Essential environment variables to pass to subprocesses
+# This prevents Windows "command line too long" errors by not passing the entire environment
+ESSENTIAL_ENV_VARS = [
+    # Python paths
+    "PATH", "PYTHONPATH", "PYTHONHOME", "VIRTUAL_ENV", "CONDA_PREFIX",
+    # Windows essentials
+    "SYSTEMROOT", "COMSPEC", "TEMP", "TMP", "USERPROFILE", "APPDATA", "LOCALAPPDATA",
+    # API keys and auth
+    "ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN",
+    "OPENAI_API_KEY", "CLAUDE_API_KEY",
+    # Project configuration
+    "PROJECT_DIR", "AUTOCODER_ALLOW_REMOTE",
+    # Development tools
+    "NODE_PATH", "NPM_CONFIG_PREFIX", "HOME", "USER", "USERNAME",
+    # SSL/TLS
+    "SSL_CERT_FILE", "SSL_CERT_DIR", "REQUESTS_CA_BUNDLE",
+]
+
+
+def _get_minimal_env() -> dict[str, str]:
+    """Get minimal environment for subprocess to avoid Windows command line length issues.
+
+    Windows has a command line length limit of ~32KB. When the environment is very large
+    (e.g., with many PATH entries), passing the entire environment can exceed this limit.
+
+    This function returns only essential environment variables needed for Python
+    and API operations.
+
+    Returns:
+        Dictionary of essential environment variables
+    """
+    env = {}
+    for var in ESSENTIAL_ENV_VARS:
+        if var in os.environ:
+            env[var] = os.environ[var]
+
+    # Always ensure PYTHONUNBUFFERED for real-time output
+    env["PYTHONUNBUFFERED"] = "1"
+
+    return env
+
+# Windows-specific: Set ProactorEventLoop policy for subprocess support
+# This MUST be set before any other asyncio operations
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+
+from api.database import Feature, checkpoint_wal, create_database
 from api.dependency_resolver import are_dependencies_satisfied, compute_scheduling_scores
+from api.logging_config import log_section, setup_orchestrator_logging
 from progress import has_features
 from server.utils.process_utils import kill_process_tree
+from structured_logging import get_logger
 
 # Root directory of autocoder (where this script and autonomous_agent_demo.py live)
 AUTOCODER_ROOT = Path(__file__).parent.resolve()
 
 # Debug log file path
-DEBUG_LOG_FILE = AUTOCODER_ROOT / "orchestrator_debug.log"
+DEBUG_LOG_FILE = AUTOCODER_ROOT / "logs" / "orchestrator.log"
 
 
-class DebugLogger:
-    """Thread-safe debug logger that writes to a file."""
+def safe_asyncio_run(coro):
+    """
+    Run an async coroutine with proper cleanup to avoid Windows subprocess errors.
 
-    def __init__(self, log_file: Path = DEBUG_LOG_FILE):
-        self.log_file = log_file
-        self._lock = threading.Lock()
-        self._session_started = False
-        # DON'T clear on import - only mark session start when run_loop begins
+    On Windows, subprocess transports may raise 'Event loop is closed' errors
+    during garbage collection if not properly cleaned up.
+    """
+    if sys.platform == "win32":
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            return loop.run_until_complete(coro)
+        finally:
+            # Cancel all pending tasks
+            pending = asyncio.all_tasks(loop)
+            for task in pending:
+                task.cancel()
 
-    def start_session(self):
-        """Mark the start of a new orchestrator session. Clears previous logs."""
-        with self._lock:
-            self._session_started = True
-            with open(self.log_file, "w") as f:
-                f.write(f"=== Orchestrator Debug Log Started: {datetime.now().isoformat()} ===\n")
-                f.write(f"=== PID: {os.getpid()} ===\n\n")
+            # Allow cancelled tasks to complete
+            if pending:
+                loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
 
-    def log(self, category: str, message: str, **kwargs):
-        """Write a timestamped log entry."""
-        timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
-        with self._lock:
-            with open(self.log_file, "a") as f:
-                f.write(f"[{timestamp}] [{category}] {message}\n")
-                for key, value in kwargs.items():
-                    f.write(f"    {key}: {value}\n")
-                f.write("\n")
+            # Shutdown async generators and executors
+            loop.run_until_complete(loop.shutdown_asyncgens())
+            if hasattr(loop, 'shutdown_default_executor'):
+                loop.run_until_complete(loop.shutdown_default_executor())
 
-    def section(self, title: str):
-        """Write a section header."""
-        with self._lock:
-            with open(self.log_file, "a") as f:
-                f.write(f"\n{'='*60}\n")
-                f.write(f"  {title}\n")
-                f.write(f"{'='*60}\n\n")
+            loop.close()
+    else:
+        return asyncio.run(coro)
 
 
-# Global debug logger instance
-debug_log = DebugLogger()
+def safe_asyncio_run(coro):
+    """
+    Run an async coroutine with proper cleanup to avoid Windows subprocess errors.
+
+    On Windows, subprocess transports may raise 'Event loop is closed' errors
+    during garbage collection if not properly cleaned up.
+    """
+    if sys.platform == "win32":
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            return loop.run_until_complete(coro)
+        finally:
+            # Cancel all pending tasks
+            pending = asyncio.all_tasks(loop)
+            for task in pending:
+                task.cancel()
+
+            # Allow cancelled tasks to complete
+            if pending:
+                loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+
+            # Shutdown async generators and executors
+            loop.run_until_complete(loop.shutdown_asyncgens())
+            if hasattr(loop, 'shutdown_default_executor'):
+                loop.run_until_complete(loop.shutdown_default_executor())
+
+            loop.close()
+    else:
+        return asyncio.run(coro)
 
 
 def _dump_database_state(session, label: str = ""):
@@ -88,14 +162,13 @@ def _dump_database_state(session, label: str = ""):
     in_progress = [f for f in all_features if f.in_progress and not f.passes]
     pending = [f for f in all_features if not f.passes and not f.in_progress]
 
-    debug_log.log("DB_DUMP", f"Full database state {label}",
-        total_features=len(all_features),
-        passing_count=len(passing),
-        passing_ids=[f.id for f in passing],
-        in_progress_count=len(in_progress),
-        in_progress_ids=[f.id for f in in_progress],
-        pending_count=len(pending),
-        pending_ids=[f.id for f in pending[:10]])  # First 10 pending only
+    logger.debug(
+        f"[DB_DUMP] Full database state {label} | "
+        f"total={len(all_features)} passing={len(passing)} in_progress={len(in_progress)} pending={len(pending)}"
+    )
+    logger.debug(f"    passing_ids: {[f.id for f in passing]}")
+    logger.debug(f"    in_progress_ids: {[f.id for f in in_progress]}")
+    logger.debug(f"    pending_ids (first 10): {[f.id for f in pending[:10]]}")
 
 # =============================================================================
 # Process Limits
@@ -170,8 +243,9 @@ class ParallelOrchestrator:
         self._lock = threading.Lock()
         # Coding agents: feature_id -> process
         self.running_coding_agents: dict[int, subprocess.Popen] = {}
-        # Testing agents: feature_id -> process (feature being tested)
-        self.running_testing_agents: dict[int, subprocess.Popen] = {}
+        # Testing agents: agent_id (pid) -> (feature_id, process)
+        # Using pid as key allows multiple agents to test the same feature
+        self.running_testing_agents: dict[int, tuple[int, subprocess.Popen] | None] = {}
         # Legacy alias for backward compatibility
         self.running_agents = self.running_coding_agents
         self.abort_events: dict[int, threading.Event] = {}
@@ -191,6 +265,16 @@ class ParallelOrchestrator:
 
         # Database session for this orchestrator
         self._engine, self._session_maker = create_database(project_dir)
+
+        # Structured logger for persistent logs (saved to {project_dir}/.autocoder/logs.db)
+        # Uses console_output=False since orchestrator already has its own print statements
+        self._logger = get_logger(project_dir, agent_id="orchestrator", console_output=False)
+        self._logger.info(
+            "Orchestrator initialized",
+            max_concurrency=self.max_concurrency,
+            yolo_mode=yolo_mode,
+            testing_agent_ratio=testing_agent_ratio,
+        )
 
     def get_session(self):
         """Get a new database session."""
@@ -316,13 +400,12 @@ class ParallelOrchestrator:
             )
 
             # Log to debug file (but not every call to avoid spam)
-            debug_log.log("READY", "get_ready_features() called",
-                ready_count=len(ready),
-                ready_ids=[f['id'] for f in ready[:5]],  # First 5 only
-                passing=passing,
-                in_progress=in_progress,
-                total=len(all_features),
-                skipped=skipped_reasons)
+            logger.debug(
+                f"[READY] get_ready_features() | ready={len(ready)} passing={passing} "
+                f"in_progress={in_progress} total={len(all_features)}"
+            )
+            logger.debug(f"    ready_ids (first 5): {[f['id'] for f in ready[:5]]}")
+            logger.debug(f"    skipped: {skipped_reasons}")
 
             return ready
         finally:
@@ -391,6 +474,11 @@ class ParallelOrchestrator:
         - YOLO mode is enabled
         - testing_agent_ratio is 0
         - No passing features exist yet
+
+        Race Condition Prevention:
+        - Uses placeholder pattern to reserve slot inside lock before spawning
+        - Placeholder ensures other threads see the reserved slot
+        - Placeholder is replaced with real process after spawn completes
         """
         # Skip if testing is disabled
         if self.yolo_mode or self.testing_agent_ratio == 0:
@@ -401,14 +489,19 @@ class ParallelOrchestrator:
         if passing_count == 0:
             return
 
+        # Determine desired testing agent count (respecting max_concurrency)
+        desired = min(self.testing_agent_ratio, self.max_concurrency)
+
         # Don't spawn testing agents if all features are already complete
         if self.get_all_complete():
             return
 
-        # Spawn testing agents one at a time, re-checking limits each time
-        # This avoids TOCTOU race by holding lock during the decision
+        # Spawn testing agents one at a time, using placeholder pattern to prevent races
         while True:
-            # Check limits and decide whether to spawn (atomically)
+            placeholder_key = None
+            spawn_index = 0
+
+            # Check limits and reserve slot atomically
             with self._lock:
                 current_testing = len(self.running_testing_agents)
                 desired = self.testing_agent_ratio
@@ -422,14 +515,22 @@ class ParallelOrchestrator:
                 if total_agents >= MAX_TOTAL_AGENTS:
                     return  # At max total agents
 
-                # We're going to spawn - log while still holding lock
+                # Reserve slot with placeholder (negative key to avoid collision with feature IDs)
+                # This prevents other threads from exceeding limits during spawn
+                placeholder_key = -(current_testing + 1)
+                self.running_testing_agents[placeholder_key] = None  # Placeholder
                 spawn_index = current_testing + 1
-                debug_log.log("TESTING", f"Spawning testing agent ({spawn_index}/{desired})",
-                    passing_count=passing_count)
+                logger.debug(f"[TESTING] Reserved slot for testing agent ({spawn_index}/{desired}) | passing_count={passing_count}")
 
             # Spawn outside lock (I/O bound operation)
             print(f"[DEBUG] Spawning testing agent ({spawn_index}/{desired})", flush=True)
-            self._spawn_testing_agent()
+            success, _ = self._spawn_testing_agent(placeholder_key=placeholder_key)
+
+            # If spawn failed, remove the placeholder
+            if not success:
+                with self._lock:
+                    self.running_testing_agents.pop(placeholder_key, None)
+                break  # Exit on failure to avoid infinite loop
 
     def start_feature(self, feature_id: int, resume: bool = False) -> tuple[bool, str]:
         """Start a single coding agent for a feature.
@@ -440,6 +541,10 @@ class ParallelOrchestrator:
 
         Returns:
             Tuple of (success, message)
+
+        Transactional State Management:
+        - If spawn fails after marking in_progress, we rollback the database state
+        - This prevents features from getting stuck in a limbo state
         """
         with self._lock:
             if feature_id in self.running_coding_agents:
@@ -452,30 +557,53 @@ class ParallelOrchestrator:
                 return False, f"At max total agents ({total_agents}/{MAX_TOTAL_AGENTS})"
 
         # Mark as in_progress in database (or verify it's resumable)
+        marked_in_progress = False
         session = self.get_session()
         try:
-            feature = session.query(Feature).filter(Feature.id == feature_id).first()
-            if not feature:
-                return False, "Feature not found"
-            if feature.passes:
-                return False, "Feature already complete"
-
             if resume:
-                # Resuming: feature should already be in_progress
+                # Resuming: verify feature is already in_progress
+                feature = session.query(Feature).filter(Feature.id == feature_id).first()
+                if not feature:
+                    return False, "Feature not found"
                 if not feature.in_progress:
                     return False, "Feature not in progress, cannot resume"
+                if feature.passes:
+                    return False, "Feature already complete"
             else:
-                # Starting fresh: feature should not be in_progress
-                if feature.in_progress:
-                    return False, "Feature already in progress"
-                feature.in_progress = True
+                # Starting fresh: atomic claim using UPDATE-WHERE pattern (same as testing agent)
+                # This prevents race conditions where multiple agents try to claim the same feature
+                from sqlalchemy import text
+                result = session.execute(
+                    text("""
+                        UPDATE features
+                        SET in_progress = 1
+                        WHERE id = :feature_id
+                          AND passes = 0
+                          AND in_progress = 0
+                    """),
+                    {"feature_id": feature_id}
+                )
                 session.commit()
+                marked_in_progress = True
         finally:
             session.close()
 
         # Start coding agent subprocess
         success, message = self._spawn_coding_agent(feature_id)
         if not success:
+            # Rollback in_progress if we set it
+            if marked_in_progress:
+                rollback_session = self.get_session()
+                try:
+                    feature = rollback_session.query(Feature).filter(Feature.id == feature_id).first()
+                    if feature and feature.in_progress:
+                        feature.in_progress = False
+                        rollback_session.commit()
+                        logger.debug(f"[ROLLBACK] Cleared in_progress for feature #{feature_id} after spawn failure")
+                except Exception as e:
+                    logger.error(f"[ROLLBACK] Failed to clear in_progress for feature #{feature_id}: {e}")
+                finally:
+                    rollback_session.close()
             return False, message
 
         # NOTE: Testing agents are now maintained independently via _maintain_testing_agents()
@@ -504,16 +632,24 @@ class ParallelOrchestrator:
             cmd.append("--yolo")
 
         try:
-            proc = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                cwd=str(AUTOCODER_ROOT),
-                env={**os.environ, "PYTHONUNBUFFERED": "1"},
-            )
+            # CREATE_NO_WINDOW on Windows prevents console window pop-ups
+            # stdin=DEVNULL prevents blocking on stdin reads
+            # Use minimal env to avoid Windows "command line too long" errors
+            popen_kwargs = {
+                "stdin": subprocess.DEVNULL,
+                "stdout": subprocess.PIPE,
+                "stderr": subprocess.STDOUT,
+                "text": True,
+                "cwd": str(AUTOCODER_ROOT),  # Run from autocoder root for proper imports
+                "env": _get_minimal_env() if sys.platform == "win32" else {**os.environ, "PYTHONUNBUFFERED": "1"},
+            }
+            if sys.platform == "win32":
+                popen_kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+
+            proc = subprocess.Popen(cmd, **popen_kwargs)
         except Exception as e:
             # Reset in_progress on failure
+            self._logger.error("Spawn coding agent failed", feature_id=feature_id, error=str(e)[:200])
             session = self.get_session()
             try:
                 feature = session.query(Feature).filter(Feature.id == feature_id).first()
@@ -539,68 +675,77 @@ class ParallelOrchestrator:
             self.on_status(feature_id, "running")
 
         print(f"Started coding agent for feature #{feature_id}", flush=True)
+        self._logger.info("Spawned coding agent", feature_id=feature_id, pid=proc.pid)
         return True, f"Started feature {feature_id}"
 
-    def _spawn_testing_agent(self) -> tuple[bool, str]:
+    def _spawn_testing_agent(self, placeholder_key: int | None = None) -> tuple[bool, str]:
         """Spawn a testing agent subprocess for regression testing.
 
         Picks a random passing feature to test. Multiple testing agents can test
         the same feature concurrently - this is intentional and simplifies the
         architecture by removing claim coordination.
+
+        Args:
+            placeholder_key: If provided, this slot was pre-reserved by _maintain_testing_agents.
+                The placeholder will be replaced with the real process once spawned.
+                If None, performs its own limit checking (legacy behavior).
         """
-        # Check limits first (under lock)
-        with self._lock:
-            current_testing_count = len(self.running_testing_agents)
-            if current_testing_count >= self.max_concurrency:
-                debug_log.log("TESTING", f"Skipped spawn - at max testing agents ({current_testing_count}/{self.max_concurrency})")
-                return False, f"At max testing agents ({current_testing_count})"
-            total_agents = len(self.running_coding_agents) + len(self.running_testing_agents)
-            if total_agents >= MAX_TOTAL_AGENTS:
-                debug_log.log("TESTING", f"Skipped spawn - at max total agents ({total_agents}/{MAX_TOTAL_AGENTS})")
-                return False, f"At max total agents ({total_agents})"
+        # If no placeholder was provided, check limits (legacy direct-call behavior)
+        if placeholder_key is None:
+            with self._lock:
+                current_testing_count = len(self.running_testing_agents)
+                if current_testing_count >= self.max_concurrency:
+                    logger.debug(f"[TESTING] Skipped spawn - at max testing agents ({current_testing_count}/{self.max_concurrency})")
+                    return False, f"At max testing agents ({current_testing_count})"
+                total_agents = len(self.running_coding_agents) + len(self.running_testing_agents)
+                if total_agents >= MAX_TOTAL_AGENTS:
+                    logger.debug(f"[TESTING] Skipped spawn - at max total agents ({total_agents}/{MAX_TOTAL_AGENTS})")
+                    return False, f"At max total agents ({total_agents})"
 
         # Pick a random passing feature (no claim needed - concurrent testing is fine)
         feature_id = self._get_random_passing_feature()
         if feature_id is None:
-            debug_log.log("TESTING", "No features available for testing")
+            logger.debug("[TESTING] No features available for testing")
             return False, "No features available for testing"
 
-        debug_log.log("TESTING", f"Selected feature #{feature_id} for testing")
+        logger.debug(f"[TESTING] Selected feature #{feature_id} for testing")
 
-        # Spawn the testing agent
+        cmd = [
+            sys.executable,
+            "-u",
+            str(AUTOCODER_ROOT / "autonomous_agent_demo.py"),
+            "--project-dir", str(self.project_dir),
+            "--max-iterations", "1",
+            "--agent-type", "testing",
+            "--testing-feature-id", str(feature_id),
+        ]
+        if self.model:
+            cmd.extend(["--model", self.model])
+
+        try:
+            # Use same platform-safe approach as coding agent spawner
+            popen_kwargs = {
+                "stdin": subprocess.DEVNULL,
+                "stdout": subprocess.PIPE,
+                "stderr": subprocess.STDOUT,
+                "text": True,
+                "cwd": str(AUTOCODER_ROOT),
+                "env": _get_minimal_env() if sys.platform == "win32" else {**os.environ, "PYTHONUNBUFFERED": "1"},
+            }
+            if sys.platform == "win32":
+                popen_kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+
+            proc = subprocess.Popen(cmd, **popen_kwargs)
+        except Exception as e:
+            logger.error(f"[TESTING] FAILED to spawn testing agent: {e}")
+            return False, f"Failed to start testing agent: {e}"
+
+        # Register process with pid as key (allows multiple agents for same feature)
         with self._lock:
-            # Re-check limits in case another thread spawned while we were selecting
-            current_testing_count = len(self.running_testing_agents)
-            if current_testing_count >= self.max_concurrency:
-                return False, f"At max testing agents ({current_testing_count})"
-
-            cmd = [
-                sys.executable,
-                "-u",
-                str(AUTOCODER_ROOT / "autonomous_agent_demo.py"),
-                "--project-dir", str(self.project_dir),
-                "--max-iterations", "1",
-                "--agent-type", "testing",
-                "--testing-feature-id", str(feature_id),
-            ]
-            if self.model:
-                cmd.extend(["--model", self.model])
-
-            try:
-                proc = subprocess.Popen(
-                    cmd,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT,
-                    text=True,
-                    cwd=str(AUTOCODER_ROOT),
-                    env={**os.environ, "PYTHONUNBUFFERED": "1"},
-                )
-            except Exception as e:
-                debug_log.log("TESTING", f"FAILED to spawn testing agent: {e}")
-                return False, f"Failed to start testing agent: {e}"
-
-            # Register process with feature ID (same pattern as coding agents)
-            self.running_testing_agents[feature_id] = proc
+            if placeholder_key is not None:
+                # Remove placeholder and add real entry
+                self.running_testing_agents.pop(placeholder_key, None)
+            self.running_testing_agents[proc.pid] = (feature_id, proc)
             testing_count = len(self.running_testing_agents)
 
         # Start output reader thread with feature ID (same as coding agents)
@@ -611,20 +756,17 @@ class ParallelOrchestrator:
         ).start()
 
         print(f"Started testing agent for feature #{feature_id} (PID {proc.pid})", flush=True)
-        debug_log.log("TESTING", f"Successfully spawned testing agent for feature #{feature_id}",
-            pid=proc.pid,
-            feature_id=feature_id,
-            total_testing_agents=testing_count)
+        logger.info(f"[TESTING] Spawned testing agent for feature #{feature_id} | pid={proc.pid} total={testing_count}")
         return True, f"Started testing agent for feature #{feature_id}"
 
     async def _run_initializer(self) -> bool:
-        """Run initializer agent as blocking subprocess.
+        """Run initializer agent as async subprocess.
 
         Returns True if initialization succeeded (features were created).
+        Uses asyncio subprocess for non-blocking I/O.
         """
-        debug_log.section("INITIALIZER PHASE")
-        debug_log.log("INIT", "Starting initializer subprocess",
-            project_dir=str(self.project_dir))
+        log_section(logger, "INITIALIZER PHASE")
+        logger.info(f"[INIT] Starting initializer subprocess | project_dir={self.project_dir}")
 
         cmd = [
             sys.executable, "-u",
@@ -638,44 +780,44 @@ class ParallelOrchestrator:
 
         print("Running initializer agent...", flush=True)
 
-        proc = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
+        # Use minimal env on Windows to avoid "command line too long" errors
+        subprocess_env = _get_minimal_env() if sys.platform == "win32" else {**os.environ, "PYTHONUNBUFFERED": "1"}
+
+        # Use asyncio subprocess for non-blocking I/O
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
             cwd=str(AUTOCODER_ROOT),
-            env={**os.environ, "PYTHONUNBUFFERED": "1"},
+            env=subprocess_env,
         )
 
-        debug_log.log("INIT", "Initializer subprocess started", pid=proc.pid)
+        logger.info(f"[INIT] Initializer subprocess started | pid={proc.pid}")
 
-        # Stream output with timeout
-        loop = asyncio.get_running_loop()
+        # Stream output with timeout using native async I/O
         try:
             async def stream_output():
                 while True:
-                    line = await loop.run_in_executor(None, proc.stdout.readline)
+                    line = await proc.stdout.readline()
                     if not line:
                         break
-                    print(line.rstrip(), flush=True)
+                    decoded_line = line.decode().rstrip()
+                    print(decoded_line, flush=True)
                     if self.on_output:
-                        self.on_output(0, line.rstrip())  # Use 0 as feature_id for initializer
-                proc.wait()
+                        self.on_output(0, decoded_line)
+                await proc.wait()
 
             await asyncio.wait_for(stream_output(), timeout=INITIALIZER_TIMEOUT)
 
         except asyncio.TimeoutError:
             print(f"ERROR: Initializer timed out after {INITIALIZER_TIMEOUT // 60} minutes", flush=True)
-            debug_log.log("INIT", "TIMEOUT - Initializer exceeded time limit",
-                timeout_minutes=INITIALIZER_TIMEOUT // 60)
-            result = kill_process_tree(proc)
-            debug_log.log("INIT", "Killed timed-out initializer process tree",
-                status=result.status, children_found=result.children_found)
+            logger.error(f"[INIT] TIMEOUT - Initializer exceeded time limit ({INITIALIZER_TIMEOUT // 60} minutes)")
+            proc.kill()
+            await proc.wait()
+            logger.info("[INIT] Killed timed-out initializer process")
             return False
 
-        debug_log.log("INIT", "Initializer subprocess completed",
-            return_code=proc.returncode,
-            success=proc.returncode == 0)
+        logger.info(f"[INIT] Initializer subprocess completed | return_code={proc.returncode}")
 
         if proc.returncode != 0:
             print(f"ERROR: Initializer failed with exit code {proc.returncode}", flush=True)
@@ -703,6 +845,12 @@ class ParallelOrchestrator:
                     print(f"[Feature #{feature_id}] {line}", flush=True)
             proc.wait()
         finally:
+            # CRITICAL: Kill the process tree to clean up any child processes (e.g., Claude CLI)
+            # This prevents zombie processes from accumulating
+            try:
+                kill_process_tree(proc, timeout=2.0)
+            except Exception as e:
+                logger.warning(f"Error killing process tree for {agent_type} agent: {e}")
             self._on_agent_complete(feature_id, proc.returncode, agent_type, proc)
 
     def _signal_agent_completed(self):
@@ -746,7 +894,7 @@ class ParallelOrchestrator:
             await asyncio.wait_for(self._agent_completed_event.wait(), timeout=timeout)
             # Event was set - an agent completed. Clear it for the next wait cycle.
             self._agent_completed_event.clear()
-            debug_log.log("EVENT", "Woke up immediately - agent completed")
+            logger.debug("[EVENT] Woke up immediately - agent completed")
         except asyncio.TimeoutError:
             # Timeout reached without agent completion - this is normal, just check anyway
             pass
@@ -768,52 +916,72 @@ class ParallelOrchestrator:
 
         For testing agents:
         - Remove from running dict (no claim to release - concurrent testing is allowed).
+
+        Process Cleanup:
+        - Ensures process is fully terminated before removing from tracking dict
+        - This prevents zombie processes from accumulating
         """
+        # Ensure process is fully terminated (should already be done by wait() in _read_output)
+        if proc.poll() is None:
+            try:
+                proc.terminate()
+                proc.wait(timeout=5.0)
+            except Exception:
+                try:
+                    proc.kill()
+                    proc.wait(timeout=2.0)
+                except Exception as e:
+                    logger.warning(f"[ZOMBIE] Failed to terminate process {proc.pid}: {e}")
+
         if agent_type == "testing":
             with self._lock:
-                # Remove from dict by finding the feature_id for this proc
-                for fid, p in list(self.running_testing_agents.items()):
-                    if p is proc:
-                        del self.running_testing_agents[fid]
-                        break
+                # Remove from dict by finding the agent_id for this proc
+                # Also clean up any placeholders (None values)
+                keys_to_remove = []
+                for agent_id, entry in list(self.running_testing_agents.items()):
+                    if entry is None:  # Orphaned placeholder
+                        keys_to_remove.append(agent_id)
+                    elif entry[1] is proc:  # entry is (feature_id, proc)
+                        keys_to_remove.append(agent_id)
+                for key in keys_to_remove:
+                    del self.running_testing_agents[key]
 
             status = "completed" if return_code == 0 else "failed"
             print(f"Feature #{feature_id} testing {status}", flush=True)
-            debug_log.log("COMPLETE", f"Testing agent for feature #{feature_id} finished",
-                pid=proc.pid,
-                feature_id=feature_id,
-                status=status)
+            logger.info(f"[COMPLETE] Testing agent for feature #{feature_id} finished | pid={proc.pid} status={status}")
             # Signal main loop that an agent slot is available
             self._signal_agent_completed()
             return
 
         # Coding agent completion
-        debug_log.log("COMPLETE", f"Coding agent for feature #{feature_id} finished",
-            return_code=return_code,
-            status="success" if return_code == 0 else "failed")
+        status = "success" if return_code == 0 else "failed"
+        logger.info(f"[COMPLETE] Coding agent for feature #{feature_id} finished | return_code={return_code} status={status}")
 
         with self._lock:
             self.running_coding_agents.pop(feature_id, None)
             self.abort_events.pop(feature_id, None)
 
-        # Refresh session cache to see subprocess commits
+        # Refresh database connection to see subprocess commits
         # The coding agent runs as a subprocess and commits changes (e.g., passes=True).
-        # Using session.expire_all() is lighter weight than engine.dispose() for SQLite WAL mode
-        # and is sufficient to invalidate cached data and force fresh reads.
-        # engine.dispose() is only called on orchestrator shutdown, not on every agent completion.
+        # For SQLite WAL mode, we need to ensure the connection pool sees fresh data.
+        # Disposing and recreating the engine is more reliable than session.expire_all()
+        # for cross-process commit visibility, though heavier weight.
+        if self._engine is not None:
+            self._engine.dispose()
+            self._engine, self._session_maker = create_database(self.project_dir)
+            logger.debug("[DB] Recreated database connection after agent completion")
+
         session = self.get_session()
         try:
             session.expire_all()
             feature = session.query(Feature).filter(Feature.id == feature_id).first()
             feature_passes = feature.passes if feature else None
             feature_in_progress = feature.in_progress if feature else None
-            debug_log.log("DB", f"Feature #{feature_id} state after session.expire_all()",
-                passes=feature_passes,
-                in_progress=feature_in_progress)
+            logger.debug(f"[DB] Feature #{feature_id} state after refresh | passes={feature_passes} in_progress={feature_in_progress}")
             if feature and feature.in_progress and not feature.passes:
                 feature.in_progress = False
                 session.commit()
-                debug_log.log("DB", f"Cleared in_progress for feature #{feature_id} (agent failed)")
+                logger.debug(f"[DB] Cleared in_progress for feature #{feature_id} (agent failed)")
         finally:
             session.close()
 
@@ -824,8 +992,7 @@ class ParallelOrchestrator:
                 failure_count = self._failure_counts[feature_id]
             if failure_count >= MAX_FEATURE_RETRIES:
                 print(f"Feature #{feature_id} has failed {failure_count} times, will not retry", flush=True)
-                debug_log.log("COMPLETE", f"Feature #{feature_id} exceeded max retries",
-                    failure_count=failure_count)
+                logger.warning(f"[COMPLETE] Feature #{feature_id} exceeded max retries | failure_count={failure_count}")
 
         status = "completed" if return_code == 0 else "failed"
         if self.on_status:
@@ -853,9 +1020,10 @@ class ParallelOrchestrator:
         if proc:
             # Kill entire process tree to avoid orphaned children (e.g., browser instances)
             result = kill_process_tree(proc, timeout=5.0)
-            debug_log.log("STOP", f"Killed feature {feature_id} process tree",
-                status=result.status, children_found=result.children_found,
-                children_terminated=result.children_terminated, children_killed=result.children_killed)
+            logger.info(
+                f"[STOP] Killed feature {feature_id} process tree | status={result.status} "
+                f"children_found={result.children_found} terminated={result.children_terminated} killed={result.children_killed}"
+            )
 
         return True, f"Stopped feature {feature_id}"
 
@@ -874,37 +1042,50 @@ class ParallelOrchestrator:
         with self._lock:
             testing_items = list(self.running_testing_agents.items())
 
-        for feature_id, proc in testing_items:
+        for agent_id, entry in testing_items:
+            if entry is None:  # Skip placeholders
+                continue
+            feature_id, proc = entry
             result = kill_process_tree(proc, timeout=5.0)
-            debug_log.log("STOP", f"Killed testing agent for feature #{feature_id} (PID {proc.pid})",
-                status=result.status, children_found=result.children_found,
-                children_terminated=result.children_terminated, children_killed=result.children_killed)
+            logger.info(
+                f"[STOP] Killed testing agent for feature #{feature_id} (PID {proc.pid}) | status={result.status} "
+                f"children_found={result.children_found} terminated={result.children_terminated} killed={result.children_killed}"
+            )
 
-    async def run_loop(self):
-        """Main orchestration loop."""
-        self.is_running = True
+        # WAL checkpoint to ensure all database changes are persisted
+        self._cleanup_database()
 
-        # Initialize the agent completion event for this run
-        # Must be created in the async context where it will be used
-        self._agent_completed_event = asyncio.Event()
-        # Store the event loop reference for thread-safe signaling from output reader threads
-        self._event_loop = asyncio.get_running_loop()
+    def _cleanup_database(self) -> None:
+        """Cleanup database connections and checkpoint WAL.
 
-        # Track session start for regression testing (UTC for consistency with last_tested_at)
-        self.session_start_time = datetime.now(timezone.utc)
+        This ensures all database changes are persisted to the main database file
+        before exit, preventing corruption when multiple agents have been running.
+        """
+        logger.info("[CLEANUP] Starting database cleanup")
 
-        # Start debug logging session FIRST (clears previous logs)
-        # Must happen before any debug_log.log() calls
-        debug_log.start_session()
+        # Checkpoint WAL to flush all changes
+        if checkpoint_wal(self.project_dir):
+            logger.info("[CLEANUP] WAL checkpoint successful")
+        else:
+            logger.warning("[CLEANUP] WAL checkpoint failed or partial")
 
-        # Log startup to debug file
-        debug_log.section("ORCHESTRATOR STARTUP")
-        debug_log.log("STARTUP", "Orchestrator run_loop starting",
-            project_dir=str(self.project_dir),
-            max_concurrency=self.max_concurrency,
-            yolo_mode=self.yolo_mode,
-            testing_agent_ratio=self.testing_agent_ratio,
-            session_start_time=self.session_start_time.isoformat())
+        # Dispose the engine to release all connections
+        if self._engine is not None:
+            try:
+                self._engine.dispose()
+                logger.info("[CLEANUP] Database engine disposed")
+            except Exception as e:
+                logger.error(f"[CLEANUP] Error disposing engine: {e}")
+
+    def _log_startup_info(self) -> None:
+        """Log startup banner and settings."""
+        log_section(logger, "ORCHESTRATOR STARTUP")
+        logger.info("[STARTUP] Orchestrator run_loop starting")
+        logger.info(f"    project_dir: {self.project_dir}")
+        logger.info(f"    max_concurrency: {self.max_concurrency}")
+        logger.info(f"    yolo_mode: {self.yolo_mode}")
+        logger.info(f"    testing_agent_ratio: {self.testing_agent_ratio}")
+        logger.info(f"    session_start_time: {self.session_start_time.isoformat()}")
 
         print("=" * 70, flush=True)
         print("  UNIFIED ORCHESTRATOR SETTINGS", flush=True)
@@ -916,195 +1097,144 @@ class ParallelOrchestrator:
         print("=" * 70, flush=True)
         print(flush=True)
 
-        # Phase 1: Check if initialization needed
-        if not has_features(self.project_dir):
-            print("=" * 70, flush=True)
-            print("  INITIALIZATION PHASE", flush=True)
-            print("=" * 70, flush=True)
-            print("No features found - running initializer agent first...", flush=True)
-            print("NOTE: This may take 10-20+ minutes to generate features.", flush=True)
-            print(flush=True)
+    async def _run_initialization_phase(self) -> bool:
+        """
+        Run initialization phase if no features exist.
 
-            success = await self._run_initializer()
+        Returns:
+            True if initialization succeeded or was not needed, False if failed.
+        """
+        if has_features(self.project_dir):
+            return True
 
-            if not success or not has_features(self.project_dir):
-                print("ERROR: Initializer did not create features. Exiting.", flush=True)
-                return
+        print("=" * 70, flush=True)
+        print("  INITIALIZATION PHASE", flush=True)
+        print("=" * 70, flush=True)
+        print("No features found - running initializer agent first...", flush=True)
+        print("NOTE: This may take 10-20+ minutes to generate features.", flush=True)
+        print(flush=True)
 
-            print(flush=True)
-            print("=" * 70, flush=True)
-            print("  INITIALIZATION COMPLETE - Starting feature loop", flush=True)
-            print("=" * 70, flush=True)
-            print(flush=True)
+        success = await self._run_initializer()
 
-            # CRITICAL: Recreate database connection after initializer subprocess commits
-            # The initializer runs as a subprocess and commits to the database file.
-            # SQLAlchemy may have stale connections or cached state. Disposing the old
-            # engine and creating a fresh engine/session_maker ensures we see all the
-            # newly created features.
-            debug_log.section("INITIALIZATION COMPLETE")
-            debug_log.log("INIT", "Disposing old database engine and creating fresh connection")
-            print("[DEBUG] Recreating database connection after initialization...", flush=True)
-            if self._engine is not None:
-                self._engine.dispose()
-            self._engine, self._session_maker = create_database(self.project_dir)
+        if not success or not has_features(self.project_dir):
+            print("ERROR: Initializer did not create features. Exiting.", flush=True)
+            return False
 
-            # Debug: Show state immediately after initialization
-            print("[DEBUG] Post-initialization state check:", flush=True)
-            print(f"[DEBUG]   max_concurrency={self.max_concurrency}", flush=True)
-            print(f"[DEBUG]   yolo_mode={self.yolo_mode}", flush=True)
-            print(f"[DEBUG]   testing_agent_ratio={self.testing_agent_ratio}", flush=True)
+        print(flush=True)
+        print("=" * 70, flush=True)
+        print("  INITIALIZATION COMPLETE - Starting feature loop", flush=True)
+        print("=" * 70, flush=True)
+        print(flush=True)
 
-            # Verify features were created and are visible
+        # CRITICAL: Recreate database connection after initializer subprocess commits
+        log_section(logger, "INITIALIZATION COMPLETE")
+        logger.info("[INIT] Disposing old database engine and creating fresh connection")
+        print("[DEBUG] Recreating database connection after initialization...", flush=True)
+        if self._engine is not None:
+            self._engine.dispose()
+        self._engine, self._session_maker = create_database(self.project_dir)
+
+        # Debug: Show state immediately after initialization
+        print("[DEBUG] Post-initialization state check:", flush=True)
+        print(f"[DEBUG]   max_concurrency={self.max_concurrency}", flush=True)
+        print(f"[DEBUG]   yolo_mode={self.yolo_mode}", flush=True)
+        print(f"[DEBUG]   testing_agent_ratio={self.testing_agent_ratio}", flush=True)
+
+        # Verify features were created and are visible
+        session = self.get_session()
+        try:
+            feature_count = session.query(Feature).count()
+            all_features = session.query(Feature).all()
+            feature_names = [f"{f.id}: {f.name}" for f in all_features[:10]]
+            print(f"[DEBUG]   features in database={feature_count}", flush=True)
+            logger.info(f"[INIT] Post-initialization database state | feature_count={feature_count}")
+            logger.debug(f"    first_10_features: {feature_names}")
+        finally:
+            session.close()
+
+        return True
+
+    async def _handle_resumable_features(self, slots: int) -> bool:
+        """
+        Handle resuming features from previous session.
+
+        Args:
+            slots: Number of available slots for new agents.
+
+        Returns:
+            True if any features were resumed, False otherwise.
+        """
+        resumable = self.get_resumable_features()
+        if not resumable:
+            return False
+
+        for feature in resumable[:slots]:
+            print(f"Resuming feature #{feature['id']}: {feature['name']}", flush=True)
+            self.start_feature(feature["id"], resume=True)
+        await asyncio.sleep(2)
+        return True
+
+    async def _spawn_ready_features(self, current: int) -> bool:
+        """
+        Start new ready features up to capacity.
+
+        Args:
+            current: Current number of running coding agents.
+
+        Returns:
+            True if features were started or we should continue, False if blocked.
+        """
+        ready = self.get_ready_features()
+        if not ready:
+            # Wait for running features to complete
+            if current > 0:
+                await self._wait_for_agent_completion()
+                return True
+
+            # No ready features and nothing running
+            # Force a fresh database check before declaring blocked
             session = self.get_session()
             try:
-                feature_count = session.query(Feature).count()
-                all_features = session.query(Feature).all()
-                feature_names = [f"{f.id}: {f.name}" for f in all_features[:10]]
-                print(f"[DEBUG]   features in database={feature_count}", flush=True)
-                debug_log.log("INIT", "Post-initialization database state",
-                    max_concurrency=self.max_concurrency,
-                    yolo_mode=self.yolo_mode,
-                    testing_agent_ratio=self.testing_agent_ratio,
-                    feature_count=feature_count,
-                    first_10_features=feature_names)
+                session.expire_all()
             finally:
                 session.close()
 
-        # Phase 2: Feature loop
-        # Check for features to resume from previous session
-        resumable = self.get_resumable_features()
-        if resumable:
-            print(f"Found {len(resumable)} feature(s) to resume from previous session:", flush=True)
-            for f in resumable:
-                print(f"  - Feature #{f['id']}: {f['name']}", flush=True)
-            print(flush=True)
+            # Recheck if all features are now complete
+            if self.get_all_complete():
+                return False  # Signal to break the loop
 
-        debug_log.section("FEATURE LOOP STARTING")
-        loop_iteration = 0
-        while self.is_running:
-            loop_iteration += 1
-            if loop_iteration <= 3:
-                print(f"[DEBUG] === Loop iteration {loop_iteration} ===", flush=True)
+            # Still have pending features but all are blocked by dependencies
+            print("No ready features available. All remaining features may be blocked by dependencies.", flush=True)
+            await self._wait_for_agent_completion(timeout=POLL_INTERVAL * 2)
+            return True
 
-            # Log every iteration to debug file (first 10, then every 5th)
-            if loop_iteration <= 10 or loop_iteration % 5 == 0:
+        # Start features up to capacity
+        slots = self.max_concurrency - current
+        print(f"[DEBUG] Spawning loop: {len(ready)} ready, {slots} slots available, max_concurrency={self.max_concurrency}", flush=True)
+        print(f"[DEBUG] Will attempt to start {min(len(ready), slots)} features", flush=True)
+        features_to_start = ready[:slots]
+        print(f"[DEBUG] Features to start: {[f['id'] for f in features_to_start]}", flush=True)
+
+        logger.debug(f"[SPAWN] Starting features batch | ready={len(ready)} slots={slots} to_start={[f['id'] for f in features_to_start]}")
+
+        for i, feature in enumerate(features_to_start):
+            print(f"[DEBUG] Starting feature {i+1}/{len(features_to_start)}: #{feature['id']} - {feature['name']}", flush=True)
+            success, msg = self.start_feature(feature["id"])
+            if not success:
+                print(f"[DEBUG] Failed to start feature #{feature['id']}: {msg}", flush=True)
+                logger.warning(f"[SPAWN] FAILED to start feature #{feature['id']} ({feature['name']}): {msg}")
+            else:
+                print(f"[DEBUG] Successfully started feature #{feature['id']}", flush=True)
                 with self._lock:
-                    running_ids = list(self.running_coding_agents.keys())
-                    testing_count = len(self.running_testing_agents)
-                debug_log.log("LOOP", f"Iteration {loop_iteration}",
-                    running_coding_agents=running_ids,
-                    running_testing_agents=testing_count,
-                    max_concurrency=self.max_concurrency)
+                    running_count = len(self.running_coding_agents)
+                    print(f"[DEBUG] Running coding agents after start: {running_count}", flush=True)
+                logger.info(f"[SPAWN] Started feature #{feature['id']} ({feature['name']}) | running_agents={running_count}")
 
-                # Full database dump every 5 iterations
-                if loop_iteration == 1 or loop_iteration % 5 == 0:
-                    session = self.get_session()
-                    try:
-                        _dump_database_state(session, f"(iteration {loop_iteration})")
-                    finally:
-                        session.close()
+        await asyncio.sleep(2)  # Brief pause between starts
+        return True
 
-            try:
-                # Check if all complete
-                if self.get_all_complete():
-                    print("\nAll features complete!", flush=True)
-                    break
-
-                # Maintain testing agents independently (runs every iteration)
-                self._maintain_testing_agents()
-
-                # Check capacity
-                with self._lock:
-                    current = len(self.running_coding_agents)
-                    current_testing = len(self.running_testing_agents)
-                    running_ids = list(self.running_coding_agents.keys())
-
-                debug_log.log("CAPACITY", "Checking capacity",
-                    current_coding=current,
-                    current_testing=current_testing,
-                    running_coding_ids=running_ids,
-                    max_concurrency=self.max_concurrency,
-                    at_capacity=(current >= self.max_concurrency))
-
-                if current >= self.max_concurrency:
-                    debug_log.log("CAPACITY", "At max capacity, waiting for agent completion...")
-                    await self._wait_for_agent_completion()
-                    continue
-
-                # Priority 1: Resume features from previous session
-                resumable = self.get_resumable_features()
-                if resumable:
-                    slots = self.max_concurrency - current
-                    for feature in resumable[:slots]:
-                        print(f"Resuming feature #{feature['id']}: {feature['name']}", flush=True)
-                        self.start_feature(feature["id"], resume=True)
-                    await asyncio.sleep(2)
-                    continue
-
-                # Priority 2: Start new ready features
-                ready = self.get_ready_features()
-                if not ready:
-                    # Wait for running features to complete
-                    if current > 0:
-                        await self._wait_for_agent_completion()
-                        continue
-                    else:
-                        # No ready features and nothing running
-                        # Force a fresh database check before declaring blocked
-                        # This handles the case where subprocess commits weren't visible yet
-                        session = self.get_session()
-                        try:
-                            session.expire_all()
-                        finally:
-                            session.close()
-
-                        # Recheck if all features are now complete
-                        if self.get_all_complete():
-                            print("\nAll features complete!", flush=True)
-                            break
-
-                        # Still have pending features but all are blocked by dependencies
-                        print("No ready features available. All remaining features may be blocked by dependencies.", flush=True)
-                        await self._wait_for_agent_completion(timeout=POLL_INTERVAL * 2)
-                        continue
-
-                # Start features up to capacity
-                slots = self.max_concurrency - current
-                print(f"[DEBUG] Spawning loop: {len(ready)} ready, {slots} slots available, max_concurrency={self.max_concurrency}", flush=True)
-                print(f"[DEBUG] Will attempt to start {min(len(ready), slots)} features", flush=True)
-                features_to_start = ready[:slots]
-                print(f"[DEBUG] Features to start: {[f['id'] for f in features_to_start]}", flush=True)
-
-                debug_log.log("SPAWN", "Starting features batch",
-                    ready_count=len(ready),
-                    slots_available=slots,
-                    features_to_start=[f['id'] for f in features_to_start])
-
-                for i, feature in enumerate(features_to_start):
-                    print(f"[DEBUG] Starting feature {i+1}/{len(features_to_start)}: #{feature['id']} - {feature['name']}", flush=True)
-                    success, msg = self.start_feature(feature["id"])
-                    if not success:
-                        print(f"[DEBUG] Failed to start feature #{feature['id']}: {msg}", flush=True)
-                        debug_log.log("SPAWN", f"FAILED to start feature #{feature['id']}",
-                            feature_name=feature['name'],
-                            error=msg)
-                    else:
-                        print(f"[DEBUG] Successfully started feature #{feature['id']}", flush=True)
-                        with self._lock:
-                            running_count = len(self.running_coding_agents)
-                            print(f"[DEBUG] Running coding agents after start: {running_count}", flush=True)
-                        debug_log.log("SPAWN", f"Successfully started feature #{feature['id']}",
-                            feature_name=feature['name'],
-                            running_coding_agents=running_count)
-
-                await asyncio.sleep(2)  # Brief pause between starts
-
-            except Exception as e:
-                print(f"Orchestrator error: {e}", flush=True)
-                await self._wait_for_agent_completion()
-
-        # Wait for remaining agents to complete
+    async def _wait_for_all_agents(self) -> None:
+        """Wait for all running agents (coding and testing) to complete."""
         print("Waiting for running agents to complete...", flush=True)
         while True:
             with self._lock:
@@ -1115,7 +1245,119 @@ class ParallelOrchestrator:
             # Use short timeout since we're just waiting for final agents to finish
             await self._wait_for_agent_completion(timeout=1.0)
 
+    async def run_loop(self):
+        """Main orchestration loop.
+
+        This method coordinates multiple coding and testing agents:
+        1. Initialization phase: Run initializer if no features exist
+        2. Feature loop: Continuously spawn agents to work on features
+        3. Cleanup: Wait for all agents to complete
+        """
+        self.is_running = True
+
+        # Initialize async event for agent completion signaling
+        self._agent_completed_event = asyncio.Event()
+        self._event_loop = asyncio.get_running_loop()
+
+        # Track session start for regression testing (UTC for consistency)
+        self.session_start_time = datetime.now(timezone.utc)
+
+        # Initialize the orchestrator logger (creates fresh log file)
+        global logger
+        DEBUG_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        logger = setup_orchestrator_logging(DEBUG_LOG_FILE)
+        self._log_startup_info()
+
+        # Phase 1: Initialization (if needed)
+        if not await self._run_initialization_phase():
+            self._cleanup_database()
+            return
+
+        # Phase 2: Feature loop
+        await self._run_feature_loop()
+
+        # Phase 3: Cleanup
+        await self._wait_for_all_agents()
+        self._cleanup_database()
         print("Orchestrator finished.", flush=True)
+
+    async def _run_feature_loop(self) -> None:
+        """Run the main feature processing loop."""
+        # Check for features to resume from previous session
+        resumable = self.get_resumable_features()
+        if resumable:
+            print(f"Found {len(resumable)} feature(s) to resume from previous session:", flush=True)
+            for f in resumable:
+                print(f"  - Feature #{f['id']}: {f['name']}", flush=True)
+            print(flush=True)
+
+        log_section(logger, "FEATURE LOOP STARTING")
+        loop_iteration = 0
+
+        while self.is_running:
+            loop_iteration += 1
+            if loop_iteration <= 3:
+                print(f"[DEBUG] === Loop iteration {loop_iteration} ===", flush=True)
+
+            self._log_loop_iteration(loop_iteration)
+
+            try:
+                # Check if all complete
+                if self.get_all_complete():
+                    print("\nAll features complete!", flush=True)
+                    break
+
+                # Maintain testing agents independently
+                self._maintain_testing_agents()
+
+                # Check capacity and get current state
+                with self._lock:
+                    current = len(self.running_coding_agents)
+                    current_testing = len(self.running_testing_agents)
+                    running_ids = list(self.running_coding_agents.keys())
+
+                logger.debug(
+                    f"[CAPACITY] Checking | coding={current} testing={current_testing} "
+                    f"running_ids={running_ids} max={self.max_concurrency} at_capacity={current >= self.max_concurrency}"
+                )
+
+                if current >= self.max_concurrency:
+                    logger.debug("[CAPACITY] At max capacity, waiting for agent completion...")
+                    await self._wait_for_agent_completion()
+                    continue
+
+                # Priority 1: Resume features from previous session
+                slots = self.max_concurrency - current
+                if await self._handle_resumable_features(slots):
+                    continue
+
+                # Priority 2: Start new ready features
+                should_continue = await self._spawn_ready_features(current)
+                if not should_continue:
+                    break  # All features complete
+
+            except Exception as e:
+                print(f"Orchestrator error: {e}", flush=True)
+                await self._wait_for_agent_completion()
+
+    def _log_loop_iteration(self, loop_iteration: int) -> None:
+        """Log debug information for the current loop iteration."""
+        if loop_iteration <= 10 or loop_iteration % 5 == 0:
+            with self._lock:
+                running_ids = list(self.running_coding_agents.keys())
+                testing_count = len(self.running_testing_agents)
+            logger.debug(
+                f"[LOOP] Iteration {loop_iteration} | running_coding={running_ids} "
+                f"testing={testing_count} max_concurrency={self.max_concurrency}"
+            )
+
+            # Full database dump every 5 iterations
+            if loop_iteration == 1 or loop_iteration % 5 == 0:
+                session = self.get_session()
+                try:
+                    _dump_database_state(session, f"(iteration {loop_iteration})")
+                finally:
+                    session.close()
 
     def get_status(self) -> dict:
         """Get current orchestrator status."""
@@ -1130,6 +1372,37 @@ class ParallelOrchestrator:
                 "is_running": self.is_running,
                 "yolo_mode": self.yolo_mode,
             }
+
+    def cleanup(self) -> None:
+        """Clean up database resources.
+
+        CRITICAL: Must be called when orchestrator exits to prevent database corruption.
+        - Forces WAL checkpoint to flush pending writes to main database file
+        - Disposes engine to close all connections
+
+        This prevents stale cache issues when the orchestrator restarts.
+        """
+        if self._engine is None:
+            return  # Already cleaned up, idempotent safe
+
+        # Capture engine and clear reference immediately to make cleanup idempotent
+        engine = self._engine
+        self._engine = None
+
+        try:
+            debug_log.log("CLEANUP", "Forcing WAL checkpoint before dispose")
+            with engine.connect() as conn:
+                conn.execute(text("PRAGMA wal_checkpoint(FULL)"))
+                conn.commit()
+            debug_log.log("CLEANUP", "WAL checkpoint completed, disposing engine")
+        except Exception as e:
+            debug_log.log("CLEANUP", f"WAL checkpoint failed (non-fatal): {e}")
+
+        try:
+            engine.dispose()
+            debug_log.log("CLEANUP", "Engine disposed successfully")
+        except Exception as e:
+            debug_log.log("CLEANUP", f"Engine dispose failed: {e}")
 
 
 async def run_parallel_orchestrator(
@@ -1157,11 +1430,48 @@ async def run_parallel_orchestrator(
         testing_agent_ratio=testing_agent_ratio,
     )
 
+    # Clear any stuck features from previous interrupted sessions
+    # This is the RIGHT place to clear - BEFORE spawning any agents
+    # Agents will NO LONGER clear features on their individual startups (see agent.py fix)
+    session = None
+    try:
+        session = orchestrator.get_session()
+        cleared_count = 0
+
+        # Get all features marked in_progress
+        from api.database import Feature
+        stuck_features = session.query(Feature).filter(
+            Feature.in_progress == True
+        ).all()
+
+        for feature in stuck_features:
+            feature.in_progress = False
+            cleared_count += 1
+
+        session.commit()
+        if cleared_count > 0:
+            print(f"[ORCHESTRATOR] Cleared {cleared_count} stuck features from previous session", flush=True)
+
+    except Exception as e:
+        print(f"[ORCHESTRATOR] Warning: Failed to clear stuck features: {e}", flush=True)
+    finally:
+        # Ensure session is always closed if it was created
+        if session is not None:
+            try:
+                session.close()
+            except Exception as close_error:
+                # Log close error but don't let it mask the original error
+                print(f"[ORCHESTRATOR] Warning: Failed to close session: {close_error}", flush=True)
+
     try:
         await orchestrator.run_loop()
     except KeyboardInterrupt:
         print("\n\nInterrupted by user. Stopping agents...", flush=True)
         orchestrator.stop_all()
+    finally:
+        # CRITICAL: Always clean up database resources on exit
+        # This forces WAL checkpoint and disposes connections
+        orchestrator.cleanup()
 
 
 def main():
@@ -1228,7 +1538,7 @@ def main():
             sys.exit(1)
 
     try:
-        asyncio.run(run_parallel_orchestrator(
+        safe_asyncio_run(run_parallel_orchestrator(
             project_dir=project_dir,
             max_concurrency=args.max_concurrency,
             model=args.model,

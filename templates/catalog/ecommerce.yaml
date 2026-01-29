@@ -1,0 +1,83 @@
+name: "E-Commerce Store"
+description: "Full-featured online store with products, cart, checkout, and order management"
+
+tech_stack:
+  frontend: "Next.js"
+  backend: "Node.js/Express"
+  database: "PostgreSQL"
+  auth: "NextAuth.js"
+  styling: "Tailwind CSS"
+  hosting: "Vercel"
+
+feature_categories:
+  product_catalog:
+    - "Product listing page"
+    - "Product detail page"
+    - "Product search"
+    - "Category navigation"
+    - "Product filtering"
+    - "Product sorting"
+    - "Product image gallery"
+    - "Related products"
+
+  shopping_cart:
+    - "Add to cart"
+    - "Update cart quantity"
+    - "Remove from cart"
+    - "Cart sidebar/drawer"
+    - "Cart page"
+    - "Save for later"
+
+  checkout:
+    - "Guest checkout"
+    - "User checkout"
+    - "Shipping address form"
+    - "Shipping method selection"
+    - "Payment integration (Stripe)"
+    - "Order summary"
+    - "Order confirmation"
+
+  user_account:
+    - "User registration"
+    - "User login"
+    - "Password reset"
+    - "Profile management"
+    - "Address book"
+    - "Order history"
+    - "Wishlist"
+
+  admin_panel:
+    - "Product management"
+    - "Category management"
+    - "Order management"
+    - "Customer management"
+    - "Inventory tracking"
+    - "Sales reports"
+    - "Discount codes"
+
+  marketing:
+    - "Newsletter signup"
+    - "Promotional banners"
+    - "Product reviews"
+    - "Rating system"
+
+design_tokens:
+  colors:
+    primary: "#2563EB"
+    secondary: "#16A34A"
+    accent: "#DC2626"
+    background: "#FFFFFF"
+    text: "#1F2937"
+    muted: "#9CA3AF"
+  spacing: [4, 8, 12, 16, 24, 32, 48]
+  fonts:
+    heading: "Poppins"
+    body: "Open Sans"
+  border_radius:
+    small: "4px"
+    medium: "8px"
+    large: "16px"
+
+estimated_features: 50
+tags: ["ecommerce", "store", "shopping", "payments"]
+difficulty: "advanced"
