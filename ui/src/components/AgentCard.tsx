@@ -69,21 +69,59 @@ function getAgentTypeBadge(agentType: AgentType): { label: string; className: st
   }
 }
 
+// Format model ID to display name
+function formatModelName(modelId: string | undefined): string | null {
+  if (!modelId) return null
+
+  // "claude-sonnet-4-5-20250514" → "Sonnet 4.5"
+  // "claude-opus-4-5-20251101" → "Opus 4.5"
+  // "claude-3-5-sonnet-20241022" → "Sonnet 3.5"
+  // "claude-3-5-haiku-20241022" → "Haiku 3.5"
+
+  // Try new format: claude-{tier}-{major}-{minor}-{date}
+  let match = modelId.match(/claude-(opus|sonnet|haiku)-(\d+)-(\d+)/i)
+  if (match) {
+    const tier = match[1].charAt(0).toUpperCase() + match[1].slice(1)
+    return `${tier} ${match[2]}.${match[3]}`
+  }
+
+  // Try old format: claude-{major}-{minor}-{tier}-{date}
+  match = modelId.match(/claude-(\d+)-(\d+)-(opus|sonnet|haiku)/i)
+  if (match) {
+    const tier = match[3].charAt(0).toUpperCase() + match[3].slice(1)
+    return `${tier} ${match[1]}.${match[2]}`
+  }
+
+  // Fallback: extract any tier name
+  match = modelId.match(/(opus|sonnet|haiku)/i)
+  if (match) {
+    return match[1].charAt(0).toUpperCase() + match[1].slice(1)
+  }
+
+  return null
+}
+
 export function AgentCard({ agent, onShowLogs }: AgentCardProps) {
   const isActive = ['thinking', 'working', 'testing'].includes(agent.state)
   const hasLogs = agent.logs && agent.logs.length > 0
   const typeBadge = getAgentTypeBadge(agent.agentType || 'coding')
   const TypeIcon = typeBadge.icon
+  const modelDisplay = formatModelName(agent.model)
 
   return (
     <Card className={`min-w-[180px] max-w-[220px] py-3 ${isActive ? 'animate-pulse' : ''}`}>
       <CardContent className="p-3 space-y-2">
-        {/* Agent type badge */}
-        <div className="flex justify-end">
+        {/* Agent type and model badges */}
+        <div className="flex justify-end gap-1">
           <Badge variant="outline" className={`text-[10px] ${typeBadge.className}`}>
             <TypeIcon size={10} />
             {typeBadge.label}
           </Badge>
+          {modelDisplay && (
+            <Badge variant="outline" className="text-[9px] bg-muted/50 text-muted-foreground">
+              {modelDisplay}
+            </Badge>
+          )}
         </div>
 
         {/* Header with avatar and name */}

@@ -8,10 +8,39 @@ import {
   Check,
   RefreshCw,
   AlertCircle,
+  WifiOff,
+  KeyRound,
+  Clock,
+  HelpCircle,
+  CloudOff,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import type { GitStatus } from '../lib/types'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
+import type { GitStatus, GitErrorType } from '../lib/types'
 import * as api from '../lib/api'
+
+// Get icon and label for error type
+function getErrorDisplay(errorType: GitErrorType): { icon: typeof AlertCircle; label: string } {
+  switch (errorType) {
+    case 'git_not_installed':
+      return { icon: AlertCircle, label: 'Git not installed' }
+    case 'auth_failed':
+      return { icon: KeyRound, label: 'Auth failed' }
+    case 'timeout':
+      return { icon: Clock, label: 'Timeout' }
+    case 'network':
+      return { icon: WifiOff, label: 'Network error' }
+    case 'no_remote':
+      return { icon: CloudOff, label: 'No remote' }
+    default:
+      return { icon: HelpCircle, label: 'Error' }
+  }
+}
 
 interface GitStatusBarProps {
   projectName: string | null
@@ -52,12 +81,68 @@ export function GitStatusBar({ projectName, className = '' }: GitStatusBarProps)
     return null
   }
 
+  // Handle API fetch errors
   if (error) {
     return (
-      <div className={`flex items-center gap-2 text-sm text-muted-foreground ${className}`}>
-        <AlertCircle size={14} className="text-destructive" />
-        <span>Git: Error</span>
-      </div>
+      <TooltipProvider>
+        <div className={`flex items-center gap-2 text-sm text-muted-foreground ${className}`}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="flex items-center gap-1.5 cursor-help">
+                <AlertCircle size={14} className="text-destructive" />
+                <span>Git: Fetch error</span>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="max-w-xs">
+              <p className="font-medium">{error}</p>
+              <p className="text-xs text-muted-foreground mt-1">Click refresh to retry</p>
+            </TooltipContent>
+          </Tooltip>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={fetchStatus}
+            disabled={isLoading}
+            className="h-6 w-6 p-0"
+            title="Retry"
+          >
+            <RefreshCw size={12} className={isLoading ? 'animate-spin' : ''} />
+          </Button>
+        </div>
+      </TooltipProvider>
+    )
+  }
+
+  // Handle structured git errors from the API response
+  if (status?.error) {
+    const { icon: ErrorIcon, label } = getErrorDisplay(status.error.error_type)
+    return (
+      <TooltipProvider>
+        <div className={`flex items-center gap-2 text-sm text-muted-foreground ${className}`}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="flex items-center gap-1.5 cursor-help">
+                <ErrorIcon size={14} className="text-yellow-500" />
+                <span>Git: {label}</span>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="max-w-xs">
+              <p className="font-medium">{status.error.message}</p>
+              <p className="text-xs text-muted-foreground mt-1">{status.error.action}</p>
+            </TooltipContent>
+          </Tooltip>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={fetchStatus}
+            disabled={isLoading}
+            className="h-6 w-6 p-0"
+            title="Refresh git status"
+          >
+            <RefreshCw size={12} className={isLoading ? 'animate-spin' : ''} />
+          </Button>
+        </div>
+      </TooltipProvider>
     )
   }
 

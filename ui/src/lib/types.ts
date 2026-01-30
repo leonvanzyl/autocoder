@@ -205,6 +205,7 @@ export interface ActiveAgent {
   thought?: string
   timestamp: string
   logs?: AgentLogEntry[]  // Per-agent log history
+  model?: string  // Model ID, e.g., "claude-sonnet-4-5-20250514"
 }
 
 // Orchestrator state for Mission Control
@@ -525,7 +526,10 @@ export interface ModelsResponse {
 
 export interface Settings {
   yolo_mode: boolean
-  model: string
+  model: string  // Default model (for backwards compat)
+  coder_model: string  // Model for coding agents
+  tester_model: string  // Model for testing agents
+  initializer_model: string  // Model for initializer agent
   glm_mode: boolean
   ollama_mode: boolean
   testing_agent_ratio: number  // Regression testing agents (0-3)
@@ -534,6 +538,9 @@ export interface Settings {
 export interface SettingsUpdate {
   yolo_mode?: boolean
   model?: string
+  coder_model?: string
+  tester_model?: string
+  initializer_model?: string
   testing_agent_ratio?: number
 }
 
@@ -631,6 +638,22 @@ export interface VersionInfo {
   shortVersion: string
 }
 
+// Git error types
+export type GitErrorType =
+  | 'git_not_installed'
+  | 'not_a_repo'
+  | 'auth_failed'
+  | 'timeout'
+  | 'no_remote'
+  | 'network'
+  | 'unknown'
+
+export interface GitError {
+  error_type: GitErrorType
+  message: string
+  action: string  // Suggested remediation
+}
+
 // Git status types
 export interface GitStatus {
   isRepo: boolean
@@ -643,6 +666,7 @@ export interface GitStatus {
   hasUncommittedChanges: boolean
   lastCommitMessage: string | null
   lastCommitDate: string | null
+  error?: GitError | null  // Structured error information
 }
 
 // ============================================================================

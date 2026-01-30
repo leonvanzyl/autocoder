@@ -16,64 +16,55 @@ export function ProgressDashboard({
   isConnected,
 }: ProgressDashboardProps) {
   return (
-    <Card>
-      <CardHeader className="flex-row items-center justify-between space-y-0 pb-4">
-        <CardTitle className="text-xl uppercase tracking-wide">
+    <Card className="py-2">
+      <CardHeader className="flex-row items-center justify-between space-y-0 pb-2 pt-2">
+        <CardTitle className="text-sm uppercase tracking-wide text-muted-foreground">
           Progress
         </CardTitle>
-        <Badge variant={isConnected ? 'default' : 'destructive'} className="gap-1">
+        <Badge variant={isConnected ? 'default' : 'destructive'} className="gap-1 text-xs py-0.5">
           {isConnected ? (
             <>
-              <Wifi size={14} />
+              <Wifi size={12} />
               Live
             </>
           ) : (
             <>
-              <WifiOff size={14} />
+              <WifiOff size={12} />
               Offline
             </>
           )}
         </Badge>
       </CardHeader>
 
-      <CardContent>
-        {/* Large Percentage */}
-        <div className="text-center mb-6">
-          <span className="inline-flex items-baseline">
-            <span className="text-6xl font-bold tabular-nums">
+      <CardContent className="pb-3">
+        {/* Compact horizontal layout */}
+        <div className="flex items-center gap-4">
+          {/* Percentage */}
+          <div className="flex items-baseline">
+            <span className="text-4xl font-bold tabular-nums">
               {percentage.toFixed(1)}
             </span>
-            <span className="text-3xl font-semibold text-muted-foreground">
+            <span className="text-xl font-semibold text-muted-foreground">
               %
             </span>
-          </span>
-        </div>
+          </div>
 
-        {/* Progress Bar */}
-        <div className="h-3 bg-muted rounded-full overflow-hidden mb-6">
-          <div
-            className="h-full bg-primary rounded-full transition-all duration-500 ease-out"
-            style={{ width: `${percentage}%` }}
-          />
-        </div>
+          {/* Progress Bar - grows to fill space */}
+          <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+            <div
+              className="h-full bg-primary rounded-full transition-all duration-500 ease-out"
+              style={{ width: `${percentage}%` }}
+            />
+          </div>
 
-        {/* Stats */}
-        <div className="flex justify-center gap-8 text-center">
-          <div>
-            <span className="font-mono text-3xl font-bold text-primary">
+          {/* Stats */}
+          <div className="flex items-center gap-2 text-center shrink-0">
+            <span className="font-mono text-xl font-bold text-primary">
               {passing}
             </span>
-            <span className="block text-sm text-muted-foreground uppercase">
-              Passing
-            </span>
-          </div>
-          <div className="text-4xl text-muted-foreground">/</div>
-          <div>
-            <span className="font-mono text-3xl font-bold">
+            <span className="text-lg text-muted-foreground">/</span>
+            <span className="font-mono text-xl font-bold">
               {total}
-            </span>
-            <span className="block text-sm text-muted-foreground uppercase">
-              Total
             </span>
           </div>
         </div>

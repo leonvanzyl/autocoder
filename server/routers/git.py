@@ -7,18 +7,85 @@ API endpoints for git status and operations.
 
 import subprocess
 from pathlib import Path
+from typing import Literal
 
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/git", tags=["git"])
 
 
-def run_git_command(project_path: Path, args: list[str]) -> tuple[bool, str]:
+# Error types for structured error reporting
+ErrorType = Literal[
+    "git_not_installed",
+    "not_a_repo",
+    "auth_failed",
+    "timeout",
+    "no_remote",
+    "network",
+    "unknown",
+]
+
+
+class GitError(BaseModel):
+    """Structured git error information."""
+    error_type: ErrorType
+    message: str
+    action: str  # Suggested remediation
+
+
+def classify_git_error(error_message: str) -> GitError:
+    """Classify a git error and provide structured information."""
+    lower = error_message.lower()
+
+    if "not installed" in lower or "not found" in lower:
+        return GitError(
+            error_type="git_not_installed",
+            message="Git is not installed on this system",
+            action="Install Git from https://git-scm.com/downloads",
+        )
+
+    if "timed out" in lower:
+        return GitError(
+            error_type="timeout",
+            message="Git command timed out",
+            action="Check your network connection or try again",
+        )
+
+    if "authentication" in lower or "permission denied" in lower or "403" in lower:
+        return GitError(
+            error_type="auth_failed",
+            message="Git authentication failed",
+            action="Check your SSH keys or GitHub credentials",
+        )
+
+    if "could not resolve" in lower or "unable to access" in lower or "network" in lower:
+        return GitError(
+            error_type="network",
+            message="Network error connecting to remote",
+            action="Check your internet connection",
+        )
+
+    if "no such remote" in lower or "no upstream" in lower or "does not have upstream" in lower:
+        return GitError(
+            error_type="no_remote",
+            message="No remote configured for this branch",
+            action="Run: git push -u origin <branch>",
+        )
+
+    return GitError(
+        error_type="unknown",
+        message=error_message or "Unknown error",
+        action="Check the git output for details",
+    )
+
+
+def run_git_command(project_path: Path, args: list[str]) -> tuple[bool, str, GitError | None]:
     """
     Run a git command in the project directory.
 
     Returns:
-        Tuple of (success, output/error message)
+        Tuple of (success, output/error message, structured error if failed)
     """
     try:
         result = subprocess.run(
@@ -29,14 +96,18 @@ def run_git_command(project_path: Path, args: list[str]) -> tuple[bool, str]:
             timeout=10,
         )
         if result.returncode == 0:
-            return True, result.stdout.strip()
-        return False, result.stderr.strip()
+            return True, result.stdout.strip(), None
+        error = classify_git_error(result.stderr.strip())
+        return False, result.stderr.strip(), error
     except subprocess.TimeoutExpired:
-        return False, "Git command timed out"
+        error = classify_git_error("Git command timed out")
+        return False, "Git command timed out", error
     except FileNotFoundError:
-        return False, "Git is not installed"
+        error = classify_git_error("Git is not installed")
+        return False, "Git is not installed", error
     except Exception as e:
-        return False, str(e)
+        error = classify_git_error(str(e))
+        return False, str(e), error
 
 
 def get_git_status_for_project(project_path: Path) -> dict:
@@ -47,8 +118,23 @@ def get_git_status_for_project(project_path: Path) -> dict:
         Dictionary with git status information.
     """
     # Check if it's a git repo
-    success, _ = run_git_command(project_path, ["rev-parse", "--git-dir"])
+    success, _, error = run_git_command(project_path, ["rev-parse", "--git-dir"])
     if not success:
+        # Check if it's "not a git repo" vs an actual error
+        if error and error.error_type == "git_not_installed":
+            return {
+                "isRepo": False,
+                "branch": None,
+                "ahead": 0,
+                "behind": 0,
+                "modified": 0,
+                "staged": 0,
+                "untracked": 0,
+                "hasUncommittedChanges": False,
+                "lastCommitMessage": None,
+                "lastCommitDate": None,
+                "error": error.model_dump() if error else None,
+            }
         return {
             "isRepo": False,
             "branch": None,
@@ -60,18 +146,20 @@ def get_git_status_for_project(project_path: Path) -> dict:
             "hasUncommittedChanges": False,
             "lastCommitMessage": None,
             "lastCommitDate": None,
+            "error": None,
         }
 
     # Get current branch
-    success, branch = run_git_command(project_path, ["rev-parse", "--abbrev-ref", "HEAD"])
+    success, branch, _ = run_git_command(project_path, ["rev-parse", "--abbrev-ref", "HEAD"])
     if not success:
         branch = None
 
     # Get ahead/behind counts
     ahead = 0
     behind = 0
+    remote_error = None
     if branch:
-        success, counts = run_git_command(
+        success, counts, error = run_git_command(
             project_path,
             ["rev-list", "--left-right", "--count", f"{branch}...@{{upstream}}"],
         )
@@ -80,12 +168,15 @@ def get_git_status_for_project(project_path: Path) -> dict:
             if len(parts) >= 2:
                 ahead = int(parts[0])
                 behind = int(parts[1])
+        elif error:
+            # Save remote error to include in response
+            remote_error = error
 
     # Get status counts using porcelain format
     modified = 0
     staged = 0
     untracked = 0
-    success, status_output = run_git_command(project_path, ["status", "--porcelain"])
+    success, status_output, _ = run_git_command(project_path, ["status", "--porcelain"])
     if success:
         for line in status_output.split("\n"):
             if not line:
@@ -110,7 +201,7 @@ def get_git_status_for_project(project_path: Path) -> dict:
     # Get last commit info
     last_commit_message = None
     last_commit_date = None
-    success, log_output = run_git_command(
+    success, log_output, _ = run_git_command(
         project_path,
         ["log", "-1", "--format=%s|||%ci"],
     )
@@ -132,6 +223,7 @@ def get_git_status_for_project(project_path: Path) -> dict:
         "hasUncommittedChanges": has_uncommitted,
         "lastCommitMessage": last_commit_message,
         "lastCommitDate": last_commit_date,
+        "error": remote_error.model_dump() if remote_error else None,
     }
 
 

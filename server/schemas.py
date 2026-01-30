@@ -394,7 +394,10 @@ class ModelInfo(BaseModel):
 class SettingsResponse(BaseModel):
     """Response schema for global settings."""
     yolo_mode: bool = False
-    model: str = DEFAULT_MODEL
+    model: str = DEFAULT_MODEL  # Default model (for backwards compat)
+    coder_model: str = DEFAULT_MODEL  # Model for coding agents
+    tester_model: str = DEFAULT_MODEL  # Model for testing agents
+    initializer_model: str = DEFAULT_MODEL  # Model for initializer agent
     glm_mode: bool = False  # True if GLM API is configured via .env
     ollama_mode: bool = False  # True if Ollama API is configured via .env
     testing_agent_ratio: int = 1  # Regression testing agents (0-3)
@@ -409,10 +412,13 @@ class ModelsResponse(BaseModel):
 class SettingsUpdate(BaseModel):
     """Request schema for updating global settings."""
     yolo_mode: bool | None = None
-    model: str | None = None
+    model: str | None = None  # Default model (for backwards compat)
+    coder_model: str | None = None  # Model for coding agents
+    tester_model: str | None = None  # Model for testing agents
+    initializer_model: str | None = None  # Model for initializer agent
     testing_agent_ratio: int | None = None  # 0-3
 
-    @field_validator('model')
+    @field_validator('model', 'coder_model', 'tester_model', 'initializer_model')
     @classmethod
     def validate_model(cls, v: str | None) -> str | None:
         if v is not None and v not in VALID_MODELS:

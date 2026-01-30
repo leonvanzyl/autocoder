@@ -263,6 +263,9 @@ const DEFAULT_MODELS: ModelsResponse = {
 const DEFAULT_SETTINGS: Settings = {
   yolo_mode: false,
   model: 'claude-opus-4-5-20251101',
+  coder_model: 'claude-opus-4-5-20251101',
+  tester_model: 'claude-sonnet-4-5-20250929',
+  initializer_model: 'claude-opus-4-5-20251101',
   glm_mode: false,
   ollama_mode: false,
   testing_agent_ratio: 1,

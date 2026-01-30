@@ -86,9 +86,15 @@ async def get_settings():
     """Get current global settings."""
     all_settings = get_all_settings()
 
+    # Get the default model (used for backwards compat)
+    default_model = all_settings.get("model", DEFAULT_MODEL)
+
     return SettingsResponse(
         yolo_mode=_parse_yolo_mode(all_settings.get("yolo_mode")),
-        model=all_settings.get("model", DEFAULT_MODEL),
+        model=default_model,
+        coder_model=all_settings.get("coder_model", default_model),
+        tester_model=all_settings.get("tester_model", default_model),
+        initializer_model=all_settings.get("initializer_model", default_model),
         glm_mode=_is_glm_mode(),
         ollama_mode=_is_ollama_mode(),
         testing_agent_ratio=_parse_int(all_settings.get("testing_agent_ratio"), 1),
@@ -104,14 +110,28 @@ async def update_settings(update: SettingsUpdate):
     if update.model is not None:
         set_setting("model", update.model)
 
+    if update.coder_model is not None:
+        set_setting("coder_model", update.coder_model)
+
+    if update.tester_model is not None:
+        set_setting("tester_model", update.tester_model)
+
+    if update.initializer_model is not None:
+        set_setting("initializer_model", update.initializer_model)
+
     if update.testing_agent_ratio is not None:
         set_setting("testing_agent_ratio", str(update.testing_agent_ratio))
 
     # Return updated settings
     all_settings = get_all_settings()
+    default_model = all_settings.get("model", DEFAULT_MODEL)
+
     return SettingsResponse(
         yolo_mode=_parse_yolo_mode(all_settings.get("yolo_mode")),
-        model=all_settings.get("model", DEFAULT_MODEL),
+        model=default_model,
+        coder_model=all_settings.get("coder_model", default_model),
+        tester_model=all_settings.get("tester_model", default_model),
+        initializer_model=all_settings.get("initializer_model", default_model),
         glm_mode=_is_glm_mode(),
         ollama_mode=_is_ollama_mode(),
         testing_agent_ratio=_parse_int(all_settings.get("testing_agent_ratio"), 1),
