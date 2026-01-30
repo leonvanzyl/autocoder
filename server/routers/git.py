@@ -245,13 +245,12 @@ async def get_git_status(project_name: str):
     if str(root_dir) not in sys.path:
         sys.path.insert(0, str(root_dir))
 
-    from registry import get_project
+    from registry import get_project_path
 
-    project = get_project(project_name)
-    if project is None:
+    project_path = get_project_path(project_name)
+    if project_path is None:
         raise HTTPException(status_code=404, detail=f"Project not found: {project_name}")
 
-    project_path = Path(project.path)
     if not project_path.exists():
         raise HTTPException(status_code=404, detail=f"Project path does not exist: {project_path}")
 

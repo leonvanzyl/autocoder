@@ -32,6 +32,7 @@ import { GitStatusBar } from './components/GitStatusBar'
 import { PRWorkflowPanel } from './components/PRWorkflowPanel'
 import { DeployPanel } from './components/DeployPanel'
 import { ActivitySidebar } from './components/ActivitySidebar'
+import { VersionBadgeDetailed } from './components/VersionBadge'
 import { getDependencyGraph } from './lib/api'
 import { Loader2, Settings, Moon, Sun, RotateCcw } from 'lucide-react'
 import type { Feature } from './lib/types'
@@ -181,7 +182,7 @@ function App() {
 
       // E : Expand project with AI (when project selected and has features)
       if ((e.key === 'e' || e.key === 'E') && selectedProject && features &&
-          (features.pending.length + features.in_progress.length + features.done.length) > 0) {
+        (features.pending.length + features.in_progress.length + features.done.length) > 0) {
         e.preventDefault()
         setShowExpandProject(true)
       }
@@ -264,9 +265,12 @@ function App() {
         <div className="max-w-7xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             {/* Logo and Title */}
-            <h1 className="font-display text-2xl font-bold tracking-tight uppercase">
-              AutoCoder
-            </h1>
+            <div className="flex items-baseline gap-3">
+              <h1 className="font-display text-2xl font-bold tracking-tight uppercase">
+                AutoCoder
+              </h1>
+              <VersionBadgeDetailed />
+            </div>
 
             {/* Controls */}
             <div className="flex items-center gap-4">
@@ -418,22 +422,22 @@ function App() {
 
             {/* Initializing Features State - show when agent is running but no features yet */}
             {features &&
-             features.pending.length === 0 &&
-             features.in_progress.length === 0 &&
-             features.done.length === 0 &&
-             wsState.agentStatus === 'running' && (
-              <Card className="p-8 text-center">
-                <CardContent className="p-0">
-                  <Loader2 size={32} className="animate-spin mx-auto mb-4 text-primary" />
-                  <h3 className="font-display font-bold text-xl mb-2">
-                    Initializing Features...
-                  </h3>
-                  <p className="text-muted-foreground">
-                    The agent is reading your spec and creating features. This may take a moment.
-                  </p>
-                </CardContent>
-              </Card>
-            )}
+              features.pending.length === 0 &&
+              features.in_progress.length === 0 &&
+              features.done.length === 0 &&
+              wsState.agentStatus === 'running' && (
+                <Card className="p-8 text-center">
+                  <CardContent className="p-0">
+                    <Loader2 size={32} className="animate-spin mx-auto mb-4 text-primary" />
+                    <h3 className="font-display font-bold text-xl mb-2">
+                      Initializing Features...
+                    </h3>
+                    <p className="text-muted-foreground">
+                      The agent is reading your spec and creating features. This may take a moment.
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
 
             {/* View Toggle - only show when there are features */}
             {features && (features.pending.length + features.in_progress.length + features.done.length) > 0 && (

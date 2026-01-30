@@ -122,8 +122,8 @@ class Deployment(Base):
     duration_ms = Column(Integer, nullable=True)
     artifact_count = Column(Integer, nullable=True, default=0)
 
-    # Metadata
-    metadata = Column(JSON, nullable=True)
+    # Deployment metadata
+    deployment_metadata = Column(JSON, nullable=True)
 
     # Timestamps
     started_at = Column(DateTime, nullable=False, default=_utc_now)
@@ -146,7 +146,7 @@ class Deployment(Base):
             "errorMessage": self.error_message,
             "durationMs": self.duration_ms,
             "artifactCount": self.artifact_count,
-            "metadata": self.metadata,
+            "metadata": self.deployment_metadata,
             "startedAt": self.started_at.isoformat() if self.started_at else None,
             "completedAt": self.completed_at.isoformat() if self.completed_at else None,
             "createdAt": self.created_at.isoformat() if self.created_at else None,
@@ -315,7 +315,7 @@ class DeployAgent:
                 branch=branch or config.branch,
                 commit_sha=sha,
                 commit_message=message,
-                metadata=config.metadata,
+                deployment_metadata=config.metadata,
             )
             session.add(deployment)
             session.commit()
@@ -451,7 +451,7 @@ class DeployAgent:
                 )
 
             # Check for rollback command in metadata
-            rollback_cmd = deployment.metadata.get("rollback_command") if deployment.metadata else None
+            rollback_cmd = deployment.deployment_metadata.get("rollback_command") if deployment.deployment_metadata else None
 
             if rollback_cmd:
                 success, output, duration = self._run_command(rollback_cmd)

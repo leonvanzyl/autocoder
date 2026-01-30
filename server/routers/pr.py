@@ -18,7 +18,7 @@ root_dir = Path(__file__).parent.parent.parent
 if str(root_dir) not in sys.path:
     sys.path.insert(0, str(root_dir))
 
-from registry import get_project
+from registry import get_project_path
 
 router = APIRouter(prefix="/api/pr", tags=["pull-requests"])
 
@@ -50,11 +50,10 @@ class PRResponse(BaseModel):
 
 def _get_project_path(project_name: str) -> Path:
     """Get project path or raise 404."""
-    project = get_project(project_name)
-    if project is None:
+    project_path = get_project_path(project_name)
+    if project_path is None:
         raise HTTPException(status_code=404, detail=f"Project not found: {project_name}")
 
-    project_path = Path(project.path)
     if not project_path.exists():
         raise HTTPException(status_code=404, detail=f"Project path does not exist: {project_path}")
 
