@@ -327,6 +327,19 @@ export function useSettings() {
   })
 }
 
+/**
+ * Get effective settings for a project, merging app and project overrides.
+ * This uses the V2 settings system which properly handles project-level overrides.
+ */
+export function useEffectiveSettingsV2(projectName: string | null) {
+  return useQuery({
+    queryKey: ['settingsV2', 'effective', projectName],
+    queryFn: () => api.getEffectiveSettingsV2(projectName || undefined),
+    enabled: !!projectName,
+    staleTime: 30000, // Cache for 30 seconds
+  })
+}
+
 export function useUpdateSettings() {
   const queryClient = useQueryClient()
 

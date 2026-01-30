@@ -3,7 +3,7 @@ import { Play, Square, Loader2, GitBranch, Clock, PauseCircle, PlayCircle } from
 import {
   useStartAgent,
   useStopAgent,
-  useSettings,
+  useEffectiveSettingsV2,
   useUpdateProjectSettings,
   usePausePickup,
   useResumePickup,
@@ -30,8 +30,13 @@ interface AgentControlProps {
 }
 
 export function AgentControl({ projectName, status, agentStatusResponse, defaultConcurrency = 3 }: AgentControlProps) {
-  const { data: settings } = useSettings()
-  const yoloMode = settings?.yolo_mode ?? false
+  // Use V2 effective settings which properly merges app + project overrides
+  const { data: effectiveSettings } = useEffectiveSettingsV2(projectName)
+
+  // Extract settings from V2 response (settings is a Record<string, unknown>)
+  const yoloMode = (effectiveSettings?.settings?.yoloMode as boolean) ?? false
+  const model = effectiveSettings?.settings?.coderModel as string | undefined
+  const testingAgentRatio = (effectiveSettings?.settings?.testingAgentRatio as number) ?? 1
 
   // Concurrency: 1 = single agent, 2-5 = parallel
   const [concurrency, setConcurrency] = useState(defaultConcurrency)
@@ -90,10 +95,10 @@ export function AgentControl({ projectName, status, agentStatusResponse, default
 
   const handleStart = () => startAgent.mutate({
     yoloMode,
-    model: settings?.model,
+    model,
     parallelMode: isParallel,
     maxConcurrency: concurrency,
-    testingAgentRatio: settings?.testing_agent_ratio,
+    testingAgentRatio,
   })
 
   const handleStopClick = () => {
