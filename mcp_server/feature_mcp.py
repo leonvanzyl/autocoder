@@ -29,6 +29,7 @@ orchestrator, not by agents. Agents receive pre-assigned feature IDs.
 
 import json
 import os
+import subprocess
 import sys
 import threading
 from contextlib import asynccontextmanager
@@ -51,6 +52,55 @@ from api.migration import migrate_json_to_sqlite
 
 # Configuration from environment
 PROJECT_DIR = Path(os.environ.get("PROJECT_DIR", ".")).resolve()
+AUTO_CHECKPOINT_INTERVAL = int(os.environ.get("AUTO_CHECKPOINT_INTERVAL", "3"))  # Checkpoint every N features
+
+
+def _run_git_command(args: list[str]) -> tuple[bool, str]:
+    """Run a git command in the project directory."""
+    try:
+        result = subprocess.run(
+            ["git"] + args,
+            cwd=str(PROJECT_DIR),
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        return result.returncode == 0, result.stdout.strip() or result.stderr.strip()
+    except Exception as e:
+        return False, str(e)
+
+
+def _create_auto_checkpoint(feature_name: str, passing_count: int) -> dict:
+    """Create an automatic checkpoint commit after feature completion."""
+    # Check if it's a git repo
+    success, _ = _run_git_command(["rev-parse", "--git-dir"])
+    if not success:
+        return {"skipped": True, "reason": "Not a git repository"}
+
+    # Check for changes
+    success, status = _run_git_command(["status", "--porcelain"])
+    if not success or not status.strip():
+        return {"skipped": True, "reason": "No changes to commit"}
+
+    # Stage all changes
+    success, output = _run_git_command(["add", "."])
+    if not success:
+        return {"skipped": True, "reason": f"Failed to stage: {output}"}
+
+    # Create commit
+    commit_msg = f"checkpoint: {feature_name} complete ({passing_count} features done)\n\nAuto-checkpoint after feature completion.\n\nCo-Authored-By: Claude <noreply@anthropic.com>"
+    success, output = _run_git_command(["commit", "-m", commit_msg])
+    if not success:
+        return {"skipped": True, "reason": f"Failed to commit: {output}"}
+
+    # Get commit hash
+    success, commit_hash = _run_git_command(["rev-parse", "--short", "HEAD"])
+
+    return {
+        "created": True,
+        "commit_hash": commit_hash if success else None,
+        "message": f"Auto-checkpoint created: {passing_count} features complete"
+    }
 
 
 # Pydantic models for input validation
@@ -235,12 +285,17 @@ def feature_mark_passing(
     Updates the feature's passes field to true and clears the in_progress flag.
     Use this after you have implemented the feature and verified it works correctly.
 
+    Auto-checkpoint: If AUTO_CHECKPOINT_INTERVAL is set (default: 3), automatically
+    creates a git commit every N features completed.
+
     Args:
         feature_id: The ID of the feature to mark as passing
 
     Returns:
-        JSON with success confirmation: {success, feature_id, name}
+        JSON with success confirmation: {success, feature_id, name, checkpoint?}
     """
+    from sqlalchemy import func
+
     session = get_session()
     try:
         feature = session.query(Feature).filter(Feature.id == feature_id).first()
@@ -252,7 +307,19 @@ def feature_mark_passing(
         feature.in_progress = False
         session.commit()
 
-        return json.dumps({"success": True, "feature_id": feature_id, "name": feature.name})
+        feature_name = feature.name
+
+        # Count total passing features for auto-checkpoint
+        passing_count = session.query(func.count(Feature.id)).filter(Feature.passes == True).scalar() or 0
+
+        result = {"success": True, "feature_id": feature_id, "name": feature_name, "passing_count": passing_count}
+
+        # Auto-checkpoint if interval reached
+        if AUTO_CHECKPOINT_INTERVAL > 0 and passing_count % AUTO_CHECKPOINT_INTERVAL == 0:
+            checkpoint_result = _create_auto_checkpoint(feature_name, passing_count)
+            result["checkpoint"] = checkpoint_result
+
+        return json.dumps(result)
     except Exception as e:
         session.rollback()
         return json.dumps({"error": f"Failed to mark feature passing: {str(e)}"})
