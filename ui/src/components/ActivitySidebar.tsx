@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Activity, ChevronRight, X } from 'lucide-react'
+import { Activity, ChevronLeft, X } from 'lucide-react'
 import { ActivityFeed } from './ActivityFeed'
 import { Button } from '@/components/ui/button'
 
@@ -40,28 +40,28 @@ export function ActivitySidebar({ activities }: ActivitySidebarProps) {
 
   return (
     <>
-      {/* Collapsed toggle button */}
+      {/* Collapsed toggle button - on left edge */}
       {isCollapsed && (
         <button
           onClick={toggleCollapsed}
-          className="fixed right-0 top-1/2 -translate-y-1/2 z-40 bg-primary text-primary-foreground p-2 rounded-l-lg shadow-lg hover:bg-primary/90 transition-colors"
+          className="fixed left-0 top-1/2 -translate-y-1/2 z-40 bg-primary text-primary-foreground p-2 rounded-r-lg shadow-lg hover:bg-primary/90 transition-colors"
           title="Show Activity"
         >
           <Activity size={20} />
           {activities.length > 0 && (
-            <span className="absolute -top-1 -left-1 bg-destructive text-destructive-foreground text-xs w-5 h-5 rounded-full flex items-center justify-center font-bold">
+            <span className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground text-xs w-5 h-5 rounded-full flex items-center justify-center font-bold">
               {activities.length > 9 ? '9+' : activities.length}
             </span>
           )}
         </button>
       )}
 
-      {/* Sidebar panel */}
+      {/* Sidebar panel - positioned on left */}
       <div
         className={`
-          fixed right-0 top-0 h-full z-40 bg-card border-l-2 border-border shadow-xl
+          fixed left-0 top-0 h-full z-40 bg-card border-r-2 border-border shadow-xl
           transition-transform duration-300 ease-out
-          ${isCollapsed ? 'translate-x-full' : 'translate-x-0'}
+          ${isCollapsed ? '-translate-x-full' : 'translate-x-0'}
         `}
         style={{ width: '320px' }}
       >
@@ -92,13 +92,13 @@ export function ActivitySidebar({ activities }: ActivitySidebarProps) {
           <ActivityFeed activities={activities} maxItems={50} showHeader={false} />
         </div>
 
-        {/* Collapse tab on the left edge */}
+        {/* Collapse tab on the right edge */}
         <button
           onClick={toggleCollapsed}
-          className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-full bg-card border-2 border-r-0 border-border p-1.5 rounded-l-lg hover:bg-muted transition-colors"
+          className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-full bg-card border-2 border-l-0 border-border p-1.5 rounded-r-lg hover:bg-muted transition-colors"
           title="Hide Activity"
         >
-          <ChevronRight size={16} />
+          <ChevronLeft size={16} />
         </button>
       </div>
 
