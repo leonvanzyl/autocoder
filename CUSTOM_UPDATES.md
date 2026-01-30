@@ -9,7 +9,7 @@ This document tracks all customizations made to AutoCoder that deviate from the 
 1. [UI Theme Customization](#1-ui-theme-customization)
 2. [Playwright Browser Configuration](#2-playwright-browser-configuration)
 3. [SQLite Robust Connection Handling](#3-sqlite-robust-connection-handling)
-4. [Update Checklist](#update-checklist)
+4. [Update Checklist](#4-update-checklist)
 
 ---
 
