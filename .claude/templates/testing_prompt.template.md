@@ -48,9 +48,7 @@ Your feature has been pre-assigned by the orchestrator. Use `feature_get_by_id` 
 Use the feature_get_by_id tool with feature_id={your_assigned_id}
 ```
 
-The orchestrator has already claimed this feature for testing (set `testing_in_progress=true`).
-
-**CRITICAL:** You MUST call `feature_release_testing` when done, regardless of pass/fail.
+The orchestrator has assigned this feature for you to test.
 
 ### STEP 4: VERIFY THE FEATURE
 
@@ -85,17 +83,16 @@ Use browser automation tools:
 
 #### If the feature PASSES:
 
-The feature still works correctly. Release the claim and end your session:
+The feature still works correctly. Log the result:
 
-```
-# Release the testing claim (tested_ok=true)
-Use the feature_release_testing tool with feature_id={id} and tested_ok=true
-
+```bash
 # Log the successful verification
 echo "[Testing] Feature #{id} verified - still passing" >> claude-progress.txt
 ```
 
 **DO NOT** call feature_mark_passing again - it's already passing.
+
+**Session will auto-terminate** after you complete the logging step. No explicit exit action needed.
 
 #### If the feature FAILS (regression found):
 
@@ -125,13 +122,7 @@ A regression has been introduced. You MUST fix it:
    Use the feature_mark_passing tool with feature_id={id}
    ```
 
-6. **Release the testing claim:**
-   ```
-   Use the feature_release_testing tool with feature_id={id} and tested_ok=false
-   ```
-   Note: tested_ok=false because we found a regression (even though we fixed it).
-
-7. **Commit the fix:**
+6. **Commit the fix:**
    ```bash
    git add .
    git commit -m "Fix regression in [feature name]
@@ -156,7 +147,6 @@ echo "[Testing] Session complete - verified/fixed feature #{id}" >> claude-progr
 ### Feature Management
 - `feature_get_stats` - Get progress overview (passing/in_progress/total counts)
 - `feature_get_by_id` - Get your assigned feature details
-- `feature_release_testing` - **REQUIRED** - Release claim after testing (pass tested_ok=true/false)
 - `feature_mark_failing` - Mark a feature as failing (when you find a regression)
 - `feature_mark_passing` - Mark a feature as passing (after fixing a regression)
 
@@ -188,20 +178,14 @@ All interaction tools have **built-in auto-wait** - no manual timeouts needed.
 - Visual appearance correct
 - API calls succeed
 
-**CRITICAL - Always release your claim:**
-- Call `feature_release_testing` when done, whether pass or fail
-- Pass `tested_ok=true` if the feature passed
-- Pass `tested_ok=false` if you found a regression
-
 **If you find a regression:**
 1. Mark the feature as failing immediately
 2. Fix the issue
 3. Verify the fix with browser automation
 4. Mark as passing only after thorough verification
-5. Release the testing claim with `tested_ok=false`
-6. Commit the fix
+5. Commit the fix
 
-**You have one iteration.** Focus on testing ONE feature thoroughly.
+**Your session is scoped to ONE feature.** Complete all verification and any necessary fixes for that feature. You may iterate on fixes until it passes.
 
 ---
 

@@ -686,7 +686,8 @@ def feature_add_dependency(
         # Security: Circular dependency check
         # would_create_circular_dependency(features, source_id, target_id)
         # source_id = feature gaining the dependency, target_id = feature being depended upon
-        all_features = [f.to_dict() for f in session.query(Feature).all()]
+        # Use to_cycle_check_dict() for minimal token usage (~95% reduction)
+        all_features = [f.to_cycle_check_dict() for f in session.query(Feature).all()]
         if would_create_circular_dependency(all_features, feature_id, dependency_id):
             return json.dumps({"error": "Cannot add: would create circular dependency"})
 
@@ -749,7 +750,8 @@ def feature_remove_dependency(
 
 @mcp.tool()
 def feature_get_ready(
-    limit: Annotated[int, Field(default=10, ge=1, le=50, description="Max features to return")] = 10
+    limit: Annotated[int, Field(default=10, ge=1, le=50, description="Max features to return")] = 10,
+    minimal: Annotated[bool, Field(default=True, description="Return minimal fields (id, name, priority, status, deps) to reduce tokens")] = True
 ) -> str:
     """Get all features ready to start (dependencies satisfied, not in progress).
 
@@ -758,6 +760,7 @@ def feature_get_ready(
 
     Args:
         limit: Maximum number of features to return (1-50, default 10)
+        minimal: If True (default), return only essential fields. Set False for full details.
 
     Returns:
         JSON with: features (list), count (int), total_ready (int)
@@ -774,7 +777,8 @@ def feature_get_ready(
                 continue
             deps = f.dependencies or []
             if all(dep_id in passing_ids for dep_id in deps):
-                ready.append(f.to_dict())
+                # Use minimal or full serialization based on parameter
+                ready.append(f.to_minimal_dict() if minimal else f.to_dict())
 
         # Sort by scheduling score (higher = first), then priority, then id
         scores = compute_scheduling_scores(all_dicts)
@@ -791,7 +795,8 @@ def feature_get_ready(
 
 @mcp.tool()
 def feature_get_blocked(
-    limit: Annotated[int, Field(default=20, ge=1, le=100, description="Max features to return")] = 20
+    limit: Annotated[int, Field(default=20, ge=1, le=100, description="Max features to return")] = 20,
+    minimal: Annotated[bool, Field(default=True, description="Return minimal fields (id, name, priority, status, deps) to reduce tokens")] = True
 ) -> str:
     """Get features that are blocked by unmet dependencies.
 
@@ -800,6 +805,7 @@ def feature_get_blocked(
 
     Args:
         limit: Maximum number of features to return (1-100, default 20)
+        minimal: If True (default), return only essential fields. Set False for full details.
 
     Returns:
         JSON with: features (list with blocked_by field), count (int), total_blocked (int)
@@ -816,8 +822,10 @@ def feature_get_blocked(
             deps = f.dependencies or []
             blocking = [d for d in deps if d not in passing_ids]
             if blocking:
+                # Use minimal or full serialization based on parameter
+                base_dict = f.to_minimal_dict() if minimal else f.to_dict()
                 blocked.append({
-                    **f.to_dict(),
+                    **base_dict,
                     "blocked_by": blocking
                 })
 
@@ -842,7 +850,17 @@ def feature_get_graph() -> str:
     """
     session = get_session()
     try:
-        all_features = session.query(Feature).all()
+        # Optimized: Query only columns needed for graph visualization
+        # Avoids loading description, steps, timestamps, last_error
+        all_features = session.query(
+            Feature.id,
+            Feature.name,
+            Feature.category,
+            Feature.priority,
+            Feature.passes,
+            Feature.in_progress,
+            Feature.dependencies
+        ).all()
         passing_ids = {f.id for f in all_features if f.passes}
 
         nodes = []
@@ -922,7 +940,8 @@ def feature_set_dependencies(
             return json.dumps({"error": f"Dependencies not found: {missing}"})
 
         # Check for circular dependencies
-        all_features = [f.to_dict() for f in session.query(Feature).all()]
+        # Use to_cycle_check_dict() for minimal token usage (~95% reduction)
+        all_features = [f.to_cycle_check_dict() for f in session.query(Feature).all()]
         # Temporarily update the feature's dependencies for cycle check
         test_features = []
         for f in all_features:
@@ -950,6 +969,99 @@ def feature_set_dependencies(
         return json.dumps({"error": f"Failed to set dependencies: {str(e)}"})
     finally:
         session.close()
+
+
+@mcp.tool()
+def spec_get_summary() -> str:
+    """Get condensed project specification summary (~800 tokens vs ~12,500 full).
+
+    Returns only essential project info:
+    - project_name: Name of the project
+    - overview: First 200 chars of project overview
+    - technology_stack: Tech stack summary
+    - ports: Development server ports
+    - feature_count: Target number of features
+
+    Use this instead of reading the full app_spec.txt to save tokens.
+    For full details, read prompts/app_spec.txt directly.
+
+    Returns:
+        JSON with condensed project spec, or error if not found.
+    """
+    import re
+
+    spec_path = PROJECT_DIR / "prompts" / "app_spec.txt"
+    if not spec_path.exists():
+        return json.dumps({"error": "No app_spec.txt found in prompts directory"})
+
+    try:
+        content = spec_path.read_text(encoding="utf-8")
+    except Exception as e:
+        return json.dumps({"error": f"Failed to read app_spec.txt: {str(e)}"})
+
+    result: dict = {}
+
+    # Extract project_name (look for <project_name> tag or "Project:" header)
+    project_name_match = re.search(r"<project_name>\s*(.+?)\s*</project_name>", content, re.IGNORECASE)
+    if project_name_match:
+        result["project_name"] = project_name_match.group(1).strip()
+    else:
+        # Try alternative formats
+        alt_match = re.search(r"(?:Project|Name):\s*(.+?)(?:\n|$)", content, re.IGNORECASE)
+        result["project_name"] = alt_match.group(1).strip() if alt_match else "Unknown"
+
+    # Extract overview (first 200 chars)
+    overview_match = re.search(r"<overview>\s*(.+?)\s*</overview>", content, re.DOTALL | re.IGNORECASE)
+    if overview_match:
+        overview = overview_match.group(1).strip()
+        result["overview"] = overview[:200] + ("..." if len(overview) > 200 else "")
+    else:
+        # Try alternative formats
+        alt_match = re.search(r"(?:Overview|Description):\s*(.+?)(?:\n\n|$)", content, re.DOTALL | re.IGNORECASE)
+        if alt_match:
+            overview = alt_match.group(1).strip()
+            result["overview"] = overview[:200] + ("..." if len(overview) > 200 else "")
+        else:
+            result["overview"] = None
+
+    # Extract technology_stack
+    tech_match = re.search(r"<technology_stack>\s*(.+?)\s*</technology_stack>", content, re.DOTALL | re.IGNORECASE)
+    if tech_match:
+        # Parse tech stack lines into a list
+        tech_text = tech_match.group(1).strip()
+        tech_items = [line.strip().lstrip("- ") for line in tech_text.split("\n") if line.strip() and not line.strip().startswith("#")]
+        result["technology_stack"] = tech_items[:10]  # Cap at 10 items
+    else:
+        result["technology_stack"] = None
+
+    # Extract ports
+    ports_match = re.search(r"<ports>\s*(.+?)\s*</ports>", content, re.DOTALL | re.IGNORECASE)
+    if ports_match:
+        ports_text = ports_match.group(1).strip()
+        ports = {}
+        for line in ports_text.split("\n"):
+            if ":" in line:
+                key, val = line.split(":", 1)
+                key = key.strip().lstrip("- ")
+                val = val.strip()
+                # Try to extract port number
+                port_num = re.search(r"\d+", val)
+                if port_num:
+                    ports[key] = int(port_num.group())
+        result["ports"] = ports if ports else None
+    else:
+        result["ports"] = None
+
+    # Extract feature_count
+    feature_count_match = re.search(r"<feature_count>\s*(\d+)\s*</feature_count>", content, re.IGNORECASE)
+    if feature_count_match:
+        result["feature_count"] = int(feature_count_match.group(1))
+    else:
+        # Try alternative formats
+        alt_match = re.search(r"feature[_\s]*count[:\s]*(\d+)", content, re.IGNORECASE)
+        result["feature_count"] = int(alt_match.group(1)) if alt_match else None
+
+    return json.dumps(result)
 
 
 if __name__ == "__main__":

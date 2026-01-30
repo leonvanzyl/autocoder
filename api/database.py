@@ -82,6 +82,32 @@ class Feature(Base):
             return [d for d in self.dependencies if isinstance(d, int)]
         return []
 
+    def to_minimal_dict(self) -> dict:
+        """Return minimal feature info for token-efficient responses.
+
+        Use this instead of to_dict() when you only need status/dependency info,
+        not the full description and steps. Reduces response size by ~80%.
+        """
+        return {
+            "id": self.id,
+            "name": self.name,
+            "priority": self.priority,
+            "passes": self.passes if self.passes is not None else False,
+            "in_progress": self.in_progress if self.in_progress is not None else False,
+            "dependencies": self.dependencies if self.dependencies else [],
+        }
+
+    def to_cycle_check_dict(self) -> dict:
+        """Return only fields needed for cycle detection.
+
+        Use this for circular dependency validation - drastically reduces
+        token usage compared to to_dict() (~95% reduction).
+        """
+        return {
+            "id": self.id,
+            "dependencies": self.dependencies if self.dependencies else [],
+        }
+
 
 class Schedule(Base):
     """Time-based schedule for automated agent start/stop."""

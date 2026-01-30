@@ -31,8 +31,7 @@ Then use MCP tools to check feature status:
 Use the feature_get_stats tool
 ```
 
-Understanding the `app_spec.txt` is critical - it contains the full requirements
-for the application you're building.
+**NOTE:** Do NOT read `app_spec.txt` directly (12,500+ tokens). If you need project context, use `spec_get_summary` tool (~800 tokens) which returns project name, tech stack, ports, and overview.
 
 ### STEP 2: START SERVERS (IF NOT RUNNING)
 
@@ -363,6 +362,9 @@ feature_skip with feature_id={id}
 
 # 7. Clear in-progress status (when abandoning a feature)
 feature_clear_in_progress with feature_id={id}
+
+# 8. Get condensed project spec (~800 tokens vs 12,500 full)
+spec_get_summary
 ```
 
 ### RULES:
@@ -393,6 +395,18 @@ When building applications that require email functionality (password resets, em
 3. Use that link directly to verify the functionality works
 
 This allows you to fully test email-dependent flows without needing external email services.
+
+---
+
+## TOKEN EFFICIENCY
+
+To maximize context window usage:
+
+- **Don't read files unnecessarily** - Feature details from `feature_get_by_id` contain everything you need
+- **Be concise** - Short, focused responses save tokens for actual work
+- **Use `feature_get_stats`** for progress checks, `feature_get_summary` for single feature status
+- **Use `spec_get_summary`** for project context (~800 tokens vs 12,500 for full app_spec.txt)
+- **Avoid re-reading large files** - Read once, remember the content
 
 ---
 

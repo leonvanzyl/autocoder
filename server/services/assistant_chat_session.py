@@ -347,22 +347,33 @@ class AssistantChatSession:
             history = get_messages(self.project_dir, self.conversation_id)
             # Exclude the message we just added (last one)
             history = history[:-1] if history else []
-            # Cap history to last 35 messages to prevent context overload
-            history = history[-35:] if len(history) > 35 else history
+            # Cap history to last 20 messages to prevent context overload
+            history = history[-20:] if len(history) > 20 else history
             if history:
-                # Format history as context for Claude
+                # Progressive summarization for token efficiency:
+                # - Recent messages (last 5): up to 1500 chars each
+                # - Older messages (6-20): 100-char summaries
+                # This reduces token usage by ~50% compared to uniform truncation
                 history_lines = ["[Previous conversation history for context:]"]
-                for msg in history:
+                num_messages = len(history)
+                for i, msg in enumerate(history):
                     role = "User" if msg["role"] == "user" else "Assistant"
                     content = msg["content"]
-                    # Truncate very long messages
-                    if len(content) > 500:
-                        content = content[:500] + "..."
+                    # Calculate position from end (0 = most recent)
+                    position_from_end = num_messages - 1 - i
+                    if position_from_end < 5:
+                        # Recent messages (last 5): allow up to 1500 chars
+                        if len(content) > 1500:
+                            content = content[:1500] + "..."
+                    else:
+                        # Older messages (6-20): 100-char summaries only
+                        if len(content) > 100:
+                            content = content[:100] + "..."
                     history_lines.append(f"{role}: {content}")
                 history_lines.append("[End of history. Continue the conversation:]")
                 history_lines.append(f"User: {user_message}")
                 message_to_send = "\n".join(history_lines)
-                logger.info(f"Loaded {len(history)} messages from conversation history")
+                logger.info(f"Loaded {len(history)} messages from conversation history (progressive summarization)")
 
         try:
             async for chunk in self._query_claude(message_to_send):
