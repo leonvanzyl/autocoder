@@ -1,25 +1,35 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Play, Square, Loader2, GitBranch, Clock } from 'lucide-react'
+import { Play, Square, Loader2, GitBranch, Clock, PauseCircle, PlayCircle } from 'lucide-react'
 import {
   useStartAgent,
   useStopAgent,
   useSettings,
   useUpdateProjectSettings,
+  usePausePickup,
+  useResumePickup,
 } from '../hooks/useProjects'
 import { useNextScheduledRun } from '../hooks/useSchedules'
 import { formatNextRun, formatEndTime } from '../lib/timeUtils'
 import { ScheduleModal } from './ScheduleModal'
-import type { AgentStatus } from '../lib/types'
+import { GracefulShutdownDialog } from './GracefulShutdownDialog'
+import type { AgentStatus, AgentStatusResponse } from '../lib/types'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 
 interface AgentControlProps {
   projectName: string
   status: AgentStatus
+  agentStatusResponse?: AgentStatusResponse
   defaultConcurrency?: number
 }
 
-export function AgentControl({ projectName, status, defaultConcurrency = 3 }: AgentControlProps) {
+export function AgentControl({ projectName, status, agentStatusResponse, defaultConcurrency = 3 }: AgentControlProps) {
   const { data: settings } = useSettings()
   const yoloMode = settings?.yolo_mode ?? false
 
@@ -60,14 +70,23 @@ export function AgentControl({ projectName, status, defaultConcurrency = 3 }: Ag
 
   const startAgent = useStartAgent(projectName)
   const stopAgent = useStopAgent(projectName)
+  const pausePickup = usePausePickup(projectName)
+  const resumePickup = useResumePickup(projectName)
   const { data: nextRun } = useNextScheduledRun(projectName)
 
   const [showScheduleModal, setShowScheduleModal] = useState(false)
+  const [showShutdownDialog, setShowShutdownDialog] = useState(false)
 
   const isLoading = startAgent.isPending || stopAgent.isPending
+  const isPausePickupLoading = pausePickup.isPending || resumePickup.isPending
   const isRunning = status === 'running' || status === 'paused'
   const isLoadingStatus = status === 'loading'
   const isParallel = concurrency > 1
+
+  // Get orchestrator state from response
+  const pickupPaused = agentStatusResponse?.pickup_paused ?? false
+  const gracefulShutdown = agentStatusResponse?.graceful_shutdown ?? false
+  const activeAgentCount = agentStatusResponse?.active_agent_count ?? 0
 
   const handleStart = () => startAgent.mutate({
     yoloMode,
@@ -75,7 +94,24 @@ export function AgentControl({ projectName, status, defaultConcurrency = 3 }: Ag
     maxConcurrency: concurrency,
     testingAgentRatio: settings?.testing_agent_ratio,
   })
-  const handleStop = () => stopAgent.mutate()
+
+  const handleStopClick = () => {
+    // If there are active agents, show the graceful shutdown dialog
+    if (activeAgentCount > 0) {
+      setShowShutdownDialog(true)
+    } else {
+      // No active agents, stop immediately
+      stopAgent.mutate()
+    }
+  }
+
+  const handleTogglePickupPause = () => {
+    if (pickupPaused) {
+      resumePickup.mutate()
+    } else {
+      pausePickup.mutate()
+    }
+  }
 
   const isStopped = status === 'stopped' || status === 'crashed'
 
@@ -109,6 +145,52 @@ export function AgentControl({ projectName, status, defaultConcurrency = 3 }: Ag
             <GitBranch size={14} />
             {concurrency}x
           </Badge>
+        )}
+
+        {/* Pickup paused badge */}
+        {isRunning && pickupPaused && !gracefulShutdown && (
+          <Badge variant="outline" className="gap-1 border-amber-500 text-amber-600">
+            <PauseCircle size={14} />
+            Pickup Paused
+          </Badge>
+        )}
+
+        {/* Graceful shutdown badge */}
+        {isRunning && gracefulShutdown && (
+          <Badge variant="outline" className="gap-1 border-orange-500 text-orange-600">
+            <Clock size={14} />
+            Shutting down ({activeAgentCount} running)
+          </Badge>
+        )}
+
+        {/* Pause pickup toggle - visible when running */}
+        {isRunning && !gracefulShutdown && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleTogglePickupPause}
+                  disabled={isPausePickupLoading}
+                  className={pickupPaused ? 'border-amber-500' : ''}
+                >
+                  {isPausePickupLoading ? (
+                    <Loader2 size={18} className="animate-spin" />
+                  ) : pickupPaused ? (
+                    <PlayCircle size={18} className="text-green-600" />
+                  ) : (
+                    <PauseCircle size={18} />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                {pickupPaused
+                  ? 'Resume claiming new features'
+                  : 'Pause claiming new features (running agents continue)'}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         )}
 
         {/* Schedule status display */}
@@ -147,11 +229,11 @@ export function AgentControl({ projectName, status, defaultConcurrency = 3 }: Ag
           </Button>
         ) : (
           <Button
-            onClick={handleStop}
-            disabled={isLoading}
+            onClick={handleStopClick}
+            disabled={isLoading || gracefulShutdown}
             variant="destructive"
             size="sm"
-            title={yoloMode ? 'Stop Agent (YOLO Mode)' : 'Stop Agent'}
+            title={gracefulShutdown ? 'Shutting down...' : (yoloMode ? 'Stop Agent (YOLO Mode)' : 'Stop Agent')}
           >
             {isLoading ? (
               <Loader2 size={18} className="animate-spin" />
@@ -177,6 +259,14 @@ export function AgentControl({ projectName, status, defaultConcurrency = 3 }: Ag
         projectName={projectName}
         isOpen={showScheduleModal}
         onClose={() => setShowScheduleModal(false)}
+      />
+
+      {/* Graceful Shutdown Dialog */}
+      <GracefulShutdownDialog
+        projectName={projectName}
+        isOpen={showShutdownDialog}
+        onClose={() => setShowShutdownDialog(false)}
+        activeAgentCount={activeAgentCount}
       />
     </>
   )

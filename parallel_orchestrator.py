@@ -177,6 +177,12 @@ class ParallelOrchestrator:
         self.abort_events: dict[int, threading.Event] = {}
         self.is_running = False
 
+        # Graceful shutdown / pause pickup state
+        self._pickup_paused = False
+        self._graceful_shutdown = False
+        self._control_file = self.project_dir / ".agent.control"
+        self._status_file = self.project_dir / ".agent.orchestrator_status"
+
         # Track feature failures to prevent infinite retry loops
         self._failure_counts: dict[int, int] = {}
 
@@ -1019,7 +1025,9 @@ class ParallelOrchestrator:
                 debug_log.log("LOOP", f"Iteration {loop_iteration}",
                     running_coding_agents=running_ids,
                     running_testing_agents=testing_count,
-                    max_concurrency=self.max_concurrency)
+                    max_concurrency=self.max_concurrency,
+                    pickup_paused=self._pickup_paused,
+                    graceful_shutdown=self._graceful_shutdown)
 
                 # Full database dump every 5 iterations
                 if loop_iteration == 1 or loop_iteration % 5 == 0:
@@ -1030,6 +1038,28 @@ class ParallelOrchestrator:
                         session.close()
 
             try:
+                # Check for control commands from server (pause, resume, graceful shutdown)
+                self._process_control_commands()
+
+                # Write current status for server to read
+                self._write_orchestrator_status()
+
+                # If pickup is paused, don't spawn new agents - just wait for completion
+                if self._pickup_paused:
+                    with self._lock:
+                        running_count = len(self.running_coding_agents) + len(self.running_testing_agents)
+
+                    if self._graceful_shutdown and running_count == 0:
+                        print("\n[CONTROL] Graceful shutdown complete - all agents finished", flush=True)
+                        debug_log.log("CONTROL", "Graceful shutdown complete - exiting")
+                        break
+
+                    # Just wait for agents to complete, don't spawn new ones
+                    if running_count > 0:
+                        debug_log.log("CONTROL", f"Pickup paused, waiting for {running_count} agent(s) to complete")
+                    await self._wait_for_agent_completion()
+                    continue
+
                 # Check if all complete
                 if self.get_all_complete():
                     print("\nAll features complete!", flush=True)
@@ -1138,7 +1168,10 @@ class ParallelOrchestrator:
                     break
             # Use short timeout since we're just waiting for final agents to finish
             await self._wait_for_agent_completion(timeout=1.0)
+            self._write_orchestrator_status()  # Keep status updated while waiting
 
+        # Cleanup status file
+        self._cleanup_status_file()
         print("Orchestrator finished.", flush=True)
 
     def get_status(self) -> dict:
@@ -1153,7 +1186,77 @@ class ParallelOrchestrator:
                 "testing_agent_ratio": self.testing_agent_ratio,
                 "is_running": self.is_running,
                 "yolo_mode": self.yolo_mode,
+                "pickup_paused": self._pickup_paused,
+                "graceful_shutdown": self._graceful_shutdown,
             }
+
+    def _write_orchestrator_status(self) -> None:
+        """Write current orchestrator status to file for server to read.
+
+        Written as JSON with pickup_paused, graceful_shutdown, and active counts.
+        """
+        import json
+        try:
+            with self._lock:
+                coding_count = len(self.running_coding_agents)
+                testing_count = len(self.running_testing_agents)
+
+            status = {
+                "pickup_paused": self._pickup_paused,
+                "graceful_shutdown": self._graceful_shutdown,
+                "coding_agent_count": coding_count,
+                "testing_agent_count": testing_count,
+                "active_agent_count": coding_count + testing_count,
+            }
+            self._status_file.write_text(json.dumps(status))
+        except Exception as e:
+            debug_log.log("STATUS", f"Error writing orchestrator status: {e}")
+
+    def _cleanup_status_file(self) -> None:
+        """Remove status file when orchestrator exits."""
+        try:
+            if self._status_file.exists():
+                self._status_file.unlink()
+        except Exception:
+            pass
+
+    def _process_control_commands(self) -> None:
+        """Process any pending control commands from the server.
+
+        Control commands are written to .agent.control by the server:
+        - pause_pickup: Stop claiming new features, let running agents finish
+        - resume_pickup: Resume normal operation
+        - graceful_shutdown: Pause pickup and exit when all agents complete
+        """
+        if not self._control_file.exists():
+            return
+
+        try:
+            command = self._control_file.read_text().strip()
+            self._control_file.unlink()  # Remove after reading
+
+            if command == "pause_pickup":
+                self._pickup_paused = True
+                self._graceful_shutdown = False
+                print("[CONTROL] Pickup paused - no new features will be claimed", flush=True)
+                debug_log.log("CONTROL", "Pickup paused via control file")
+                self._write_orchestrator_status()
+            elif command == "resume_pickup":
+                self._pickup_paused = False
+                self._graceful_shutdown = False
+                print("[CONTROL] Pickup resumed", flush=True)
+                debug_log.log("CONTROL", "Pickup resumed via control file")
+                self._write_orchestrator_status()
+            elif command == "graceful_shutdown":
+                self._pickup_paused = True
+                self._graceful_shutdown = True
+                print("[CONTROL] Graceful shutdown initiated - waiting for agents to complete", flush=True)
+                debug_log.log("CONTROL", "Graceful shutdown initiated via control file")
+                self._write_orchestrator_status()
+            else:
+                debug_log.log("CONTROL", f"Unknown control command: {command}")
+        except Exception as e:
+            debug_log.log("CONTROL", f"Error processing control command: {e}")
 
 
 async def run_parallel_orchestrator(

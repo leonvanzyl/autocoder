@@ -290,6 +290,24 @@ export async function resumeAgent(projectName: string): Promise<AgentActionRespo
   })
 }
 
+export async function pausePickup(projectName: string): Promise<AgentActionResponse> {
+  return fetchJSON(`/projects/${encodeURIComponent(projectName)}/agent/pause-pickup`, {
+    method: 'POST',
+  })
+}
+
+export async function resumePickup(projectName: string): Promise<AgentActionResponse> {
+  return fetchJSON(`/projects/${encodeURIComponent(projectName)}/agent/resume-pickup`, {
+    method: 'POST',
+  })
+}
+
+export async function gracefulStopAgent(projectName: string): Promise<AgentActionResponse> {
+  return fetchJSON(`/projects/${encodeURIComponent(projectName)}/agent/graceful-stop`, {
+    method: 'POST',
+  })
+}
+
 // ============================================================================
 // Spec Creation API
 // ============================================================================

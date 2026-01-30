@@ -16,8 +16,8 @@ from .git import router as git_router
 from .models import router as models_router
 from .pr import router as pr_router
 from .projects import router as projects_router
-from .schedules import router as schedules_router
 from .scheduler import router as scheduler_router
+from .schedules import router as schedules_router
 from .settings import router as settings_router
 from .settings_v2 import router as settings_v2_router
 from .spec_creation import router as spec_creation_router

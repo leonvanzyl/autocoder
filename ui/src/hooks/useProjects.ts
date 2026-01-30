@@ -197,6 +197,41 @@ export function useResumeAgent(projectName: string) {
   })
 }
 
+export function usePausePickup(projectName: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: () => api.pausePickup(projectName),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['agent-status', projectName] })
+    },
+  })
+}
+
+export function useResumePickup(projectName: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: () => api.resumePickup(projectName),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['agent-status', projectName] })
+    },
+  })
+}
+
+export function useGracefulStopAgent(projectName: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: () => api.gracefulStopAgent(projectName),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['agent-status', projectName] })
+      // Invalidate schedule status to reflect manual stop override
+      queryClient.invalidateQueries({ queryKey: ['nextRun', projectName] })
+    },
+  })
+}
+
 // ============================================================================
 // Setup
 // ============================================================================

@@ -479,6 +479,71 @@ class AgentProcessManager:
             logger.exception("Failed to resume agent")
             return False, f"Failed to resume agent: {e}"
 
+    async def pause_pickup(self) -> tuple[bool, str]:
+        """
+        Signal orchestrator to pause claiming new features.
+        Running agents will continue until completion.
+
+        Uses a control file (.agent.control) that the orchestrator polls.
+
+        Returns:
+            Tuple of (success, message)
+        """
+        if self.status != "running":
+            return False, "Agent is not running"
+
+        try:
+            control_file = self.project_dir / ".agent.control"
+            control_file.write_text("pause_pickup")
+            logger.info(f"Wrote pause_pickup to {control_file}")
+            return True, "Pickup pause requested - running agents will complete"
+        except Exception as e:
+            logger.exception("Failed to write pause_pickup control command")
+            return False, f"Failed to pause pickup: {e}"
+
+    async def resume_pickup(self) -> tuple[bool, str]:
+        """
+        Signal orchestrator to resume claiming new features.
+
+        Uses a control file (.agent.control) that the orchestrator polls.
+
+        Returns:
+            Tuple of (success, message)
+        """
+        if self.status != "running":
+            return False, "Agent is not running"
+
+        try:
+            control_file = self.project_dir / ".agent.control"
+            control_file.write_text("resume_pickup")
+            logger.info(f"Wrote resume_pickup to {control_file}")
+            return True, "Pickup resume requested"
+        except Exception as e:
+            logger.exception("Failed to write resume_pickup control command")
+            return False, f"Failed to resume pickup: {e}"
+
+    async def graceful_stop(self) -> tuple[bool, str]:
+        """
+        Signal orchestrator to stop after current tasks complete.
+        No new features will be claimed. Orchestrator exits when all agents finish.
+
+        Uses a control file (.agent.control) that the orchestrator polls.
+
+        Returns:
+            Tuple of (success, message)
+        """
+        if self.status not in ("running", "paused"):
+            return False, "Agent is not running"
+
+        try:
+            control_file = self.project_dir / ".agent.control"
+            control_file.write_text("graceful_shutdown")
+            logger.info(f"Wrote graceful_shutdown to {control_file}")
+            return True, "Graceful shutdown requested - will stop when all agents complete"
+        except Exception as e:
+            logger.exception("Failed to write graceful_shutdown control command")
+            return False, f"Failed to initiate graceful shutdown: {e}"
+
     async def healthcheck(self) -> bool:
         """
         Check if the agent process is still alive.
@@ -501,8 +566,35 @@ class AgentProcessManager:
 
         return True
 
+    def _read_orchestrator_status(self) -> dict:
+        """Read orchestrator status from the status file.
+
+        The orchestrator writes its status to .agent.orchestrator_status as JSON.
+        Returns default values if file doesn't exist or can't be read.
+        """
+        import json
+        status_file = self.project_dir / ".agent.orchestrator_status"
+
+        try:
+            if status_file.exists():
+                content = status_file.read_text()
+                return json.loads(content)
+        except Exception as e:
+            logger.debug(f"Could not read orchestrator status: {e}")
+
+        return {
+            "pickup_paused": False,
+            "graceful_shutdown": False,
+            "coding_agent_count": 0,
+            "testing_agent_count": 0,
+            "active_agent_count": 0,
+        }
+
     def get_status_dict(self) -> dict:
         """Get current status as a dictionary."""
+        # Read orchestrator-specific status from file
+        orch_status = self._read_orchestrator_status() if self.status == "running" else {}
+
         return {
             "status": self.status,
             "pid": self.pid,
@@ -512,6 +604,9 @@ class AgentProcessManager:
             "parallel_mode": self.parallel_mode,
             "max_concurrency": self.max_concurrency,
             "testing_agent_ratio": self.testing_agent_ratio,
+            "pickup_paused": orch_status.get("pickup_paused", False),
+            "graceful_shutdown": orch_status.get("graceful_shutdown", False),
+            "active_agent_count": orch_status.get("active_agent_count", 0),
         }
 
 

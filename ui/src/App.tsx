@@ -82,7 +82,7 @@ function App() {
   const { data: projects, isLoading: projectsLoading } = useProjects()
   const { data: features } = useFeatures(selectedProject)
   const { data: settings } = useSettings()
-  useAgentStatus(selectedProject) // Keep polling for status updates
+  const { data: agentStatusData } = useAgentStatus(selectedProject) // Keep polling for status updates
   const wsState = useProjectWebSocket(selectedProject)
   const { theme, setTheme, darkMode, toggleDarkMode, themes } = useTheme()
 
@@ -288,6 +288,7 @@ function App() {
                   <AgentControl
                     projectName={selectedProject}
                     status={wsState.agentStatus}
+                    agentStatusResponse={agentStatusData}
                     defaultConcurrency={selectedProjectData?.default_concurrency}
                   />
 

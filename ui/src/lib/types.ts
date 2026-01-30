@@ -131,6 +131,9 @@ export interface AgentStatusResponse {
   parallel_mode: boolean  // DEPRECATED: Always true now (unified orchestrator)
   max_concurrency: number | null
   testing_agent_ratio: number  // Regression testing agents (0-3)
+  pickup_paused: boolean  // True when pickup is paused (no new features claimed)
+  graceful_shutdown: boolean  // True when graceful shutdown is in progress
+  active_agent_count: number  // Number of currently active agents (coding + testing)
 }
 
 export interface AgentActionResponse {

@@ -222,6 +222,9 @@ class AgentStatus(BaseModel):
     parallel_mode: bool = False  # DEPRECATED: Always True now (unified orchestrator)
     max_concurrency: int | None = None
     testing_agent_ratio: int = 1  # Regression testing agents (0-3)
+    pickup_paused: bool = False  # True when pickup is paused (no new features claimed)
+    graceful_shutdown: bool = False  # True when graceful shutdown is in progress
+    active_agent_count: int = 0  # Number of currently active agents (coding + testing)
 
 
 class AgentActionResponse(BaseModel):

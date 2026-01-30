@@ -90,6 +90,9 @@ async def get_agent_status(project_name: str):
     # Run healthcheck to detect crashed processes
     await manager.healthcheck()
 
+    # Get full status dict including orchestrator state
+    status_dict = manager.get_status_dict()
+
     return AgentStatus(
         status=manager.status,
         pid=manager.pid,
@@ -99,6 +102,9 @@ async def get_agent_status(project_name: str):
         parallel_mode=manager.parallel_mode,
         max_concurrency=manager.max_concurrency,
         testing_agent_ratio=manager.testing_agent_ratio,
+        pickup_paused=status_dict.get("pickup_paused", False),
+        graceful_shutdown=status_dict.get("graceful_shutdown", False),
+        active_agent_count=status_dict.get("active_agent_count", 0),
     )
 
 
@@ -180,6 +186,55 @@ async def resume_agent(project_name: str):
     manager = get_project_manager(project_name)
 
     success, message = await manager.resume()
+
+    return AgentActionResponse(
+        success=success,
+        status=manager.status,
+        message=message,
+    )
+
+
+@router.post("/pause-pickup", response_model=AgentActionResponse)
+async def pause_pickup(project_name: str):
+    """Pause claiming new features. Running agents continue until completion."""
+    manager = get_project_manager(project_name)
+
+    success, message = await manager.pause_pickup()
+
+    return AgentActionResponse(
+        success=success,
+        status=manager.status,
+        message=message,
+    )
+
+
+@router.post("/resume-pickup", response_model=AgentActionResponse)
+async def resume_pickup(project_name: str):
+    """Resume claiming new features after pause."""
+    manager = get_project_manager(project_name)
+
+    success, message = await manager.resume_pickup()
+
+    return AgentActionResponse(
+        success=success,
+        status=manager.status,
+        message=message,
+    )
+
+
+@router.post("/graceful-stop", response_model=AgentActionResponse)
+async def graceful_stop(project_name: str):
+    """Stop the agent gracefully after current tasks complete."""
+    manager = get_project_manager(project_name)
+
+    success, message = await manager.graceful_stop()
+
+    # Notify scheduler of manual stop (to prevent auto-start during scheduled window)
+    if success:
+        from ..services.scheduler_service import get_scheduler
+        project_dir = _get_project_path(project_name)
+        if project_dir:
+            get_scheduler().notify_manual_stop(project_name, project_dir)
 
     return AgentActionResponse(
         success=success,
