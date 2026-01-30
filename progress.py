@@ -13,8 +13,7 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
-# Import robust connection utilities
-from api.database import robust_db_connection, execute_with_retry
+from api.database import execute_with_retry, robust_db_connection
 
 WEBHOOK_URL = os.environ.get("PROGRESS_N8N_WEBHOOK_URL")
 PROGRESS_CACHE_FILE = ".progress_cache"
