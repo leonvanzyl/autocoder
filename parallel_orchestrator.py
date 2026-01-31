@@ -678,10 +678,22 @@ class ParallelOrchestrator:
         """Spawn a doc-admin agent subprocess to maintain documentation.
 
         This runs as a background task and doesn't block other agents.
-        Only one doc-admin agent runs at a time.
+        Only one doc-admin agent runs at a time (enforced via lock file).
         """
         if self._doc_admin_running:
             return False, "Doc-admin agent already running"
+
+        # Check lock file to prevent duplicates (handles manually-triggered doc-admin)
+        doc_admin_lock = self.project_dir / ".doc-admin.lock"
+        if doc_admin_lock.exists():
+            try:
+                pid = int(doc_admin_lock.read_text().strip())
+                os.kill(pid, 0)  # Check if process is running
+                debug_log.log("DOC_ADMIN", f"Skipping - another doc-admin already running (PID {pid})")
+                return False, f"Doc-admin already running (PID {pid})"
+            except (ValueError, ProcessLookupError, PermissionError):
+                # Stale lock - will be cleaned up by the new process
+                pass
 
         debug_log.log("DOC_ADMIN", "Spawning doc-admin agent")
 

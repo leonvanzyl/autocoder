@@ -283,25 +283,32 @@ async def run_doc_admin(project_name: str):
 
     This spawns a doc-admin agent to assess and update project documentation.
     Works whether the main agent is running or not.
+    Uses a lock file to prevent duplicate doc-admin agents.
     """
+    import os
     import subprocess
     import sys
 
     manager = get_project_manager(project_name)
-
-    # If orchestrator is running, use it (maintains single doc-admin constraint)
-    if manager.orchestrator:
-        success, message = manager.orchestrator.run_doc_admin()
-        return AgentActionResponse(
-            success=success,
-            status=manager.status,
-            message=message,
-        )
-
-    # If not running, spawn doc-admin directly
     project_dir = _get_project_path(project_name)
     if not project_dir:
         raise HTTPException(status_code=404, detail=f"Project not found: {project_name}")
+
+    # Check lock file to prevent duplicate doc-admin runs
+    doc_admin_lock = project_dir / ".doc-admin.lock"
+    if doc_admin_lock.exists():
+        try:
+            pid = int(doc_admin_lock.read_text().strip())
+            # Check if process is still running
+            os.kill(pid, 0)
+            return AgentActionResponse(
+                success=False,
+                status=manager.status,
+                message=f"Doc-admin already running (PID {pid})",
+            )
+        except (ValueError, ProcessLookupError, PermissionError):
+            # Stale lock - will be cleaned up by the new process
+            pass
 
     root_dir = Path(__file__).parent.parent.parent
     cmd = [

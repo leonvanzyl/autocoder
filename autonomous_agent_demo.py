@@ -193,20 +193,50 @@ def main() -> None:
             print("Use an absolute path or register the project first.")
             return
 
+    # Doc-admin lock file for preventing duplicate runs
+    doc_admin_lock = project_dir / ".doc-admin.lock"
+
     try:
         if args.agent_type:
             # Subprocess mode - spawned by orchestrator for a specific role
-            asyncio.run(
-                run_autonomous_agent(
-                    project_dir=project_dir,
-                    model=args.model,
-                    max_iterations=args.max_iterations or 1,
-                    yolo_mode=args.yolo,
-                    feature_id=args.feature_id,
-                    agent_type=args.agent_type,
-                    testing_feature_id=args.testing_feature_id,
+
+            # For doc-admin, create lock file to prevent duplicates
+            if args.agent_type == "doc-admin":
+                import os
+                if doc_admin_lock.exists():
+                    # Check if the process is still running (stale lock detection)
+                    try:
+                        pid = int(doc_admin_lock.read_text().strip())
+                        # Check if process exists (works on Unix and Windows)
+                        os.kill(pid, 0)
+                        print(f"[doc-admin] Another doc-admin is already running (PID {pid})", flush=True)
+                        return
+                    except (ValueError, ProcessLookupError, PermissionError):
+                        # PID invalid or process not running - stale lock
+                        print("[doc-admin] Removing stale lock file", flush=True)
+                        doc_admin_lock.unlink(missing_ok=True)
+
+                # Create lock file with our PID
+                doc_admin_lock.write_text(str(os.getpid()))
+                print(f"[doc-admin] Lock acquired (PID {os.getpid()})", flush=True)
+
+            try:
+                asyncio.run(
+                    run_autonomous_agent(
+                        project_dir=project_dir,
+                        model=args.model,
+                        max_iterations=args.max_iterations or 1,
+                        yolo_mode=args.yolo,
+                        feature_id=args.feature_id,
+                        agent_type=args.agent_type,
+                        testing_feature_id=args.testing_feature_id,
+                    )
                 )
-            )
+            finally:
+                # Always remove lock file for doc-admin, even on error
+                if args.agent_type == "doc-admin" and doc_admin_lock.exists():
+                    doc_admin_lock.unlink(missing_ok=True)
+                    print("[doc-admin] Lock released", flush=True)
         else:
             # Entry point mode - always use unified orchestrator
             from parallel_orchestrator import run_parallel_orchestrator
