@@ -272,6 +272,27 @@ The feature_list.json **MUST** include tests from ALL 20 categories. Minimum cou
 
 ---
 
+## UI COMPONENT LIBRARY
+
+Check the `<ui_components>` section in `app_spec.txt` for the UI library configuration:
+
+- **library**: The component library to use (shadcn-ui, ark-ui, radix-ui, or none)
+- **framework**: The frontend framework (react, vue, solid, svelte)
+- **has_mcp**: Whether MCP tools are available for component generation
+
+If `has_mcp` is `true`, the coding agent will have access to MCP tools for rapid component generation. Factor this into feature descriptions where relevant.
+
+## VISUAL STYLE
+
+Check the `<visual_style>` section in `app_spec.txt` for styling configuration:
+
+- **style**: The visual aesthetic (default, neobrutalism, glassmorphism, retro, custom)
+- **design_tokens_path**: Path to custom design tokens JSON if applicable
+
+For non-default styles, style-specific tests may be included (e.g., "Button has 4px border and offset shadow" for neobrutalism).
+
+---
+
 ## ABSOLUTE PROHIBITION: NO MOCK DATA
 
 The feature_list.json must include tests that **actively verify real data** and **detect mock data patterns**.

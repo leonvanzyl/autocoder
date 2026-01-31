@@ -287,6 +287,7 @@ Projects can be stored in any directory (registered in `~/.autoforge/registry.db
 - `.autoforge/features.db` - SQLite database with feature test cases
 - `.autoforge/.agent.lock` - Lock file to prevent multiple agent instances
 - `.autoforge/allowed_commands.yaml` - Project-specific bash command allowlist (optional)
+- `.autoforge/design-tokens.json` - Visual style design tokens (generated for non-default styles)
 - `.autoforge/.gitignore` - Ignores runtime files
 - `CLAUDE.md` - Stays at project root (SDK convention)
 - `app_spec.txt` - Root copy for agent template compatibility
@@ -397,6 +398,69 @@ blocked_commands:
 - `examples/project_allowed_commands.yaml` - Project config example (all commented by default)
 - `examples/org_config.yaml` - Org config example (all commented by default)
 - `examples/README.md` - Comprehensive guide with use cases, testing, and troubleshooting
+
+### UI Component MCP Servers
+
+The agent can use MCP servers for rapid UI component generation when a compatible library is configured in `app_spec.txt`.
+
+**Supported Libraries:**
+- `shadcn-ui` - Beautiful, accessible React components (MCP enabled)
+- `ark-ui` - Headless primitives for React, Vue, Solid, Svelte (MCP enabled)
+- `radix-ui` - Low-level headless primitives (no MCP, uses frontend-design skill)
+- `none` - Custom components (no MCP, uses frontend-design skill)
+
+**Configuration in app_spec.txt:**
+```xml
+<ui_components>
+  <library>shadcn-ui</library>
+  <framework>react</framework>
+  <has_mcp>true</has_mcp>
+</ui_components>
+```
+
+**MCP Tools Available:**
+- `mcp__ui_components__list_components` - List available components
+- `mcp__ui_components__get_example` - Get component implementation code
+- `mcp__ui_components__styling_guide` - Get styling documentation
+
+**Environment Variables:**
+- `DISABLE_UI_MCP=true` - Disable UI MCP server (for troubleshooting)
+- `MCP_SHADCN_VERSION=1.0.0` - Pin shadcn MCP server version
+- `MCP_ARK_VERSION=0.1.0` - Pin Ark UI MCP server version
+- `GITHUB_PERSONAL_ACCESS_TOKEN` - GitHub token for better rate limits (optional)
+
+### Visual Styles and Design Tokens
+
+Projects can specify a visual style that generates design tokens for consistent styling.
+
+**Available Styles:**
+- `default` - Clean, minimal design (no tokens generated)
+- `neobrutalism` - Bold colors, hard shadows, 4px borders, no border-radius
+- `glassmorphism` - Frosted glass effects, blur, transparency
+- `retro` - Pixel-art inspired, vibrant neons, 8-bit aesthetic
+- `custom` - User-defined tokens
+
+**Configuration in app_spec.txt:**
+```xml
+<visual_style>
+  <style>neobrutalism</style>
+  <design_tokens_path>.autoforge/design-tokens.json</design_tokens_path>
+</visual_style>
+```
+
+**Design Tokens File (generated for non-default styles):**
+```json
+{
+  "borders": {"width": "4px", "radius": "0"},
+  "shadows": {"default": "4px 4px 0 0 currentColor"},
+  "colors": {"primary": "#ff6b6b", "secondary": "#4ecdc4"}
+}
+```
+
+**Files:**
+- `app_spec_parser.py` - Shared parser for UI config from app_spec.txt
+- `design_tokens.py` - Design token generation and style presets
+- `test_ui_config.py` - Unit tests for UI configuration
 
 ### Vertex AI Configuration (Optional)
 

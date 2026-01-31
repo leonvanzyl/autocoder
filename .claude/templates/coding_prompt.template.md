@@ -111,6 +111,7 @@ Use browser automation tools:
 
 **Complete ALL applicable checks before marking any feature as passing:**
 
+- **UI & Design:** Used MCP tools for component generation when available (`mcp__ui_components__*`); components follow the project's visual style (check `app_spec.txt`); if design tokens exist (`.autoforge/design-tokens.json`), styling matches; components are accessible (ARIA labels, keyboard nav); responsive at desktop (1920px), tablet (768px), mobile (375px)
 - **Security:** Feature respects role permissions; unauthenticated access blocked; API checks auth (401/403); no cross-user data leaks via URL manipulation
 - **Real Data:** Create unique test data via UI, verify it appears, refresh to confirm persistence, delete and verify removal. No unexplained data (indicates mocks). Dashboard counts reflect real numbers
 - **Mock Data Grep:** Run STEP 5.6 grep checks - no hits in src/ (excluding tests). No globalThis, devStore, or dev-store patterns
@@ -195,6 +196,28 @@ Before context fills up:
 Use Playwright MCP tools (`browser_*`) for UI verification. Key tools: `navigate`, `click`, `type`, `fill_form`, `take_screenshot`, `console_messages`, `network_requests`. All tools have auto-wait built in.
 
 Test like a human user with mouse and keyboard. Use `browser_console_messages` to detect errors. Don't bypass UI with JavaScript evaluation.
+
+---
+
+## UI COMPONENT GENERATION
+
+When building UI components, check if MCP tools are available for component generation:
+
+- `mcp__ui_components__list_components` - See all available components in the library
+- `mcp__ui_components__get_example` - Get implementation code for a component
+- `mcp__ui_components__styling_guide` - Understand the styling approach
+
+**If these tools are available**, use them to generate components quickly instead of building from scratch.
+
+**If these tools are NOT available**, use the frontend-design skill for component creation:
+- Invoke `/frontend-design` for complex UI components
+- Follow the project's visual style from `app_spec.txt`
+- Check `.autoforge/design-tokens.json` for style tokens if they exist
+
+**Visual Style Application:**
+1. Read the `<visual_style>` section in `app_spec.txt`
+2. If a design tokens file exists, apply those values to your CSS/Tailwind
+3. Maintain consistency across all components
 
 ---
 

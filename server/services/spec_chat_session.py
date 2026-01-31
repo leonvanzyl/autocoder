@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import shutil
+import sys
 import threading
 from datetime import datetime
 from pathlib import Path
@@ -20,6 +21,11 @@ from dotenv import load_dotenv
 
 from ..schemas import ImageAttachment
 from .chat_constants import ROOT_DIR, make_multimodal_message
+
+# Add root directory to path for imports
+ROOT_DIR = Path(__file__).parent.parent.parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 
 # Load environment variables from .env file if present
 load_dotenv()
@@ -411,6 +417,20 @@ class SpecChatSession:
                             if files_written["app_spec"] and files_written["initializer"]:
                                 logger.info("Both app_spec.txt and initializer_prompt.md verified - signaling completion")
                                 self.complete = True
+
+                                # Generate design tokens based on visual style (if not default)
+                                try:
+                                    from design_tokens import generate_design_tokens_from_spec
+                                    tokens_path = generate_design_tokens_from_spec(self.project_dir)
+                                    if tokens_path:
+                                        logger.info(f"Generated design tokens at: {tokens_path}")
+                                        yield {
+                                            "type": "file_written",
+                                            "path": str(tokens_path.relative_to(self.project_dir))
+                                        }
+                                except Exception as e:
+                                    logger.warning(f"Failed to generate design tokens: {e}")
+
                                 yield {
                                     "type": "spec_complete",
                                     "path": str(spec_path)

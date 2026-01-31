@@ -216,6 +216,44 @@
       - Loading spinners
       - Skeleton loaders
     </animations>
+
+    <ui_components>
+      <!--
+        UI Component Library Configuration
+        ==================================
+        Specifies which component library to use for building UI.
+
+        Options for library:
+        - shadcn-ui: Beautiful, accessible React components (copy-paste approach)
+        - ark-ui: Headless primitives for React, Vue, Solid, Svelte
+        - radix-ui: Low-level headless primitives (requires manual styling)
+        - none: Build components from scratch
+
+        has_mcp indicates if an MCP server is available for rapid component generation.
+      -->
+      <library>none</library>
+      <framework>react</framework>
+      <has_mcp>false</has_mcp>
+    </ui_components>
+
+    <visual_style>
+      <!--
+        Visual Style Configuration
+        ==========================
+        Defines the overall visual aesthetic of the application.
+
+        Options for style:
+        - default: Clean, minimal design following library defaults
+        - neobrutalism: Bold colors, hard shadows, no border-radius
+        - glassmorphism: Frosted glass effects, blur, transparency
+        - retro: Pixel-art inspired, vibrant neons, 8-bit aesthetic
+        - custom: Define your own design tokens
+
+        design_tokens_path points to a JSON file with custom tokens (optional).
+      -->
+      <style>default</style>
+      <design_tokens_path></design_tokens_path>
+    </visual_style>
   </design_system>
 
   <key_interactions>

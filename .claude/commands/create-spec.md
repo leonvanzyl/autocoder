@@ -95,7 +95,64 @@ Ask the user about their involvement preference:
 
 **For Detailed Mode users**, ask specific tech questions about frontend, backend, database, etc.
 
-### Phase 3b: Database Requirements (MANDATORY)
+### Phase 3b: UI Component Library (OPTIONAL)
+
+Ask the user which UI component library they prefer. This step helps configure automated component generation.
+
+> "Would you like to use a UI component library for faster development?
+>
+> 1. **shadcn/ui (Recommended for React)** - Beautiful, accessible components with Radix primitives
+>    - Copy-paste approach (you own the code)
+>    - MCP-enabled: Agent can generate components automatically
+>
+> 2. **Ark UI (Recommended for multi-framework)** - Headless primitives for any framework
+>    - Works with React, Vue, Solid, Svelte
+>    - MCP-enabled: Agent can generate components automatically
+>
+> 3. **Radix UI** - Low-level headless primitives
+>    - Requires manual styling
+>    - Uses frontend-design skill for component creation
+>
+> 4. **None/Custom** - Build components from scratch
+>    - Full control, more development time
+>    - Uses frontend-design skill for component creation
+>
+> 5. **Skip this question** - Use default (no library)"
+
+**Framework validation:** If user chooses shadcn/ui but their framework isn't React, warn them and suggest Ark UI instead.
+
+### Phase 3c: Visual Style (OPTIONAL)
+
+Ask the user which visual style they prefer. This step configures design tokens for consistent styling.
+
+> "What visual style do you prefer for your app?
+>
+> 1. **Modern/Clean (Recommended)** - Minimal, professional design
+>    - Uses library defaults, no custom tokens needed
+>
+> 2. **Neobrutalism** - Bold colors, hard shadows, no border-radius
+>    - High contrast, playful aesthetic
+>    - Generates design tokens: 4px borders, offset shadows
+>
+> 3. **Glassmorphism** - Frosted glass effects, blur, transparency
+>    - Subtle gradients, floating elements
+>    - Generates design tokens: backdrop-blur, low opacity backgrounds
+>
+> 4. **Retro/Arcade** - Pixel-art inspired, vibrant neons
+>    - 8-bit aesthetic, chunky borders
+>    - Generates design tokens: sharp corners, neon gradients
+>
+> 5. **Custom** - Define your own design tokens
+>    - Maximum flexibility
+>
+> 6. **Skip this question** - Use default (Modern/Clean)"
+
+**Behavior:**
+- If user skips or chooses "Modern/Clean", no design tokens file is generated
+- Other styles generate `.autocoder/design-tokens.json` with appropriate presets
+- The coding agent will apply these tokens when building components
+
+### Phase 3d: Database Requirements (MANDATORY)
 
 **Always ask this question regardless of mode:**
 
@@ -457,6 +514,19 @@ Create a new file using this XML structure:
     <typography>
       [Font preferences]
     </typography>
+
+    <ui_components>
+      <!-- Based on Phase 3b selection -->
+      <library>[shadcn-ui | ark-ui | radix-ui | none]</library>
+      <framework>[react | vue | solid | svelte]</framework>
+      <has_mcp>[true if shadcn-ui or ark-ui, false otherwise]</has_mcp>
+    </ui_components>
+
+    <visual_style>
+      <!-- Based on Phase 3c selection -->
+      <style>[default | neobrutalism | glassmorphism | retro | custom]</style>
+      <design_tokens_path>[.autocoder/design-tokens.json if style != default, empty otherwise]</design_tokens_path>
+    </visual_style>
   </design_system>
 
   <implementation_steps>
