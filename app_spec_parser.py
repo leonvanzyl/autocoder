@@ -4,11 +4,40 @@ App Spec Parser
 
 Shared utilities for parsing app_spec.txt sections.
 Used by client.py, prompts.py, and design_tokens.py to avoid code duplication.
+
+This module provides functions to:
+- Extract XML sections from app_spec.txt
+- Parse UI component library configuration
+- Parse visual style configuration
+- Combine configurations for the coding agent
 """
 
 import re
 from pathlib import Path
 from typing import TypedDict
+
+# =============================================================================
+# Constants
+# =============================================================================
+
+# Valid UI library options
+VALID_UI_LIBRARIES = {"shadcn-ui", "ark-ui", "radix-ui", "none"}
+
+# Libraries that have MCP server support
+MCP_SUPPORTED_LIBRARIES = {"shadcn-ui", "ark-ui"}
+
+# Valid visual style options
+VALID_VISUAL_STYLES = {"default", "neobrutalism", "glassmorphism", "retro", "custom"}
+
+# Valid frameworks
+VALID_FRAMEWORKS = {"react", "vue", "solid", "svelte"}
+
+# Regex pattern to match XML comments (<!-- ... -->)
+XML_COMMENT_PATTERN = re.compile(r"<!--.*?-->", re.DOTALL)
+
+# =============================================================================
+# Type Definitions
+# =============================================================================
 
 
 class UIComponentsConfig(TypedDict, total=False):
@@ -33,6 +62,11 @@ class UIConfig(TypedDict, total=False):
     design_tokens_path: str
 
 
+# =============================================================================
+# Parsing Functions
+# =============================================================================
+
+
 def parse_section(content: str, section_name: str) -> str | None:
     """
     Parse an XML section from app_spec.txt content.
@@ -53,19 +87,29 @@ def parse_xml_value(content: str, tag_name: str) -> str | None:
     """
     Parse a single XML value from content.
 
+    Extracts the text content from an XML tag, filtering out any XML comments.
+    Returns None if the tag is not found or contains only whitespace/comments.
+
     Args:
         content: XML content to search
         tag_name: The tag name to extract value from
 
     Returns:
-        The value inside the tags, or None if not found.
+        The value inside the tags, or None if not found or empty.
+
+    Example:
+        >>> parse_xml_value("<library>shadcn-ui</library>", "library")
+        'shadcn-ui'
+        >>> parse_xml_value("<library><!-- comment --></library>", "library")
+        None
     """
     pattern = rf"<{tag_name}[^>]*>(.*?)</{tag_name}>"
     match = re.search(pattern, content, re.DOTALL)
     if match:
-        value = match.group(1).strip()
-        # Filter out XML comments
-        if value and not value.startswith("<!--"):
+        value = match.group(1)
+        # Remove XML comments using regex pattern
+        value = XML_COMMENT_PATTERN.sub("", value).strip()
+        if value:
             return value
     return None
 
@@ -169,16 +213,3 @@ def get_ui_config_from_spec(project_dir: Path) -> UIConfig | None:
         return parse_ui_config(content)
     except (OSError, UnicodeDecodeError):
         return None
-
-
-# Valid UI library options
-VALID_UI_LIBRARIES = {"shadcn-ui", "ark-ui", "radix-ui", "none"}
-
-# Libraries that have MCP server support
-MCP_SUPPORTED_LIBRARIES = {"shadcn-ui", "ark-ui"}
-
-# Valid visual style options
-VALID_VISUAL_STYLES = {"default", "neobrutalism", "glassmorphism", "retro", "custom"}
-
-# Valid frameworks
-VALID_FRAMEWORKS = {"react", "vue", "solid", "svelte"}

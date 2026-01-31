@@ -293,7 +293,7 @@ These are just reference points - your actual count should come from the require
 
 **MANDATORY: Infrastructure Features**
 
-If the app requires a database (Phase 3b answer was "Yes" or "Not sure"), you MUST include 5 Infrastructure features (indices 0-4):
+If the app requires a database (Phase 3d answer was "Yes" or "Not sure"), you MUST include 5 Infrastructure features (indices 0-4):
 1. Database connection established
 2. Database schema applied correctly
 3. Data persists across server restart

@@ -23,6 +23,7 @@ from app_spec_parser import (
 from design_tokens import (
     STYLE_PRESETS,
     generate_design_tokens,
+    generate_design_tokens_from_spec,
     get_style_preset,
     validate_visual_style,
 )
@@ -340,6 +341,67 @@ class TestGenerateDesignTokens:
         with tempfile.TemporaryDirectory() as tmpdir:
             project_dir = Path(tmpdir)
             result = generate_design_tokens(project_dir, "custom")
+            assert result is None
+
+
+# =============================================================================
+# Test: generate_design_tokens_from_spec
+# =============================================================================
+
+class TestGenerateDesignTokensFromSpec:
+    """Tests for generate_design_tokens_from_spec function."""
+
+    def test_generate_tokens_from_neobrutalism_spec(self):
+        """Integration test: generate tokens from a spec file with neobrutalism style."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_dir = Path(tmpdir)
+            prompts_dir = project_dir / "prompts"
+            prompts_dir.mkdir()
+
+            spec_content = """
+            <project_specification>
+                <visual_style>
+                    <style>neobrutalism</style>
+                    <design_tokens_path>.autocoder/design-tokens.json</design_tokens_path>
+                </visual_style>
+            </project_specification>
+            """
+            (prompts_dir / "app_spec.txt").write_text(spec_content)
+
+            result = generate_design_tokens_from_spec(project_dir)
+
+            assert result is not None
+            assert result.exists()
+            assert result.name == "design-tokens.json"
+
+            tokens = json.loads(result.read_text())
+            assert tokens["borders"]["width"] == "4px"
+            assert tokens["borders"]["radius"] == "0"
+
+    def test_generate_tokens_from_default_spec(self):
+        """No tokens generated for default style."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_dir = Path(tmpdir)
+            prompts_dir = project_dir / "prompts"
+            prompts_dir.mkdir()
+
+            spec_content = """
+            <project_specification>
+                <visual_style>
+                    <style>default</style>
+                </visual_style>
+            </project_specification>
+            """
+            (prompts_dir / "app_spec.txt").write_text(spec_content)
+
+            result = generate_design_tokens_from_spec(project_dir)
+            assert result is None
+
+    def test_generate_tokens_missing_spec(self):
+        """Returns None when spec file doesn't exist."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_dir = Path(tmpdir)
+            result = generate_design_tokens_from_spec(project_dir)
             assert result is None
 
 

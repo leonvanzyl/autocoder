@@ -355,6 +355,12 @@ def create_client(
     Note: Authentication is handled by start.bat/start.sh before this runs.
     The Claude SDK auto-detects credentials from the Claude CLI configuration
     """
+    # Cache UI config once to avoid repeated file reads
+    # This is used for both allowed_tools and MCP server configuration
+    ui_mcp_disabled = os.getenv("DISABLE_UI_MCP", "").lower() == "true"
+    ui_config = None if ui_mcp_disabled else get_ui_config_from_spec(project_dir)
+    has_ui_mcp = ui_config is not None and ui_config.get("has_mcp", False)
+
     # Select the feature MCP tools appropriate for this agent type
     feature_tools_map = {
         "coding": CODING_AGENT_TOOLS,
@@ -381,10 +387,8 @@ def create_client(
 
     # Add UI MCP tools if the project uses a library with MCP support
     # UI MCP is available in both standard and YOLO mode
-    if os.getenv("DISABLE_UI_MCP", "").lower() != "true":
-        ui_config = get_ui_config_from_spec(project_dir)
-        if ui_config and ui_config.get("has_mcp"):
-            allowed_tools.extend(UI_MCP_TOOLS)
+    if has_ui_mcp:
+        allowed_tools.extend(UI_MCP_TOOLS)
 
     # Build permissions list.
     # We permit ALL feature MCP tools at the security layer (so the MCP server
@@ -421,10 +425,8 @@ def create_client(
         permissions_list.extend(PLAYWRIGHT_TOOLS)
 
     # Add UI MCP tools to permissions if available
-    if os.getenv("DISABLE_UI_MCP", "").lower() != "true":
-        ui_config = get_ui_config_from_spec(project_dir)
-        if ui_config and ui_config.get("has_mcp"):
-            permissions_list.extend(UI_MCP_TOOLS)
+    if has_ui_mcp:
+        permissions_list.extend(UI_MCP_TOOLS)
 
     # Create comprehensive security settings
     # Note: Using relative paths ("./**") restricts access to project directory
@@ -509,52 +511,50 @@ def create_client(
 
     # UI Components MCP server (available in both standard and YOLO mode)
     # Only added for libraries with MCP support (shadcn-ui, ark-ui)
-    if os.getenv("DISABLE_UI_MCP", "").lower() != "true":
-        ui_config = get_ui_config_from_spec(project_dir)
-        if ui_config and ui_config.get("has_mcp"):
-            library = ui_config.get("library", "")
-            framework = ui_config.get("framework", "react")
+    if has_ui_mcp and ui_config:
+        library = ui_config.get("library", "")
+        framework = ui_config.get("framework", "react")
 
-            try:
-                npx_cmd = get_npx_command()
+        try:
+            npx_cmd = get_npx_command()
 
-                if library == "shadcn-ui":
-                    # shadcn/ui MCP server for React components
-                    # Uses GitHub API - benefits from GITHUB_PERSONAL_ACCESS_TOKEN for rate limits
-                    ui_mcp_args = [
-                        "-y",
-                        "--prefer-offline",
-                        f"@jpisnice/shadcn-ui-mcp-server@{SHADCN_MCP_VERSION}",
-                        "--framework", framework,
-                    ]
-                    ui_mcp_env = {}
-                    github_token = os.getenv("GITHUB_PERSONAL_ACCESS_TOKEN")
-                    if github_token:
-                        ui_mcp_env["GITHUB_TOKEN"] = github_token
+            if library == "shadcn-ui":
+                # shadcn/ui MCP server for React components
+                # Uses GitHub API - benefits from GITHUB_PERSONAL_ACCESS_TOKEN for rate limits
+                ui_mcp_args = [
+                    "-y",
+                    "--prefer-offline",
+                    f"@jpisnice/shadcn-ui-mcp-server@{SHADCN_MCP_VERSION}",
+                    "--framework", framework,
+                ]
+                ui_mcp_config: dict = {
+                    "command": npx_cmd,
+                    "args": ui_mcp_args,
+                }
+                # Only add env if there are environment variables to pass
+                github_token = os.getenv("GITHUB_PERSONAL_ACCESS_TOKEN")
+                if github_token:
+                    ui_mcp_config["env"] = {"GITHUB_TOKEN": github_token}
 
-                    mcp_servers["ui_components"] = {
-                        "command": npx_cmd,
-                        "args": ui_mcp_args,
-                        "env": ui_mcp_env if ui_mcp_env else None,
-                    }
-                    print(f"   - UI MCP: shadcn/ui ({framework})")
+                mcp_servers["ui_components"] = ui_mcp_config
+                print(f"   - UI MCP: shadcn/ui ({framework})")
 
-                elif library == "ark-ui":
-                    # Ark UI MCP server for multi-framework headless components
-                    ui_mcp_args = [
-                        "-y",
-                        "--prefer-offline",
-                        f"@ark-ui/mcp@{ARK_MCP_VERSION}",
-                    ]
-                    mcp_servers["ui_components"] = {
-                        "command": npx_cmd,
-                        "args": ui_mcp_args,
-                    }
-                    print(f"   - UI MCP: Ark UI ({framework})")
+            elif library == "ark-ui":
+                # Ark UI MCP server for multi-framework headless components
+                ui_mcp_args = [
+                    "-y",
+                    "--prefer-offline",
+                    f"@ark-ui/mcp@{ARK_MCP_VERSION}",
+                ]
+                mcp_servers["ui_components"] = {
+                    "command": npx_cmd,
+                    "args": ui_mcp_args,
+                }
+                print(f"   - UI MCP: Ark UI ({framework})")
 
-            except RuntimeError as e:
-                # npx not found - graceful degradation
-                print(f"   - Warning: UI MCP disabled - {e}")
+        except RuntimeError as e:
+            # npx not found - graceful degradation
+            print(f"   - Warning: UI MCP disabled - {e}")
 
     # Build environment overrides for API endpoint configuration
     # Uses get_effective_sdk_env() which reads provider settings from the database,

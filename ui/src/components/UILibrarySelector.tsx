@@ -84,11 +84,16 @@ export function UILibrarySelector({
   }
 
   const isCompatible = (lib: UILibrary) => {
-    return lib.frameworks.includes(framework) || lib.id === 'none'
+    // 'none' is always compatible as it's a catch-all for any framework
+    return lib.frameworks.includes(framework)
   }
 
   return (
-    <div className={cn('grid grid-cols-1 gap-3 sm:grid-cols-2', className)}>
+    <div
+      className={cn('grid grid-cols-1 gap-3 sm:grid-cols-2', className)}
+      role="listbox"
+      aria-label="Select UI component library"
+    >
       {UI_LIBRARIES.map((lib) => {
         const selected = value === lib.id
         const compatible = isCompatible(lib)

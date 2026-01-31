@@ -158,8 +158,11 @@ def generate_design_tokens(project_dir: Path, style: str) -> Path | None:
         style: The visual style to use
 
     Returns:
-        Path to the generated tokens file, or None if style is default.
+        Path to the generated tokens file, or None if style is default/custom
+        or if file write fails.
     """
+    # "default" uses library defaults, no tokens needed
+    # "custom" means user will define their own tokens manually
     if style == "default" or style == "custom":
         return None
 
@@ -173,7 +176,11 @@ def generate_design_tokens(project_dir: Path, style: str) -> Path | None:
 
     # Write design tokens
     tokens_path = autocoder_dir / "design-tokens.json"
-    tokens_path.write_text(json.dumps(preset, indent=2), encoding="utf-8")
+    try:
+        tokens_path.write_text(json.dumps(preset, indent=2), encoding="utf-8")
+    except OSError:
+        # File write failed (permissions, disk full, etc.)
+        return None
 
     return tokens_path
 
