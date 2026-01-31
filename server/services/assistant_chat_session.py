@@ -7,6 +7,7 @@ The assistant can answer questions about the codebase and features
 but cannot modify any files.
 """
 
+import asyncio
 import json
 import logging
 import os
@@ -267,8 +268,14 @@ class AssistantChatSession:
         # This allows using alternative APIs (e.g., GLM via z.ai) that may not support Claude model names
         model = os.getenv("ANTHROPIC_DEFAULT_OPUS_MODEL", "claude-opus-4-5-20251101")
 
+        # Check that Claude CLI is available
+        if not system_cli:
+            logger.error("Claude CLI not found in PATH")
+            yield {"type": "error", "content": "Claude CLI not found. Please install it with: npm install -g @anthropic-ai/claude-code"}
+            return
+
         try:
-            logger.info("Creating ClaudeSDKClient...")
+            logger.info(f"Creating ClaudeSDKClient with CLI: {system_cli}")
             self.client = ClaudeSDKClient(
                 options=ClaudeAgentOptions(
                     model=model,
@@ -285,8 +292,14 @@ class AssistantChatSession:
                     env=sdk_env,
                 )
             )
-            logger.info("Entering Claude client context...")
-            await self.client.__aenter__()
+            logger.info("Entering Claude client context (spawning CLI subprocess)...")
+            # Add timeout for CLI startup - it shouldn't take more than 30 seconds
+            try:
+                await asyncio.wait_for(self.client.__aenter__(), timeout=30.0)
+            except asyncio.TimeoutError:
+                logger.error("Claude CLI startup timed out after 30 seconds")
+                yield {"type": "error", "content": "Claude CLI startup timed out. Please check that Claude is properly configured."}
+                return
             self._client_entered = True
             logger.info("Claude client ready")
         except Exception as e:
