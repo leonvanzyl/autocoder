@@ -546,9 +546,25 @@ def feature_create_bulk(
                                 "error": f"Feature at index {i} cannot depend on feature at index {idx} (forward reference not allowed)"
                             })
 
-            # Second pass: create all features
+            # Second pass: check for existing features to avoid duplicates
+            existing = set()
+            for f in session.query(Feature.category, Feature.name).all():
+                existing.add((f.category, f.name))
+
+            # Filter out duplicates from input batch
+            unique_features = []
+            skipped = 0
+            for feature_data in features:
+                key = (feature_data["category"], feature_data["name"])
+                if key in existing:
+                    skipped += 1
+                else:
+                    unique_features.append(feature_data)
+                    existing.add(key)  # Mark as will-exist for batch dedup
+
+            # Third pass: create unique features only
             created_features: list[Feature] = []
-            for i, feature_data in enumerate(features):
+            for i, feature_data in enumerate(unique_features):
                 db_feature = Feature(
                     priority=start_priority + i,
                     category=feature_data["category"],
@@ -564,9 +580,9 @@ def feature_create_bulk(
             # Flush to get IDs assigned
             session.flush()
 
-            # Third pass: resolve index-based dependencies to actual IDs
+            # Fourth pass: resolve index-based dependencies to actual IDs
             deps_count = 0
-            for i, feature_data in enumerate(features):
+            for i, feature_data in enumerate(unique_features):
                 indices = feature_data.get("depends_on_indices", [])
                 if indices:
                     # Convert indices to actual feature IDs
@@ -578,6 +594,7 @@ def feature_create_bulk(
 
         return json.dumps({
             "created": len(created_features),
+            "skipped_duplicates": skipped,
             "with_dependencies": deps_count
         })
     except Exception as e:
