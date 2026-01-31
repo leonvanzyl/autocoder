@@ -27,6 +27,7 @@ from progress import count_passing_tests, has_features, print_progress_summary, 
 from prompts import (
     copy_spec_to_project,
     get_coding_prompt,
+    get_doc_admin_prompt,
     get_initializer_prompt,
     get_single_feature_prompt,
     get_testing_prompt,
@@ -177,6 +178,14 @@ async def run_autonomous_agent(
     elif agent_type == "testing":
         print("Running as TESTING agent (regression testing)")
         print_progress_summary(project_dir)
+    elif agent_type == "doc-admin":
+        print("Running as DOC-ADMIN agent (documentation maintenance)")
+        print()
+        print("=" * 70)
+        print("  Maestro's Documentation Admin Assistant")
+        print("  Keeping docs in sync with the codebase")
+        print("=" * 70)
+        print()
     else:
         print("Running as CODING agent")
         print_progress_summary(project_dir)
@@ -188,8 +197,8 @@ async def run_autonomous_agent(
         iteration += 1
 
         # Check if all features are already complete (before starting a new session)
-        # Skip this check if running as initializer (needs to create features first)
-        if not is_initializer and iteration == 1:
+        # Skip this check for initializer (needs to create features first) and doc-admin (not feature-based)
+        if agent_type not in ("initializer", "doc-admin") and iteration == 1:
             passing, in_progress, total = count_passing_tests(project_dir)
             if total > 0 and passing == total:
                 print("\n" + "=" * 70)
@@ -223,6 +232,8 @@ async def run_autonomous_agent(
             prompt = get_initializer_prompt(project_dir)
         elif agent_type == "testing":
             prompt = get_testing_prompt(project_dir, testing_feature_id)
+        elif agent_type == "doc-admin":
+            prompt = get_doc_admin_prompt(project_dir)
         elif feature_id:
             # Single-feature mode (used by orchestrator for coding agents)
             prompt = get_single_feature_prompt(feature_id, project_dir, yolo_mode)

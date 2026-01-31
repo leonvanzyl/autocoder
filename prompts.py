@@ -74,6 +74,11 @@ def get_coding_prompt(project_dir: Path | None = None) -> str:
     return load_prompt("coding_prompt", project_dir)
 
 
+def get_doc_admin_prompt(project_dir: Path | None = None) -> str:
+    """Load the documentation admin prompt (project-specific if available)."""
+    return load_prompt("doc_admin_prompt", project_dir)
+
+
 def get_testing_prompt(project_dir: Path | None = None, testing_feature_id: int | None = None) -> str:
     """Load the testing agent prompt (project-specific if available).
 

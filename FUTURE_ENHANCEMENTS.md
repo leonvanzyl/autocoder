@@ -24,15 +24,15 @@ A running list of ideas and improvements to implement when time permits.
 
 ### [DONE] Documentation Admin Agent (Haiku)
 - Background agent using Claude Haiku (cheap/fast) for admin tasks
-- Implemented in `doc_admin_agent.py`
+- Integrated into main agent infrastructure (same pattern as initializer/coding/testing)
 - Responsibilities:
   - Keep CLAUDE.md and README.md up to date with code changes
   - Maintain CHANGELOG.md with feature additions/fixes
   - Sync documentation with actual behavior
   - Flag outdated documentation for review
 - Each project gets its own agent (not shared)
-- Maintains running log in `.doc_admin_log.jsonl`
-- Usage: `python doc_admin_agent.py --project-dir /path/to/project --assess`
+- Uses Claude Code authentication (no separate API key needed)
+- Usage: `python autonomous_agent_demo.py --project-dir /path/to/project --agent-type doc-admin --max-iterations 1`
 
 ---
 
