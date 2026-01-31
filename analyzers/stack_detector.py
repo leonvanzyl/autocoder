@@ -57,7 +57,7 @@ class StackDetector:
             project_dir: Path to the project directory to analyze
         """
         self.project_dir = Path(project_dir).resolve()
-        self._analyzers = []
+        self._analyzers: list = []
         self._load_analyzers()
 
     def _load_analyzers(self) -> None:

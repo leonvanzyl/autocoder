@@ -90,16 +90,16 @@ class PythonAnalyzer(BaseAnalyzer):
         # Check for common FastAPI patterns
         main_py = self.project_dir / "main.py"
         if main_py.exists():
-            content = self._read_file_safe(main_py)
-            if content and "from fastapi import" in content:
+            main_content = self._read_file_safe(main_py)
+            if main_content and "from fastapi import" in main_content:
                 self._detected_stack = "fastapi"
                 return True, 0.9
 
         # Check for Flask patterns
         app_py = self.project_dir / "app.py"
         if app_py.exists():
-            content = self._read_file_safe(app_py)
-            if content and "from flask import" in content:
+            app_content = self._read_file_safe(app_py)
+            if app_content and "from flask import" in app_content:
                 self._detected_stack = "flask"
                 return True, 0.85
 
