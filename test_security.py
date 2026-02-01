@@ -15,15 +15,21 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from security import (
+    _matches_mcp_tool_pattern,
     bash_security_hook,
     extract_commands,
     get_effective_commands,
+    get_effective_mcp_servers,
+    get_effective_mcp_tools,
     get_effective_pkill_processes,
+    get_mcp_servers_from_org_config,
+    get_mcp_servers_from_project_config,
     load_org_config,
     load_project_commands,
     matches_pattern,
     validate_chmod_command,
     validate_init_script,
+    validate_mcp_server,
     validate_pkill_command,
     validate_project_command,
 )
@@ -923,6 +929,405 @@ pkill_processes:
     return passed, failed
 
 
+def test_mcp_server_validation():
+    """Test MCP server configuration validation."""
+    print("\nTesting MCP server validation:\n")
+    passed = 0
+    failed = 0
+
+    # Test cases: (config, should_be_valid, description)
+    test_cases = [
+        # Valid configurations
+        (
+            {
+                "name": "test_server",
+                "command": "npx",
+                "args": ["@anthropic/mcp-server-test"],
+                "allowed_tools": ["read_file", "write_file"],
+            },
+            True,
+            "valid complete config",
+        ),
+        (
+            {
+                "name": "minimal",
+                "command": "python",
+                "allowed_tools": ["tool1"],
+            },
+            True,
+            "valid minimal config (no args/env)",
+        ),
+        (
+            {
+                "name": "with_env",
+                "command": "npx",
+                "args": ["@test/mcp"],
+                "env": {"VAR": "value", "ANOTHER": "test"},
+                "allowed_tools": ["tool1"],
+            },
+            True,
+            "valid config with env",
+        ),
+
+        # Invalid configurations
+        ({}, False, "empty config"),
+        ({"command": "npx", "allowed_tools": ["tool"]}, False, "missing name"),
+        ({"name": "test", "allowed_tools": ["tool"]}, False, "missing command"),
+        ({"name": "test", "command": "npx"}, False, "missing allowed_tools"),
+        ({"name": "", "command": "npx", "allowed_tools": ["tool"]}, False, "empty name"),
+        ({"name": "test", "command": "", "allowed_tools": ["tool"]}, False, "empty command"),
+        ({"name": "test", "command": "npx", "allowed_tools": []}, False, "empty allowed_tools"),
+        (
+            {"name": "test", "command": "npx", "args": "invalid", "allowed_tools": ["tool"]},
+            False,
+            "args not a list",
+        ),
+        (
+            {"name": "test", "command": "npx", "args": [123], "allowed_tools": ["tool"]},
+            False,
+            "args item not string",
+        ),
+        (
+            {"name": "test", "command": "npx", "env": "invalid", "allowed_tools": ["tool"]},
+            False,
+            "env not a dict",
+        ),
+        (
+            {"name": "test", "command": "npx", "env": {"key": 123}, "allowed_tools": ["tool"]},
+            False,
+            "env value not string",
+        ),
+        (
+            {"name": "test", "command": "npx", "allowed_tools": ["", "tool"]},
+            False,
+            "empty tool in allowed_tools",
+        ),
+    ]
+
+    for config, should_be_valid, description in test_cases:
+        valid, error = validate_mcp_server(config)
+        if valid == should_be_valid:
+            print(f"  PASS: {description}")
+            passed += 1
+        else:
+            expected = "valid" if should_be_valid else "invalid"
+            actual = "valid" if valid else "invalid"
+            print(f"  FAIL: {description}")
+            print(f"         Expected: {expected}, Got: {actual}")
+            if error:
+                print(f"         Error: {error}")
+            failed += 1
+
+    return passed, failed
+
+
+def test_mcp_tool_pattern_matching():
+    """Test MCP tool pattern matching for blocked tools."""
+    print("\nTesting MCP tool pattern matching:\n")
+    passed = 0
+    failed = 0
+
+    # Test cases: (tool_name, pattern, server_name, should_match, description)
+    test_cases = [
+        # Exact matches
+        ("mcp__filesystem__read_file", "filesystem__read_file", "filesystem", True, "short pattern match"),
+        ("mcp__filesystem__read_file", "mcp__filesystem__read_file", "filesystem", True, "full pattern match"),
+
+        # Wildcard matches
+        ("mcp__filesystem__read_file", "filesystem__*", "filesystem", True, "wildcard matches read_file"),
+        ("mcp__filesystem__write_file", "filesystem__*", "filesystem", True, "wildcard matches write_file"),
+        ("mcp__filesystem__delete_file", "mcp__filesystem__*", "filesystem", True, "full wildcard pattern"),
+
+        # Non-matches
+        ("mcp__filesystem__read_file", "other__read_file", "filesystem", False, "different server"),
+        ("mcp__filesystem__read_file", "filesystem__write_file", "filesystem", False, "different tool"),
+        ("mcp__memory__store", "filesystem__*", "memory", False, "wildcard wrong server"),
+    ]
+
+    for tool_name, pattern, server_name, should_match, description in test_cases:
+        result = _matches_mcp_tool_pattern(tool_name, pattern, server_name)
+        if result == should_match:
+            print(f"  PASS: {description}")
+            passed += 1
+        else:
+            expected = "match" if should_match else "no match"
+            actual = "match" if result else "no match"
+            print(f"  FAIL: {description}")
+            print(f"         Tool: {tool_name}, Pattern: {pattern}")
+            print(f"         Expected: {expected}, Got: {actual}")
+            failed += 1
+
+    return passed, failed
+
+
+def test_mcp_server_config_loading():
+    """Test MCP server configuration loading from org and project configs."""
+    print("\nTesting MCP server config loading:\n")
+    passed = 0
+    failed = 0
+
+    # Test 1: Org config with MCP servers
+    with tempfile.TemporaryDirectory() as tmphome:
+        with temporary_home(tmphome):
+            org_dir = Path(tmphome) / ".autocoder"
+            org_dir.mkdir()
+            org_config_path = org_dir / "config.yaml"
+
+            org_config_path.write_text("""version: 1
+mcp_servers:
+  - name: test_server
+    command: npx
+    args:
+      - "@test/mcp"
+    allowed_tools:
+      - tool1
+      - tool2
+blocked_mcp_tools:
+  - other__dangerous_tool
+""")
+
+            servers, blocked = get_mcp_servers_from_org_config()
+
+            if len(servers) == 1 and servers[0]["name"] == "test_server":
+                print("  PASS: Org MCP servers loaded correctly")
+                passed += 1
+            else:
+                print(f"  FAIL: Org MCP servers not loaded correctly: {servers}")
+                failed += 1
+
+            if "other__dangerous_tool" in blocked:
+                print("  PASS: Org blocked_mcp_tools loaded correctly")
+                passed += 1
+            else:
+                print(f"  FAIL: Org blocked_mcp_tools not loaded correctly: {blocked}")
+                failed += 1
+
+    # Test 2: Project config with MCP servers
+    with tempfile.TemporaryDirectory() as tmpproject:
+        project_dir = Path(tmpproject)
+        autocoder_dir = project_dir / ".autocoder"
+        autocoder_dir.mkdir()
+
+        config_path = autocoder_dir / "allowed_commands.yaml"
+        config_path.write_text("""version: 1
+commands: []
+mcp_servers:
+  - name: project_server
+    command: python
+    args:
+      - "${PROJECT_DIR}/tools/mcp.py"
+    env:
+      MY_VAR: "${HOME}/data"
+    allowed_tools:
+      - my_tool
+""")
+
+        servers = get_mcp_servers_from_project_config(project_dir)
+
+        if len(servers) == 1 and servers[0]["name"] == "project_server":
+            print("  PASS: Project MCP servers loaded correctly")
+            passed += 1
+        else:
+            print(f"  FAIL: Project MCP servers not loaded correctly: {servers}")
+            failed += 1
+
+        if servers[0].get("env", {}).get("MY_VAR") == "${HOME}/data":
+            print("  PASS: Project MCP server env preserved (substitution happens in client.py)")
+            passed += 1
+        else:
+            print(f"  FAIL: Project MCP server env not preserved: {servers[0]}")
+            failed += 1
+
+    # Test 3: Invalid MCP server config is rejected
+    with tempfile.TemporaryDirectory() as tmphome:
+        with temporary_home(tmphome):
+            org_dir = Path(tmphome) / ".autocoder"
+            org_dir.mkdir()
+            org_config_path = org_dir / "config.yaml"
+
+            org_config_path.write_text("""version: 1
+mcp_servers:
+  - name: invalid_server
+    command: npx
+    # Missing required allowed_tools
+""")
+
+            servers, _ = get_mcp_servers_from_org_config()
+
+            if len(servers) == 0:
+                print("  PASS: Invalid MCP server config rejected")
+                passed += 1
+            else:
+                print(f"  FAIL: Invalid MCP server config should be rejected: {servers}")
+                failed += 1
+
+    return passed, failed
+
+
+def test_mcp_hierarchy_resolution():
+    """Test MCP server hierarchy resolution (org + project)."""
+    print("\nTesting MCP hierarchy resolution:\n")
+    passed = 0
+    failed = 0
+
+    with tempfile.TemporaryDirectory() as tmphome:
+        with tempfile.TemporaryDirectory() as tmpproject:
+            with temporary_home(tmphome):
+                # Set up org config
+                org_dir = Path(tmphome) / ".autocoder"
+                org_dir.mkdir()
+                org_config_path = org_dir / "config.yaml"
+
+                org_config_path.write_text("""version: 1
+mcp_servers:
+  - name: org_server
+    command: npx
+    args: ["@org/mcp"]
+    allowed_tools:
+      - org_tool
+  - name: shared_server
+    command: org_cmd
+    allowed_tools:
+      - org_version_tool
+blocked_mcp_tools:
+  - org_server__blocked_tool
+""")
+
+                # Set up project config
+                project_dir = Path(tmpproject)
+                autocoder_dir = project_dir / ".autocoder"
+                autocoder_dir.mkdir()
+
+                config_path = autocoder_dir / "allowed_commands.yaml"
+                config_path.write_text("""version: 1
+commands: []
+mcp_servers:
+  - name: project_server
+    command: python
+    allowed_tools:
+      - project_tool
+  - name: shared_server
+    command: project_cmd
+    allowed_tools:
+      - project_version_tool
+""")
+
+                # Test get_effective_mcp_servers
+                servers, blocked_tools = get_effective_mcp_servers(project_dir)
+                server_names = {s["name"] for s in servers}
+
+                # Should have org_server, project_server, and shared_server (project version)
+                if "org_server" in server_names and "project_server" in server_names:
+                    print("  PASS: Both org and project servers included")
+                    passed += 1
+                else:
+                    print(f"  FAIL: Expected org_server and project_server in {server_names}")
+                    failed += 1
+
+                # shared_server should use project version (project overrides org)
+                shared = next((s for s in servers if s["name"] == "shared_server"), None)
+                if shared and shared["command"] == "project_cmd":
+                    print("  PASS: Project overrides org for same server name")
+                    passed += 1
+                else:
+                    print(f"  FAIL: shared_server should use project_cmd: {shared}")
+                    failed += 1
+
+                if "org_server__blocked_tool" in blocked_tools:
+                    print("  PASS: Org blocked_mcp_tools preserved")
+                    passed += 1
+                else:
+                    print(f"  FAIL: Expected org_server__blocked_tool in {blocked_tools}")
+                    failed += 1
+
+                # Test get_effective_mcp_tools
+                allowed_tools, permissions = get_effective_mcp_tools(servers, blocked_tools)
+
+                # Check that org_tool is in allowed list
+                if "mcp__org_server__org_tool" in allowed_tools:
+                    print("  PASS: Org server tools included")
+                    passed += 1
+                else:
+                    print(f"  FAIL: Expected mcp__org_server__org_tool in {allowed_tools}")
+                    failed += 1
+
+                # Check that project_tool is in allowed list
+                if "mcp__project_server__project_tool" in allowed_tools:
+                    print("  PASS: Project server tools included")
+                    passed += 1
+                else:
+                    print(f"  FAIL: Expected mcp__project_server__project_tool in {allowed_tools}")
+                    failed += 1
+
+    return passed, failed
+
+
+def test_mcp_blocked_tools_enforcement():
+    """Test that org-level blocked MCP tools are enforced."""
+    print("\nTesting MCP blocked tools enforcement:\n")
+    passed = 0
+    failed = 0
+
+    # Create a server config with some tools
+    servers = [
+        {
+            "name": "filesystem",
+            "command": "npx",
+            "allowed_tools": ["read_file", "write_file", "delete_file"],
+        }
+    ]
+
+    # Block write and delete
+    blocked_tools = {"filesystem__write_file", "filesystem__delete_file"}
+
+    allowed_tools, _ = get_effective_mcp_tools(servers, blocked_tools)
+
+    # read_file should be allowed
+    if "mcp__filesystem__read_file" in allowed_tools:
+        print("  PASS: Unblocked tool (read_file) is allowed")
+        passed += 1
+    else:
+        print(f"  FAIL: read_file should be allowed: {allowed_tools}")
+        failed += 1
+
+    # write_file should be blocked
+    if "mcp__filesystem__write_file" not in allowed_tools:
+        print("  PASS: Blocked tool (write_file) is excluded")
+        passed += 1
+    else:
+        print(f"  FAIL: write_file should be blocked: {allowed_tools}")
+        failed += 1
+
+    # delete_file should be blocked
+    if "mcp__filesystem__delete_file" not in allowed_tools:
+        print("  PASS: Blocked tool (delete_file) is excluded")
+        passed += 1
+    else:
+        print(f"  FAIL: delete_file should be blocked: {allowed_tools}")
+        failed += 1
+
+    # Test wildcard blocking
+    servers2 = [
+        {
+            "name": "dangerous",
+            "command": "danger",
+            "allowed_tools": ["tool1", "tool2", "tool3"],
+        }
+    ]
+    blocked_wildcard = {"dangerous__*"}
+
+    allowed_tools2, _ = get_effective_mcp_tools(servers2, blocked_wildcard)
+
+    if len([t for t in allowed_tools2 if "dangerous" in t]) == 0:
+        print("  PASS: Wildcard blocks all tools from server")
+        passed += 1
+    else:
+        print(f"  FAIL: Wildcard should block all tools: {allowed_tools2}")
+        failed += 1
+
+    return passed, failed
+
+
 def main():
     print("=" * 70)
     print("  SECURITY HOOK TESTS")
@@ -990,6 +1395,31 @@ def main():
     pkill_passed, pkill_failed = test_pkill_extensibility()
     passed += pkill_passed
     failed += pkill_failed
+
+    # Test MCP server validation
+    mcp_val_passed, mcp_val_failed = test_mcp_server_validation()
+    passed += mcp_val_passed
+    failed += mcp_val_failed
+
+    # Test MCP tool pattern matching
+    mcp_pattern_passed, mcp_pattern_failed = test_mcp_tool_pattern_matching()
+    passed += mcp_pattern_passed
+    failed += mcp_pattern_failed
+
+    # Test MCP server config loading
+    mcp_load_passed, mcp_load_failed = test_mcp_server_config_loading()
+    passed += mcp_load_passed
+    failed += mcp_load_failed
+
+    # Test MCP hierarchy resolution
+    mcp_hier_passed, mcp_hier_failed = test_mcp_hierarchy_resolution()
+    passed += mcp_hier_passed
+    failed += mcp_hier_failed
+
+    # Test MCP blocked tools enforcement
+    mcp_block_passed, mcp_block_failed = test_mcp_blocked_tools_enforcement()
+    passed += mcp_block_passed
+    failed += mcp_block_failed
 
     # Commands that SHOULD be blocked
     # Note: blocklisted commands (sudo, shutdown, dd, aws) are tested in

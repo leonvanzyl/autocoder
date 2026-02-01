@@ -398,6 +398,61 @@ blocked_commands:
 - `examples/org_config.yaml` - Org config example (all commented by default)
 - `examples/README.md` - Comprehensive guide with use cases, testing, and troubleshooting
 
+#### Custom MCP Servers
+
+The agent supports adding custom MCP (Model Context Protocol) servers via configuration files. This allows extending the agent's capabilities with additional tools.
+
+**Configuration Locations:**
+- **Org-level**: `~/.autocoder/config.yaml` - Available to ALL projects
+- **Project-level**: `{project}/.autocoder/allowed_commands.yaml` - Project-specific
+
+**MCP Server Config Schema:**
+
+```yaml
+# ~/.autocoder/config.yaml (org-level)
+version: 1
+
+mcp_servers:
+  - name: filesystem
+    command: npx
+    args:
+      - "@anthropic/mcp-server-filesystem"
+      - "${PROJECT_DIR}"  # Variable substitution
+    env:
+      SOME_VAR: value
+    allowed_tools:  # REQUIRED - explicit list of tools to allow
+      - read_file
+      - list_directory
+
+# Org-level can block specific tools across ALL projects
+blocked_mcp_tools:
+  - filesystem__write_file    # Block write across all projects
+  - filesystem__delete_file
+```
+
+**Variable Substitution:**
+- `${PROJECT_DIR}` - Absolute path to project directory
+- `${HOME}` - User's home directory
+
+**Tool Naming Convention:**
+- MCP tools follow the pattern `mcp__{server}__{tool}`
+- Config uses short names: `allowed_tools: [read_file]`
+- Becomes: `mcp__filesystem__read_file`
+
+**Key Behaviors:**
+- `allowed_tools` is REQUIRED for each MCP server - must explicitly list tools
+- Org `blocked_mcp_tools` takes precedence - projects cannot allow blocked tools
+- Environment variables merge with parent environment
+- Project can override org MCP server by using the same name
+
+**Example Output:**
+
+```
+Created security settings at /path/to/project/.claude_settings.json
+   - MCP servers: playwright (browser), features (database), filesystem (custom)
+   - Blocked MCP tools (org): filesystem__write_file, filesystem__delete_file
+```
+
 ### Vertex AI Configuration (Optional)
 
 Run coding agents via Google Cloud Vertex AI:

@@ -92,6 +92,78 @@ blocked_commands: []
 
 
 # ==========================================
+# Custom MCP Servers
+# ==========================================
+# Configure additional MCP (Model Context Protocol) servers that will be
+# available to the agent in ALL projects.
+#
+# Each MCP server MUST specify:
+#   - name: Unique identifier for the server
+#   - command: Command to run (e.g., "npx", "python")
+#   - allowed_tools: REQUIRED list of tools to allow (explicit allowlist)
+#
+# Optional fields:
+#   - args: List of command arguments
+#   - env: Environment variables (merged with parent environment)
+#
+# Variable substitution is supported:
+#   - ${PROJECT_DIR} - Absolute path to current project directory
+#   - ${HOME} - User's home directory
+#
+# By default, no custom MCP servers are configured.
+
+mcp_servers: []
+
+  # Example: Filesystem MCP server (read-only)
+  # - name: filesystem
+  #   command: npx
+  #   args:
+  #     - "@anthropic/mcp-server-filesystem"
+  #     - "${PROJECT_DIR}"
+  #   allowed_tools:
+  #     - read_file
+  #     - list_directory
+  #     - search_files
+
+  # Example: Memory MCP server for persistent context
+  # - name: memory
+  #   command: npx
+  #   args:
+  #     - "@anthropic/mcp-server-memory"
+  #   env:
+  #     MEMORY_DIR: "${HOME}/.autocoder/memory"
+  #   allowed_tools:
+  #     - store_memory
+  #     - retrieve_memory
+  #     - search_memory
+
+
+# ==========================================
+# Blocked MCP Tools (Organization-Wide)
+# ==========================================
+# Tools listed here are BLOCKED across ALL projects.
+# Projects CANNOT override these blocks.
+#
+# Tool naming convention: {server}__{tool} or mcp__{server}__{tool}
+# Examples:
+#   - filesystem__write_file    (blocks filesystem server's write_file tool)
+#   - filesystem__delete_file   (blocks filesystem server's delete_file tool)
+#   - myserver__*               (blocks ALL tools from myserver - wildcard)
+#
+# By default, no tools are blocked.
+
+blocked_mcp_tools: []
+
+  # Block dangerous filesystem operations
+  # - filesystem__write_file
+  # - filesystem__delete_file
+  # - filesystem__move_file
+
+  # Block all tools from a specific server (wildcard)
+  # - dangerous_server__*
+
+
+# ==========================================
 # Global Settings (Phase 3 feature)
 # ==========================================
 # These settings control approval behavior when agents request

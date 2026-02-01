@@ -104,6 +104,53 @@ commands: []
 
 
 # ==========================================
+# Custom MCP Servers
+# ==========================================
+# Configure additional MCP (Model Context Protocol) servers for THIS PROJECT.
+# These are added to any org-level MCP servers defined in ~/.autocoder/config.yaml
+#
+# Each MCP server MUST specify:
+#   - name: Unique identifier for the server
+#   - command: Command to run (e.g., "npx", "python")
+#   - allowed_tools: REQUIRED list of tools to allow (explicit allowlist)
+#
+# Optional fields:
+#   - args: List of command arguments
+#   - env: Environment variables (merged with parent environment)
+#
+# Variable substitution is supported:
+#   - ${PROJECT_DIR} - Absolute path to current project directory
+#   - ${HOME} - User's home directory
+#
+# By default, no custom MCP servers are configured.
+
+mcp_servers: []
+
+  # Example: SQLite MCP server for this project's database
+  # - name: sqlite
+  #   command: npx
+  #   args:
+  #     - "@anthropic/mcp-server-sqlite"
+  #     - "${PROJECT_DIR}/data.db"
+  #   allowed_tools:
+  #     - read_query
+  #     - list_tables
+  #     - describe_table
+
+  # Example: Custom project-specific MCP server
+  # - name: my_project_tools
+  #   command: python
+  #   args:
+  #     - "${PROJECT_DIR}/tools/mcp_server.py"
+  #   env:
+  #     PROJECT_ROOT: "${PROJECT_DIR}"
+  #   allowed_tools:
+  #     - build_project
+  #     - run_tests
+  #     - deploy_staging
+
+
+# ==========================================
 # Notes and Best Practices
 # ==========================================
 #

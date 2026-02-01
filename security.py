@@ -11,9 +11,18 @@ import os
 import re
 import shlex
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional, TypedDict
 
 import yaml
+
+
+class MCPServerConfig(TypedDict, total=False):
+    """Configuration for a custom MCP server."""
+    name: str  # Required: unique identifier for the server
+    command: str  # Required: command to run (e.g., "npx", "python")
+    args: list[str]  # Optional: command arguments
+    env: dict[str, str]  # Optional: environment variables
+    allowed_tools: list[str]  # Required: explicit list of tools to allow
 
 # Logger for security-related events (fallback parsing, validation failures, etc.)
 logger = logging.getLogger(__name__)
@@ -835,6 +844,326 @@ def get_effective_pkill_processes(project_dir: Optional[Path]) -> set[str]:
                 processes |= {p for p in proj_processes if isinstance(p, str) and p.strip()}
 
     return processes
+
+
+# =============================================================================
+# MCP Server Configuration
+# =============================================================================
+
+
+def validate_mcp_server(server_config: dict, source: str = "config") -> tuple[bool, str]:
+    """
+    Validate a single MCP server configuration entry.
+
+    Args:
+        server_config: Dict with MCP server configuration
+        source: Description of where the config came from (for error messages)
+
+    Returns:
+        Tuple of (is_valid, error_message)
+    """
+    if not isinstance(server_config, dict):
+        return False, "MCP server config must be a dict"
+
+    # Validate name (required)
+    if "name" not in server_config:
+        return False, "MCP server must have 'name' field"
+    name = server_config["name"]
+    if not isinstance(name, str) or not name.strip():
+        return False, "MCP server name must be a non-empty string"
+
+    # Validate command (required)
+    if "command" not in server_config:
+        return False, f"MCP server '{name}' must have 'command' field"
+    command = server_config["command"]
+    if not isinstance(command, str) or not command.strip():
+        return False, f"MCP server '{name}' command must be a non-empty string"
+
+    # Validate args (optional, must be list of strings)
+    if "args" in server_config:
+        args = server_config["args"]
+        if not isinstance(args, list):
+            return False, f"MCP server '{name}' args must be a list"
+        for i, arg in enumerate(args):
+            if not isinstance(arg, str):
+                return False, f"MCP server '{name}' args[{i}] must be a string"
+
+    # Validate env (optional, must be dict of string keys and values)
+    if "env" in server_config:
+        env = server_config["env"]
+        if not isinstance(env, dict):
+            return False, f"MCP server '{name}' env must be a dict"
+        for key, value in env.items():
+            if not isinstance(key, str):
+                return False, f"MCP server '{name}' env key must be a string"
+            if not isinstance(value, str):
+                return False, f"MCP server '{name}' env['{key}'] must be a string"
+
+    # Validate allowed_tools (required, must be list of strings)
+    if "allowed_tools" not in server_config:
+        return False, f"MCP server '{name}' must have 'allowed_tools' field (explicit tool list required)"
+    allowed_tools = server_config["allowed_tools"]
+    if not isinstance(allowed_tools, list):
+        return False, f"MCP server '{name}' allowed_tools must be a list"
+    if len(allowed_tools) == 0:
+        return False, f"MCP server '{name}' allowed_tools cannot be empty"
+    for i, tool in enumerate(allowed_tools):
+        if not isinstance(tool, str) or not tool.strip():
+            return False, f"MCP server '{name}' allowed_tools[{i}] must be a non-empty string"
+
+    return True, ""
+
+
+def _validate_mcp_servers_list(
+    servers: Any,
+    config_path: Path,
+    max_servers: int = 20
+) -> Optional[list[dict]]:
+    """
+    Validate a list of MCP server configurations.
+
+    Args:
+        servers: The mcp_servers value from config (should be a list)
+        config_path: Path to config file (for error messages)
+        max_servers: Maximum number of servers allowed
+
+    Returns:
+        Validated list of server configs, or None if invalid
+    """
+    if not isinstance(servers, list):
+        logger.warning(f"Config at {config_path}: 'mcp_servers' must be a list")
+        return None
+
+    if len(servers) > max_servers:
+        logger.warning(
+            f"Config at {config_path} exceeds {max_servers} MCP server limit ({len(servers)} servers)"
+        )
+        return None
+
+    validated = []
+    for i, server in enumerate(servers):
+        valid, error = validate_mcp_server(server, str(config_path))
+        if not valid:
+            logger.warning(f"Config at {config_path}: mcp_servers[{i}] - {error}")
+            return None
+        validated.append(server)
+
+    return validated
+
+
+def _validate_blocked_mcp_tools(
+    tools: Any,
+    config_path: Path
+) -> Optional[list[str]]:
+    """
+    Validate blocked_mcp_tools list from org config.
+
+    Args:
+        tools: The blocked_mcp_tools value from config
+        config_path: Path to config file (for error messages)
+
+    Returns:
+        Validated list of blocked tool patterns, or None if invalid
+    """
+    if not isinstance(tools, list):
+        logger.warning(f"Config at {config_path}: 'blocked_mcp_tools' must be a list")
+        return None
+
+    validated = []
+    for i, tool in enumerate(tools):
+        if not isinstance(tool, str):
+            logger.warning(f"Config at {config_path}: blocked_mcp_tools[{i}] must be a string")
+            return None
+        tool = tool.strip()
+        if not tool:
+            logger.warning(f"Config at {config_path}: blocked_mcp_tools[{i}] cannot be empty")
+            return None
+        validated.append(tool)
+
+    return validated
+
+
+def get_mcp_servers_from_org_config() -> tuple[list[dict], set[str]]:
+    """
+    Load MCP server configurations from org-level config.
+
+    Returns:
+        Tuple of (mcp_servers, blocked_mcp_tools)
+    """
+    org_config = load_org_config()
+    if not org_config:
+        return [], set()
+
+    mcp_servers = []
+    blocked_tools: set[str] = set()
+
+    # Load mcp_servers
+    if "mcp_servers" in org_config:
+        config_path = get_org_config_path()
+        validated_servers = _validate_mcp_servers_list(
+            org_config["mcp_servers"],
+            config_path,
+            max_servers=20
+        )
+        if validated_servers:
+            mcp_servers = validated_servers
+
+    # Load blocked_mcp_tools
+    if "blocked_mcp_tools" in org_config:
+        config_path = get_org_config_path()
+        validated_tools = _validate_blocked_mcp_tools(
+            org_config["blocked_mcp_tools"],
+            config_path
+        )
+        if validated_tools:
+            blocked_tools = set(validated_tools)
+
+    return mcp_servers, blocked_tools
+
+
+def get_mcp_servers_from_project_config(project_dir: Path) -> list[dict]:
+    """
+    Load MCP server configurations from project-level config.
+
+    Args:
+        project_dir: Path to the project directory
+
+    Returns:
+        List of validated MCP server configurations
+    """
+    project_config = load_project_commands(project_dir)
+    if not project_config:
+        return []
+
+    if "mcp_servers" not in project_config:
+        return []
+
+    config_path = project_dir.resolve() / ".autocoder" / "allowed_commands.yaml"
+    validated = _validate_mcp_servers_list(
+        project_config["mcp_servers"],
+        config_path,
+        max_servers=20
+    )
+
+    return validated if validated else []
+
+
+def get_effective_mcp_servers(project_dir: Optional[Path]) -> tuple[list[dict], set[str]]:
+    """
+    Get effective MCP server configurations after hierarchy resolution.
+
+    Hierarchy:
+    1. Org MCP servers - available to all projects with their allowed_tools
+    2. Org blocked_mcp_tools - tools blocked across ALL projects
+    3. Project MCP servers - project-specific additions
+
+    Args:
+        project_dir: Path to the project directory, or None
+
+    Returns:
+        Tuple of (mcp_servers, blocked_mcp_tools)
+        - mcp_servers: List of all MCP server configs (org + project)
+        - blocked_mcp_tools: Set of tool patterns blocked at org level
+    """
+    # Get org-level servers and blocked tools
+    org_servers, blocked_tools = get_mcp_servers_from_org_config()
+
+    # Get project-level servers
+    project_servers = []
+    if project_dir:
+        project_servers = get_mcp_servers_from_project_config(project_dir)
+
+    # Merge servers (org first, then project)
+    # Use dict to prevent duplicate server names (project can override org)
+    servers_by_name: dict[str, dict] = {}
+    for server in org_servers:
+        servers_by_name[server["name"]] = server
+    for server in project_servers:
+        servers_by_name[server["name"]] = server
+
+    return list(servers_by_name.values()), blocked_tools
+
+
+def get_effective_mcp_tools(
+    mcp_servers: list[dict],
+    blocked_tools: set[str]
+) -> tuple[list[str], list[str]]:
+    """
+    Get effective allowed and blocked MCP tools from server configurations.
+
+    Tool naming convention: mcp__{server}__{tool}
+    Config uses short names: allowed_tools: [read_file]
+    Becomes: mcp__filesystem__read_file
+
+    Args:
+        mcp_servers: List of MCP server configurations
+        blocked_tools: Set of tool patterns blocked at org level
+
+    Returns:
+        Tuple of (allowed_tools, permissions)
+        - allowed_tools: List of full tool names (mcp__server__tool format)
+        - permissions: List of permission strings for the allowed tools
+    """
+    allowed_tools: list[str] = []
+    permissions: list[str] = []
+
+    for server in mcp_servers:
+        server_name = server["name"]
+        server_tools = server.get("allowed_tools", [])
+
+        for tool in server_tools:
+            # Build full tool name
+            full_tool_name = f"mcp__{server_name}__{tool}"
+
+            # Check if tool is blocked (exact match or pattern)
+            is_blocked = False
+            for blocked_pattern in blocked_tools:
+                if _matches_mcp_tool_pattern(full_tool_name, blocked_pattern, server_name):
+                    is_blocked = True
+                    logger.debug(
+                        f"MCP tool '{full_tool_name}' blocked by pattern '{blocked_pattern}'"
+                    )
+                    break
+
+            if not is_blocked:
+                allowed_tools.append(full_tool_name)
+                permissions.append(full_tool_name)
+
+    return allowed_tools, permissions
+
+
+def _matches_mcp_tool_pattern(tool_name: str, pattern: str, server_name: str) -> bool:
+    """
+    Check if an MCP tool matches a blocked pattern.
+
+    Patterns can be:
+    - Full name: "mcp__filesystem__write_file"
+    - Short name with server: "filesystem__write_file"
+    - Wildcard: "filesystem__*" (blocks all tools from server)
+
+    Args:
+        tool_name: Full tool name (mcp__server__tool)
+        pattern: Blocked pattern to check against
+        server_name: The server name for context
+
+    Returns:
+        True if tool matches the blocked pattern
+    """
+    # Normalize pattern (add mcp__ prefix if not present)
+    if not pattern.startswith("mcp__"):
+        pattern = f"mcp__{pattern}"
+
+    # Exact match
+    if tool_name == pattern:
+        return True
+
+    # Wildcard match (e.g., mcp__filesystem__* or filesystem__*)
+    if pattern.endswith("__*"):
+        prefix = pattern[:-1]  # Remove trailing *
+        if tool_name.startswith(prefix):
+            return True
+
+    return False
 
 
 def is_command_allowed(command: str, allowed_commands: set[str]) -> bool:

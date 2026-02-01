@@ -11,12 +11,19 @@ import re
 import shutil
 import sys
 from pathlib import Path
+from typing import Any
 
 from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
 from claude_agent_sdk.types import HookContext, HookInput, HookMatcher, SyncHookJSONOutput
 from dotenv import load_dotenv
 
-from security import SENSITIVE_DIRECTORIES, bash_security_hook
+from env_constants import API_ENV_VARS
+from security import (
+    SENSITIVE_DIRECTORIES,
+    bash_security_hook,
+    get_effective_mcp_servers,
+    get_effective_mcp_tools,
+)
 
 # Load environment variables from .env file if present
 load_dotenv()
@@ -182,6 +189,37 @@ def get_extra_read_paths() -> list[Path]:
     return validated_paths
 
 
+def substitute_variables(value: str, project_dir: Path) -> str:
+    """
+    Substitute variables in a configuration value.
+
+    Supported variables:
+    - ${PROJECT_DIR} - Absolute path to project directory
+    - ${HOME} - User's home directory
+
+    Args:
+        value: String value that may contain variables
+        project_dir: Path to the project directory
+
+    Returns:
+        String with variables substituted
+    """
+    result = value
+    result = result.replace("${PROJECT_DIR}", str(project_dir.resolve()))
+    result = result.replace("${HOME}", str(Path.home()))
+    return result
+
+
+def substitute_variables_in_list(values: list[str], project_dir: Path) -> list[str]:
+    """Substitute variables in a list of strings."""
+    return [substitute_variables(v, project_dir) for v in values]
+
+
+def substitute_variables_in_dict(values: dict[str, str], project_dir: Path) -> dict[str, str]:
+    """Substitute variables in a dict of strings."""
+    return {k: substitute_variables(v, project_dir) for k, v in values.items()}
+
+
 # Per-agent-type MCP tool lists.
 # Only expose the tools each agent type actually needs, reducing tool schema
 # overhead and preventing agents from calling tools meant for other roles.
@@ -327,11 +365,20 @@ def create_client(
     }
     max_turns = max_turns_map.get(agent_type, 300)
 
+    # Load user-configured MCP servers from org and project configs
+    user_mcp_servers, blocked_mcp_tools = get_effective_mcp_servers(project_dir)
+    user_mcp_tools, user_mcp_permissions = get_effective_mcp_tools(
+        user_mcp_servers, blocked_mcp_tools
+    )
+
     # Build allowed tools list based on mode and agent type.
     # In YOLO mode, exclude Playwright tools for faster prototyping.
     allowed_tools = [*BUILTIN_TOOLS, *feature_tools]
     if not yolo_mode:
         allowed_tools.extend(PLAYWRIGHT_TOOLS)
+
+    # Add user-configured MCP tools
+    allowed_tools.extend(user_mcp_tools)
 
     # Build permissions list.
     # We permit ALL feature MCP tools at the security layer (so the MCP server
@@ -367,6 +414,9 @@ def create_client(
         # Allow Playwright MCP tools for browser automation (standard mode only)
         permissions_list.extend(PLAYWRIGHT_TOOLS)
 
+    # Add user-configured MCP tool permissions
+    permissions_list.extend(user_mcp_permissions)
+
     # Create comprehensive security settings
     # Note: Using relative paths ("./**") restricts access to project directory
     # since cwd is set to project_dir
@@ -394,10 +444,22 @@ def create_client(
     if extra_read_paths:
         print(f"   - Extra read paths (validated): {', '.join(str(p) for p in extra_read_paths)}")
     print("   - Bash commands restricted to allowlist (see security.py)")
-    if yolo_mode:
+
+    # Report MCP servers
+    builtin_servers = ["features (database)"]
+    if not yolo_mode:
+        builtin_servers.insert(0, "playwright (browser)")
+    user_server_names = [s["name"] for s in user_mcp_servers]
+    if user_server_names:
+        all_servers = builtin_servers + [f"{name} (custom)" for name in user_server_names]
+        print(f"   - MCP servers: {', '.join(all_servers)}")
+    elif yolo_mode:
         print("   - MCP servers: features (database) - YOLO MODE (no Playwright)")
     else:
         print("   - MCP servers: playwright (browser), features (database)")
+
+    if blocked_mcp_tools:
+        print(f"   - Blocked MCP tools (org): {', '.join(sorted(blocked_mcp_tools))}")
     print("   - Project settings enabled (skills, commands, CLAUDE.md)")
     print()
 
@@ -450,6 +512,35 @@ def create_client(
                 "NODE_COMPILE_CACHE": "",  # Disable V8 compile caching to prevent .node file accumulation in %TEMP%
             },
         }
+
+    # Add user-configured MCP servers from org and project configs
+    for server_config in user_mcp_servers:
+        server_name = server_config["name"]
+
+        # Skip if server name conflicts with built-in servers
+        if server_name in mcp_servers:
+            print(f"   - Warning: Custom MCP server '{server_name}' conflicts with built-in, skipping")
+            continue
+
+        # Build server entry with variable substitution
+        server_entry: dict[str, Any] = {
+            "command": substitute_variables(server_config["command"], project_dir),
+        }
+
+        # Add args with variable substitution
+        if "args" in server_config:
+            server_entry["args"] = substitute_variables_in_list(
+                server_config["args"], project_dir
+            )
+
+        # Add env with variable substitution, merging with parent environment
+        if "env" in server_config:
+            server_entry["env"] = substitute_variables_in_dict(
+                server_config["env"], project_dir
+            )
+
+        mcp_servers[server_name] = server_entry
+        print(f"   - Custom MCP server '{server_name}': {server_config['command']}")
 
     # Build environment overrides for API endpoint configuration
     # Uses get_effective_sdk_env() which reads provider settings from the database,
