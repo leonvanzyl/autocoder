@@ -156,41 +156,35 @@ tmpclaude-*-cwd
 ui/test-results/
 
 # ===================
-# Autocoder Runtime Files
+# Autocoder Directory (.autocoder/)
 # ===================
-# These are created when autocoder runs and should not be committed
+# All autocoder files now live in .autocoder/ to keep project root clean
+# For autocoder's own repo, ignore the whole directory (runtime data)
+# For user projects, they may want to track .autocoder/prompts/
 
-# Orchestrator state files
+# Ignore entire .autocoder directory (autocoder working on itself)
+.autocoder/
+
+# Legacy locations (before consolidation) - ignore if they exist
 .agent.control
 .agent.orchestrator_status
 .progress_cache
-
-# SQLite databases (features, deployments, etc.)
 features.db
 features.db-shm
 features.db-wal
 deployments.db
-
-# Project-specific autocoder config (when running on itself)
-.autocoder/
-
-# Claude settings
 .claude_settings.json
 
 # Worktree directory (agent work isolation)
-# Note: ~/.autocoder/worktrees/ is outside repo, but just in case
 worktrees/
 
 # ===================
 # Autocoder Temp/Working Files
 # ===================
-# Temporary files created during agent runs - not project config
+# Temporary files created during agent runs
 
-# Feature generation temp files
 features_batch.json
 generate_features.py
-
-# Reference docs (manually managed, not part of core)
 Reference_Docs_Prompts_CMDs/
 
 # NOTE: prompts/ is NOT ignored - it's core project config that defines
