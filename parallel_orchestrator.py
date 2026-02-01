@@ -214,6 +214,34 @@ class ParallelOrchestrator:
         """Get a new database session."""
         return self._session_maker()
 
+    def _clear_features_for_reinit(self):
+        """Clear all features from the database for a clean re-initialization.
+
+        This is called when we detect incomplete initialization (e.g., init was
+        interrupted). Rather than trying to add only missing features (which would
+        be complex and error-prone), we clear everything and start fresh.
+        """
+        session = self.get_session()
+        try:
+            # Count before delete
+            count = session.query(Feature).count()
+            debug_log.log("INIT", f"Clearing {count} features for re-initialization")
+            print(f"[INIT] Clearing {count} existing features for fresh start...", flush=True)
+
+            # Delete all features
+            session.query(Feature).delete()
+            session.commit()
+
+            debug_log.log("INIT", "Features cleared successfully")
+            print("[INIT] Features cleared. Database is ready for fresh initialization.", flush=True)
+        except Exception as e:
+            session.rollback()
+            debug_log.log("INIT", f"Error clearing features: {e}")
+            print(f"[INIT] ERROR clearing features: {e}", flush=True)
+            raise
+        finally:
+            session.close()
+
     def _load_pause_on_error_setting(self) -> bool:
         """Load the pauseOnError setting from the settings hierarchy."""
         try:
@@ -1175,14 +1203,29 @@ class ParallelOrchestrator:
         if needs_initialization(self.main_project_dir):
             actual = get_actual_feature_count(self.main_project_dir)
             expected = get_expected_feature_count(self.main_project_dir)
+
+            debug_log.section("INITIALIZATION CHECK")
+            debug_log.log("INIT", "Initialization needed",
+                actual_count=actual,
+                expected_count=expected,
+                threshold=int((expected or 0) * 0.9) if expected else "N/A",
+                main_project_dir=str(self.main_project_dir),
+                project_dir=str(self.project_dir))
+
             print("=" * 70, flush=True)
             print("  INITIALIZATION PHASE", flush=True)
             print("=" * 70, flush=True)
             if actual == 0:
                 print("No features found - running initializer agent first...", flush=True)
+                debug_log.log("INIT", "Fresh initialization - no existing features")
             else:
                 print(f"Incomplete initialization detected ({actual}/{expected} features)", flush=True)
-                print("Re-running initializer to create remaining features...", flush=True)
+                print("Clearing existing features and re-running initializer...", flush=True)
+                debug_log.log("INIT", f"Incomplete initialization - clearing {actual} features for fresh start")
+
+                # Clear existing features for a clean re-init
+                self._clear_features_for_reinit()
+
             print("NOTE: This may take 10-20+ minutes to generate features.", flush=True)
             print(flush=True)
 
