@@ -17,6 +17,83 @@ WEBHOOK_URL = os.environ.get("PROGRESS_N8N_WEBHOOK_URL")
 PROGRESS_CACHE_FILE = ".progress_cache"
 
 
+def get_expected_feature_count(project_dir: Path) -> int | None:
+    """
+    Read the expected feature count from the app_spec.txt file.
+
+    Returns:
+        The expected feature count from <feature_count> tag, or None if not found.
+    """
+    import re
+
+    spec_file = project_dir / "prompts" / "app_spec.txt"
+    if not spec_file.exists():
+        return None
+
+    try:
+        content = spec_file.read_text()
+        # Look for <feature_count>123</feature_count>
+        match = re.search(r'<feature_count>\s*(\d+)\s*</feature_count>', content)
+        if match:
+            return int(match.group(1))
+        return None
+    except Exception:
+        return None
+
+
+def get_actual_feature_count(project_dir: Path) -> int:
+    """
+    Get the actual number of features in the database.
+
+    Returns:
+        The count of features, or 0 if database doesn't exist.
+    """
+    import sqlite3
+
+    db_file = project_dir / "features.db"
+    if not db_file.exists():
+        return 0
+
+    try:
+        conn = sqlite3.connect(db_file)
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM features")
+        count = cursor.fetchone()[0]
+        conn.close()
+        return count
+    except Exception:
+        return 0
+
+
+def needs_initialization(project_dir: Path) -> bool:
+    """
+    Check if the project needs initialization.
+
+    Initialization is needed if:
+    - No features exist, OR
+    - Feature count is less than expected (incomplete initialization)
+
+    This prevents the orchestrator from skipping init when only partial
+    features were created (e.g., if init was interrupted).
+    """
+    actual_count = get_actual_feature_count(project_dir)
+
+    # No features = definitely needs init
+    if actual_count == 0:
+        return True
+
+    # Check expected count from spec
+    expected_count = get_expected_feature_count(project_dir)
+    if expected_count is not None:
+        # If actual is significantly less than expected, needs re-init
+        # Allow some tolerance (90% threshold) in case a few features were skipped
+        threshold = int(expected_count * 0.9)
+        if actual_count < threshold:
+            return True
+
+    return False
+
+
 def has_features(project_dir: Path) -> bool:
     """
     Check if the project has features in the database.

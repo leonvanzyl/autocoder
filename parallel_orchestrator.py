@@ -29,7 +29,7 @@ from typing import Callable, Literal
 
 from api.database import Feature, create_database
 from api.dependency_resolver import are_dependencies_satisfied, compute_scheduling_scores
-from progress import has_features
+from progress import get_actual_feature_count, get_expected_feature_count, needs_initialization
 from server.utils.process_utils import kill_process_tree
 
 # Root directory of autocoder (where this script and autonomous_agent_demo.py live)
@@ -1171,18 +1171,24 @@ class ParallelOrchestrator:
         print("=" * 70, flush=True)
         print(flush=True)
 
-        # Phase 1: Check if initialization needed
-        if not has_features(self.project_dir):
+        # Phase 1: Check if initialization needed (checks expected vs actual feature count)
+        if needs_initialization(self.main_project_dir):
+            actual = get_actual_feature_count(self.main_project_dir)
+            expected = get_expected_feature_count(self.main_project_dir)
             print("=" * 70, flush=True)
             print("  INITIALIZATION PHASE", flush=True)
             print("=" * 70, flush=True)
-            print("No features found - running initializer agent first...", flush=True)
+            if actual == 0:
+                print("No features found - running initializer agent first...", flush=True)
+            else:
+                print(f"Incomplete initialization detected ({actual}/{expected} features)", flush=True)
+                print("Re-running initializer to create remaining features...", flush=True)
             print("NOTE: This may take 10-20+ minutes to generate features.", flush=True)
             print(flush=True)
 
             success = await self._run_initializer()
 
-            if not success or not has_features(self.project_dir):
+            if not success or needs_initialization(self.main_project_dir):
                 print("ERROR: Initializer did not create features. Exiting.", flush=True)
                 return
 
