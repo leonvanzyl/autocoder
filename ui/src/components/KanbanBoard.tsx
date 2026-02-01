@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { KanbanColumn } from './KanbanColumn'
 import type { Feature, FeatureListResponse, ActiveAgent } from '../lib/types'
 import { Card, CardContent } from '@/components/ui/card'
+import { useBoardTheme } from '../contexts/ThemeContext'
 
 interface KanbanBoardProps {
   features: FeatureListResponse | undefined
@@ -24,6 +25,7 @@ export function KanbanBoard({
   hasSpec = true,
   fourColumnView = false
 }: KanbanBoardProps) {
+  const { theme } = useBoardTheme()
   const hasFeatures = features && (features.pending.length + features.in_progress.length + features.done.length) > 0
 
   // Combine all features for dependency status calculation
@@ -60,8 +62,8 @@ export function KanbanBoard({
 
   const columnCount = fourColumnView ? 4 : 3
   const columnTitles = fourColumnView
-    ? ['Pending', 'In Progress', 'Testing', 'Complete']
-    : ['Pending', 'In Progress', 'Done']
+    ? [theme.columns.pending, theme.columns.inProgress, theme.columns.testing, theme.columns.complete]
+    : [theme.columns.pending, theme.columns.inProgress, theme.columns.complete]
 
   if (!features) {
     return (
@@ -86,7 +88,7 @@ export function KanbanBoard({
     return (
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 min-w-0" style={{ gridTemplateColumns: 'repeat(4, minmax(280px, 1fr))' }}>
         <KanbanColumn
-          title="Pending"
+          title={theme.columns.pending}
           count={features.pending.length}
           features={features.pending}
           allFeatures={allFeatures}
@@ -100,7 +102,7 @@ export function KanbanBoard({
           showCreateSpec={!hasSpec && !hasFeatures}
         />
         <KanbanColumn
-          title="In Progress"
+          title={theme.columns.inProgress}
           count={features.in_progress.length}
           features={features.in_progress}
           allFeatures={allFeatures}
@@ -109,7 +111,7 @@ export function KanbanBoard({
           onFeatureClick={onFeatureClick}
         />
         <KanbanColumn
-          title="Testing"
+          title={theme.columns.testing}
           count={testingFeatures.length}
           features={testingFeatures}
           allFeatures={allFeatures}
@@ -118,7 +120,7 @@ export function KanbanBoard({
           onFeatureClick={onFeatureClick}
         />
         <KanbanColumn
-          title="Complete"
+          title={theme.columns.complete}
           count={completeFeatures.length}
           features={completeFeatures}
           allFeatures={allFeatures}
@@ -133,7 +135,7 @@ export function KanbanBoard({
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
       <KanbanColumn
-        title="Pending"
+        title={theme.columns.pending}
         count={features.pending.length}
         features={features.pending}
         allFeatures={allFeatures}
@@ -147,7 +149,7 @@ export function KanbanBoard({
         showCreateSpec={!hasSpec && !hasFeatures}
       />
       <KanbanColumn
-        title="In Progress"
+        title={theme.columns.inProgress}
         count={features.in_progress.length}
         features={features.in_progress}
         allFeatures={allFeatures}
@@ -156,7 +158,7 @@ export function KanbanBoard({
         onFeatureClick={onFeatureClick}
       />
       <KanbanColumn
-        title="Done"
+        title={theme.columns.complete}
         count={features.done.length}
         features={features.done}
         allFeatures={allFeatures}

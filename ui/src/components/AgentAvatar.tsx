@@ -1,14 +1,40 @@
-import { type AgentMascot, type AgentState } from '../lib/types'
+import { type AgentMascot, type AgentState, AGENT_MASCOTS } from '../lib/types'
 
 interface AgentAvatarProps {
-  name: AgentMascot | 'Unknown'
+  name: string  // Can be any string - themed names supported
   state: AgentState
   size?: 'sm' | 'md' | 'lg'
   showName?: boolean
 }
 
+// Check if name is a known mascot
+function isMascot(name: string): name is AgentMascot {
+  return (AGENT_MASCOTS as readonly string[]).includes(name)
+}
+
 // Fallback colors for unknown agents (neutral gray)
 const UNKNOWN_COLORS = { primary: '#6B7280', secondary: '#9CA3AF', accent: '#F3F4F6' }
+
+// Color palettes for themed agent names (Star Trek inspired, etc.)
+const THEMED_PALETTES = [
+  { primary: '#D4AF37', secondary: '#F0D060', accent: '#FFF8DC' },  // Command Gold
+  { primary: '#3B82F6', secondary: '#60A5FA', accent: '#DBEAFE' },  // Science Blue
+  { primary: '#DC2626', secondary: '#EF4444', accent: '#FEE2E2' },  // Operations Red
+  { primary: '#059669', secondary: '#10B981', accent: '#D1FAE5' },  // Medical Green
+  { primary: '#7C3AED', secondary: '#8B5CF6', accent: '#EDE9FE' },  // Purple
+  { primary: '#EA580C', secondary: '#F97316', accent: '#FFEDD5' },  // Orange
+  { primary: '#0891B2', secondary: '#06B6D4', accent: '#CFFAFE' },  // Cyan
+  { primary: '#BE185D', secondary: '#EC4899', accent: '#FCE7F3' },  // Pink
+]
+
+// Generate consistent colors from a name string
+function generateColorsFromName(name: string): { primary: string; secondary: string; accent: string } {
+  let hash = 0
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash)
+  }
+  return THEMED_PALETTES[Math.abs(hash) % THEMED_PALETTES.length]
+}
 
 const AVATAR_COLORS: Record<AgentMascot, { primary: string; secondary: string; accent: string }> = {
   // Original 5
@@ -577,13 +603,25 @@ function getStateDescription(state: AgentState): string {
 }
 
 export function AgentAvatar({ name, state, size = 'md', showName = false }: AgentAvatarProps) {
-  // Handle 'Unknown' agents (synthetic completions from untracked agents)
-  const isUnknown = name === 'Unknown'
-  const colors = isUnknown ? UNKNOWN_COLORS : AVATAR_COLORS[name]
+  // Check if name is a known mascot - if not, use generic avatar with generated colors
+  const knownMascot = isMascot(name)
   const { svg: svgSize, font } = SIZES[size]
-  const SvgComponent = isUnknown ? UnknownSVG : MASCOT_SVGS[name]
   const stateDesc = getStateDescription(state)
   const ariaLabel = `Agent ${name} is ${stateDesc}`
+
+  // For known mascots, use their defined colors and SVG
+  // For themed/custom names, generate colors from the name and use generic avatar
+  let colors: { primary: string; secondary: string; accent: string }
+  let SvgComponent: typeof SparkSVG
+
+  if (knownMascot) {
+    colors = AVATAR_COLORS[name]
+    SvgComponent = MASCOT_SVGS[name]
+  } else {
+    // Generate colors from name hash for themed names (Spock, McCoy, etc.)
+    colors = generateColorsFromName(name)
+    SvgComponent = UnknownSVG  // Use generic avatar for themed names
+  }
 
   return (
     <div

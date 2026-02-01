@@ -4,6 +4,8 @@ import { DependencyBadge } from './DependencyBadge'
 import { AgentAvatar } from './AgentAvatar'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { useBoardTheme } from '../contexts/ThemeContext'
+import { getAgentName } from '../lib/themes'
 
 interface FeatureCardProps {
   feature: Feature
@@ -34,9 +36,12 @@ function getCategoryColor(category: string): string {
 }
 
 export function FeatureCard({ feature, onClick, isInProgress, allFeatures = [], activeAgent }: FeatureCardProps) {
+  const { theme } = useBoardTheme()
   const categoryColor = getCategoryColor(feature.category)
   const isBlocked = feature.blocked || (feature.blocking_dependencies && feature.blocking_dependencies.length > 0)
   const hasActiveAgent = !!activeAgent
+  // Get themed agent name if there's an active agent
+  const themedAgentName = activeAgent ? getAgentName(theme, activeAgent.agentIndex) : null
 
   return (
     <Card
@@ -74,12 +79,12 @@ export function FeatureCard({ feature, onClick, isInProgress, allFeatures = [], 
         </p>
 
         {/* Agent working on this feature */}
-        {activeAgent && (
+        {activeAgent && themedAgentName && (
           <div className="flex items-center gap-2 py-2 px-2 rounded-md bg-primary/10 border border-primary/30">
-            <AgentAvatar name={activeAgent.agentName} state={activeAgent.state} size="sm" />
+            <AgentAvatar name={themedAgentName} state={activeAgent.state} size="sm" />
             <div className="flex-1 min-w-0">
               <div className="text-xs font-semibold text-primary">
-                {activeAgent.agentName} is working on this!
+                {themedAgentName} is working on this!
               </div>
               {activeAgent.thought && (
                 <div className="flex items-center gap-1 mt-0.5">

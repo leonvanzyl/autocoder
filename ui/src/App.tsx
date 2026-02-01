@@ -26,6 +26,7 @@ import { ViewToggle, type ViewMode } from './components/ViewToggle'
 import { DependencyGraph } from './components/DependencyGraph'
 import { KeyboardShortcutsHelp } from './components/KeyboardShortcutsHelp'
 import { ThemeSelector } from './components/ThemeSelector'
+import { BoardThemeSelector } from './components/BoardThemeSelector'
 import { ResetProjectModal } from './components/ResetProjectModal'
 import { ProjectSetupRequired } from './components/ProjectSetupRequired'
 import { ExistingProjectSetup } from './components/ExistingProjectSetup'
@@ -34,7 +35,7 @@ import { ActiveSettingsDisplay } from './components/ActiveSettingsDisplay'
 import { ServerStatusBanner } from './components/ServerStatusBanner'
 // import { UsageLevelIndicator } from './components/UsageLevelIndicator'  // Disabled until smart scheduler integration
 import { PRWorkflowPanel } from './components/PRWorkflowPanel'
-import { DeployPanel } from './components/DeployPanel'
+// import { DeployPanel } from './components/DeployPanel'  // Hidden until worktree integration
 import { VersionBadgeDetailed } from './components/VersionBadge'
 import { getDependencyGraph, runDocAdmin } from './lib/api'
 import { Loader2, Settings, Moon, Sun, RotateCcw } from 'lucide-react'
@@ -388,6 +389,9 @@ function App() {
                 currentTheme={theme}
                 onThemeChange={setTheme}
               />
+
+              {/* Board theme selector (agent names, column titles) */}
+              <BoardThemeSelector />
 
               {/* Dark mode toggle - always visible */}
               <Button

@@ -15,7 +15,7 @@ import { Bot, FileEdit, ArrowRight, ArrowLeft, Loader2, CheckCircle2, Folder, Gi
 import { useCreateProject } from '../hooks/useProjects'
 import { SpecCreationChat } from './SpecCreationChat'
 import { FolderBrowser } from './FolderBrowser'
-import { startAgent, getGitStatus, initGitRepo } from '../lib/api'
+import { startAgent, initGitRepo } from '../lib/api'
 import type { GitRepoOption } from '../lib/types'
 import {
   Dialog,
