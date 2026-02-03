@@ -372,7 +372,6 @@ class DevServerProcessManager:
             self._remove_lock()
             return False, f"Failed to start dev server: {e}"
 
-
     async def stop(self) -> tuple[bool, str]:
         """
         Stop the dev server (SIGTERM then SIGKILL if needed).
