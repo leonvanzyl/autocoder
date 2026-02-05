@@ -104,19 +104,26 @@ async def expand_project_websocket(websocket: WebSocket, project_name: str):
     - {"type": "error", "content": "..."} - Error message
     - {"type": "pong"} - Keep-alive pong
     """
+    # Always accept the WebSocket first to avoid opaque 403 errors.
+    # Starlette returns 403 if we close before accepting.
+    await websocket.accept()
+
     try:
         project_name = validate_project_name(project_name)
     except HTTPException:
+        await websocket.send_json({"type": "error", "content": "Invalid project name"})
         await websocket.close(code=4000, reason="Invalid project name")
         return
 
     # Look up project directory from registry
     project_dir = _get_project_path(project_name)
     if not project_dir:
+        await websocket.send_json({"type": "error", "content": "Project not found in registry"})
         await websocket.close(code=4004, reason="Project not found in registry")
         return
 
     if not project_dir.exists():
+        await websocket.send_json({"type": "error", "content": "Project directory not found"})
         await websocket.close(code=4004, reason="Project directory not found")
         return
 
@@ -124,10 +131,9 @@ async def expand_project_websocket(websocket: WebSocket, project_name: str):
     from autoforge_paths import get_prompts_dir
     spec_path = get_prompts_dir(project_dir) / "app_spec.txt"
     if not spec_path.exists():
+        await websocket.send_json({"type": "error", "content": "Project has no spec. Create a spec first before expanding."})
         await websocket.close(code=4004, reason="Project has no spec. Create spec first.")
         return
-
-    await websocket.accept()
 
     session: Optional[ExpandChatSession] = None
 

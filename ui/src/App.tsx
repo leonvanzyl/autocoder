@@ -178,8 +178,8 @@ function App() {
         setShowAddFeature(true)
       }
 
-      // E : Expand project with AI (when project selected and has features)
-      if ((e.key === 'e' || e.key === 'E') && selectedProject && features &&
+      // E : Expand project with AI (when project selected, has spec and has features)
+      if ((e.key === 'e' || e.key === 'E') && selectedProject && hasSpec && features &&
           (features.pending.length + features.in_progress.length + features.done.length) > 0) {
         e.preventDefault()
         setShowExpandProject(true)
@@ -239,7 +239,7 @@ function App() {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [selectedProject, showAddFeature, showExpandProject, selectedFeature, debugOpen, debugActiveTab, assistantOpen, features, showSettings, showKeyboardHelp, isSpecCreating, viewMode, showResetModal, wsState.agentStatus])
+  }, [selectedProject, showAddFeature, showExpandProject, selectedFeature, debugOpen, debugActiveTab, assistantOpen, features, showSettings, showKeyboardHelp, isSpecCreating, viewMode, showResetModal, wsState.agentStatus, hasSpec])
 
   // Combine WebSocket progress with feature data
   const progress = wsState.progress.total > 0 ? wsState.progress : {
@@ -490,7 +490,7 @@ function App() {
       )}
 
       {/* Expand Project Modal - AI-powered bulk feature creation */}
-      {showExpandProject && selectedProject && (
+      {showExpandProject && selectedProject && hasSpec && (
         <ExpandProjectModal
           isOpen={showExpandProject}
           projectName={selectedProject}

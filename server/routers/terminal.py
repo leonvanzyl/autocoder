@@ -221,8 +221,12 @@ async def terminal_websocket(websocket: WebSocket, project_name: str, terminal_i
     - {"type": "pong"} - Keep-alive response
     - {"type": "error", "message": "..."} - Error message
     """
+    # Always accept WebSocket first to avoid opaque 403 errors
+    await websocket.accept()
+
     # Validate project name
     if not validate_project_name(project_name):
+        await websocket.send_json({"type": "error", "message": "Invalid project name"})
         await websocket.close(
             code=TerminalCloseCode.INVALID_PROJECT_NAME, reason="Invalid project name"
         )
@@ -230,6 +234,7 @@ async def terminal_websocket(websocket: WebSocket, project_name: str, terminal_i
 
     # Validate terminal ID
     if not validate_terminal_id(terminal_id):
+        await websocket.send_json({"type": "error", "message": "Invalid terminal ID"})
         await websocket.close(
             code=TerminalCloseCode.INVALID_PROJECT_NAME, reason="Invalid terminal ID"
         )
@@ -238,6 +243,7 @@ async def terminal_websocket(websocket: WebSocket, project_name: str, terminal_i
     # Look up project directory from registry
     project_dir = _get_project_path(project_name)
     if not project_dir:
+        await websocket.send_json({"type": "error", "message": "Project not found in registry"})
         await websocket.close(
             code=TerminalCloseCode.PROJECT_NOT_FOUND,
             reason="Project not found in registry",
@@ -245,6 +251,7 @@ async def terminal_websocket(websocket: WebSocket, project_name: str, terminal_i
         return
 
     if not project_dir.exists():
+        await websocket.send_json({"type": "error", "message": "Project directory not found"})
         await websocket.close(
             code=TerminalCloseCode.PROJECT_NOT_FOUND,
             reason="Project directory not found",
@@ -254,13 +261,12 @@ async def terminal_websocket(websocket: WebSocket, project_name: str, terminal_i
     # Verify terminal exists in metadata
     terminal_info = get_terminal_info(project_name, terminal_id)
     if not terminal_info:
+        await websocket.send_json({"type": "error", "message": "Terminal not found"})
         await websocket.close(
             code=TerminalCloseCode.PROJECT_NOT_FOUND,
             reason="Terminal not found",
         )
         return
-
-    await websocket.accept()
 
     # Get or create terminal session for this project/terminal
     session = get_terminal_session(project_name, project_dir, terminal_id)

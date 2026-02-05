@@ -157,15 +157,18 @@ export function useSpecChat({
       }, 30000)
     }
 
-    ws.onclose = () => {
+    ws.onclose = (event) => {
       setConnectionStatus('disconnected')
       if (pingIntervalRef.current) {
         clearInterval(pingIntervalRef.current)
         pingIntervalRef.current = null
       }
 
+      // Don't retry on application-level errors (4xxx codes won't resolve on retry)
+      const isAppError = event.code >= 4000 && event.code <= 4999
+
       // Attempt reconnection if not intentionally closed
-      if (reconnectAttempts.current < maxReconnectAttempts && !isCompleteRef.current) {
+      if (!isAppError && reconnectAttempts.current < maxReconnectAttempts && !isCompleteRef.current) {
         reconnectAttempts.current++
         const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 10000)
         reconnectTimeoutRef.current = window.setTimeout(connect, delay)

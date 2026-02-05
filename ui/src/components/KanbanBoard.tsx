@@ -51,7 +51,7 @@ export function KanbanBoard({ features, onFeatureClick, onAddFeature, onExpandPr
         onFeatureClick={onFeatureClick}
         onAddFeature={onAddFeature}
         onExpandProject={onExpandProject}
-        showExpandButton={hasFeatures}
+        showExpandButton={hasFeatures && hasSpec}
         onCreateSpec={onCreateSpec}
         showCreateSpec={!hasSpec && !hasFeatures}
       />

@@ -640,9 +640,7 @@ class ConnectionManager:
         self._lock = asyncio.Lock()
 
     async def connect(self, websocket: WebSocket, project_name: str):
-        """Accept a WebSocket connection for a project."""
-        await websocket.accept()
-
+        """Register a WebSocket connection for a project (must already be accepted)."""
         async with self._lock:
             if project_name not in self.active_connections:
                 self.active_connections[project_name] = set()
@@ -727,16 +725,22 @@ async def project_websocket(websocket: WebSocket, project_name: str):
     - Agent status changes
     - Agent stdout/stderr lines
     """
+    # Always accept WebSocket first to avoid opaque 403 errors
+    await websocket.accept()
+
     if not validate_project_name(project_name):
+        await websocket.send_json({"type": "error", "content": "Invalid project name"})
         await websocket.close(code=4000, reason="Invalid project name")
         return
 
     project_dir = _get_project_path(project_name)
     if not project_dir:
+        await websocket.send_json({"type": "error", "content": "Project not found in registry"})
         await websocket.close(code=4004, reason="Project not found in registry")
         return
 
     if not project_dir.exists():
+        await websocket.send_json({"type": "error", "content": "Project directory not found"})
         await websocket.close(code=4004, reason="Project directory not found")
         return
 
@@ -879,8 +883,7 @@ async def project_websocket(websocket: WebSocket, project_name: str):
                 break
             except json.JSONDecodeError:
                 logger.warning(f"Invalid JSON from WebSocket: {data[:100] if data else 'empty'}")
-            except Exception as e:
-                logger.warning(f"WebSocket error: {e}")
+            except Exception:
                 break
 
     finally:

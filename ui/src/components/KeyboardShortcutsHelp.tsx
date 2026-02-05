@@ -19,7 +19,7 @@ const shortcuts: Shortcut[] = [
   { key: 'D', description: 'Toggle debug panel' },
   { key: 'T', description: 'Toggle terminal tab' },
   { key: 'N', description: 'Add new feature', context: 'with project' },
-  { key: 'E', description: 'Expand project with AI', context: 'with features' },
+  { key: 'E', description: 'Expand project with AI', context: 'with spec & features' },
   { key: 'A', description: 'Toggle AI assistant', context: 'with project' },
   { key: 'G', description: 'Toggle Kanban/Graph view', context: 'with project' },
   { key: ',', description: 'Open settings' },

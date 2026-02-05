@@ -107,16 +107,20 @@ export function useExpandChat({
       }, 30000)
     }
 
-    ws.onclose = () => {
+    ws.onclose = (event) => {
       setConnectionStatus('disconnected')
       if (pingIntervalRef.current) {
         clearInterval(pingIntervalRef.current)
         pingIntervalRef.current = null
       }
 
+      // Don't retry on application-level errors (4xxx codes won't resolve on retry)
+      const isAppError = event.code >= 4000 && event.code <= 4999
+
       // Attempt reconnection if not intentionally closed
       if (
         !manuallyDisconnectedRef.current &&
+        !isAppError &&
         reconnectAttempts.current < maxReconnectAttempts &&
         !isCompleteRef.current
       ) {
