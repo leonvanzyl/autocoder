@@ -34,6 +34,7 @@
     "registry.py",
     "rate_limit_utils.py",
     "security.py",
+    "temp_cleanup.py",
     "requirements-prod.txt",
     "pyproject.toml",
     ".env.example",
