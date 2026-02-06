@@ -710,13 +710,16 @@ def get_effective_sdk_env() -> dict[str, str]:
     provider_id = all_settings.get("api_provider", "claude")
 
     if provider_id == "claude":
-        # Default behavior: forward existing env vars
-        from env_constants import API_ENV_VARS
-        sdk_env: dict[str, str] = {}
-        for var in API_ENV_VARS:
-            value = os.getenv(var)
-            if value:
-                sdk_env[var] = value
+        # MODIFIED: Force subscription-only mode by explicitly disabling API
+        # This prevents the SDK from using OAuth tokens in API mode, which would
+        # charge the user's Anthropic API account instead of using their Claude Code subscription.
+        sdk_env: dict[str, str] = {
+            # Explicitly clear API authentication to prevent unexpected charges
+            "ANTHROPIC_API_KEY": "",
+            "ANTHROPIC_AUTH_TOKEN": "",
+        }
+        # Log that we're in subscription-only mode
+        logger.info("Claude Code subscription mode: API authentication explicitly disabled")
         return sdk_env
 
     # Alternative provider: build env from settings
