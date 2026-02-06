@@ -686,6 +686,20 @@ API_PROVIDERS: dict[str, dict[str, Any]] = {
         ],
         "default_model": "qwen3-coder",
     },
+    "openrouter": {
+        "name": "OpenRouter",
+        "base_url": "https://openrouter.ai/api/v1",
+        "requires_auth": True,
+        "auth_env_var": "ANTHROPIC_API_KEY",
+        "models": [
+            {"id": "anthropic/claude-sonnet-4-5", "name": "Claude Sonnet 4.5"},
+            {"id": "anthropic/claude-opus-4", "name": "Claude Opus 4"},
+            {"id": "google/gemini-2.5-pro", "name": "Gemini 2.5 Pro"},
+            {"id": "openai/gpt-4o", "name": "GPT-4o"},
+            {"id": "deepseek/deepseek-chat-v3-0324", "name": "DeepSeek V3"},
+        ],
+        "default_model": "anthropic/claude-sonnet-4-5",
+    },
     "custom": {
         "name": "Custom Provider",
         "base_url": "",

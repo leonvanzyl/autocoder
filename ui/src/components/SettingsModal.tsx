@@ -24,6 +24,7 @@ const PROVIDER_INFO_TEXT: Record<string, string> = {
   kimi: 'Get an API key at kimi.com',
   glm: 'Get an API key at open.bigmodel.cn',
   ollama: 'Run models locally. Install from ollama.com',
+  openrouter: 'Access 200+ models. Get an API key at openrouter.ai',
   custom: 'Connect to any OpenAI-compatible API endpoint.',
 }
 
