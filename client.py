@@ -17,7 +17,6 @@ from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
 from claude_agent_sdk.types import HookContext, HookInput, HookMatcher, SyncHookJSONOutput
 from dotenv import load_dotenv
 
-from env_constants import API_ENV_VARS
 from security import (
     SENSITIVE_DIRECTORIES,
     bash_security_hook,
