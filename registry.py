@@ -667,14 +667,14 @@ API_PROVIDERS: dict[str, dict[str, Any]] = {
     },
     "glm": {
         "name": "GLM (Zhipu AI)",
-        "base_url": "https://api.z.ai/api/coding/paas/v4",
+        "base_url": "https://api.z.ai/api/anthropic",
         "requires_auth": True,
         "auth_env_var": "ANTHROPIC_AUTH_TOKEN",
         "models": [
-            {"id": "glm-4.7", "name": "GLM 4.7"},
-            {"id": "glm-4.5-air", "name": "GLM 4.5 Air"},
+            {"id": "GLM-4.7", "name": "GLM 4.7"},
+            {"id": "GLM-4.5-Air", "name": "GLM 4.5 Air"},
         ],
-        "default_model": "glm-4.7",
+        "default_model": "GLM-4.7",
     },
     "ollama": {
         "name": "Ollama (Local)",
