@@ -19,8 +19,8 @@ from unittest.mock import patch
 import detach
 
 
-class TestGetAutocoderFiles(unittest.TestCase):
-    """Tests for get_autocoder_files function."""
+class TestGetAutoforgeFiles(unittest.TestCase):
+    """Tests for get_autoforge_files function."""
 
     def setUp(self):
         """Create temporary project directory."""
@@ -31,50 +31,50 @@ class TestGetAutocoderFiles(unittest.TestCase):
         """Clean up temporary directory."""
         shutil.rmtree(self.temp_dir)
 
-    def test_detects_autocoder_directory(self):
-        """Should detect .autocoder directory."""
-        (self.project_dir / ".autocoder").mkdir()
-        files = detach.get_autocoder_files(self.project_dir)
+    def test_detects_autoforge_directory(self):
+        """Should detect .autoforge directory."""
+        (self.project_dir / ".autoforge").mkdir()
+        files = detach.get_autoforge_files(self.project_dir)
         self.assertEqual(len(files), 1)
-        self.assertEqual(files[0].name, ".autocoder")
+        self.assertEqual(files[0].name, ".autoforge")
 
     def test_detects_prompts_directory(self):
         """Should detect prompts directory."""
         (self.project_dir / "prompts").mkdir()
-        files = detach.get_autocoder_files(self.project_dir)
+        files = detach.get_autoforge_files(self.project_dir)
         self.assertEqual(len(files), 1)
         self.assertEqual(files[0].name, "prompts")
 
     def test_detects_features_db(self):
         """Should detect features.db file."""
         (self.project_dir / "features.db").touch()
-        files = detach.get_autocoder_files(self.project_dir)
+        files = detach.get_autoforge_files(self.project_dir)
         self.assertEqual(len(files), 1)
         self.assertEqual(files[0].name, "features.db")
 
     def test_detects_claude_md(self):
         """Should detect CLAUDE.md file."""
         (self.project_dir / "CLAUDE.md").touch()
-        files = detach.get_autocoder_files(self.project_dir)
+        files = detach.get_autoforge_files(self.project_dir)
         self.assertEqual(len(files), 1)
         self.assertEqual(files[0].name, "CLAUDE.md")
 
     def test_detects_glob_patterns(self):
-        """Should detect files matching glob patterns in Autocoder directories.
+        """Should detect files matching glob patterns in AutoForge directories.
 
-        Patterns are only matched within .autocoder/, prompts/, and .playwright-mcp/
+        Patterns are only matched within .autoforge/, prompts/, and .playwright-mcp/
         to avoid accidentally moving user files like test-myfeature.py at root.
         """
-        # Create Autocoder directory structure
-        (self.project_dir / ".autocoder").mkdir()
-        (self.project_dir / ".autocoder" / "test-login.json").touch()
-        (self.project_dir / ".autocoder" / "test-api.py").touch()
-        (self.project_dir / ".autocoder" / "generate-data.py").touch()
-        files = detach.get_autocoder_files(self.project_dir)
+        # Create AutoForge directory structure
+        (self.project_dir / ".autoforge").mkdir()
+        (self.project_dir / ".autoforge" / "test-login.json").touch()
+        (self.project_dir / ".autoforge" / "test-api.py").touch()
+        (self.project_dir / ".autoforge" / "generate-data.py").touch()
+        files = detach.get_autoforge_files(self.project_dir)
         # 1 directory + 3 pattern-matched files
         self.assertEqual(len(files), 4)
         names = {f.name for f in files}
-        self.assertIn(".autocoder", names)
+        self.assertIn(".autoforge", names)
         self.assertIn("test-login.json", names)
         self.assertIn("test-api.py", names)
         self.assertIn("generate-data.py", names)
@@ -87,7 +87,7 @@ class TestGetAutocoderFiles(unittest.TestCase):
         (self.project_dir / "assistant.db").touch()
         (self.project_dir / "assistant.db-shm").write_bytes(b"\x00" * 32768)
         (self.project_dir / "assistant.db-wal").touch()
-        files = detach.get_autocoder_files(self.project_dir)
+        files = detach.get_autoforge_files(self.project_dir)
         names = {f.name for f in files}
         self.assertIn("features.db", names)
         self.assertIn("features.db-shm", names)
@@ -98,11 +98,11 @@ class TestGetAutocoderFiles(unittest.TestCase):
         self.assertEqual(len(files), 6)
 
     def test_detects_sql_test_files(self):
-        """Should detect test-*.sql files in Autocoder directories."""
+        """Should detect test-*.sql files in AutoForge directories."""
         (self.project_dir / "prompts").mkdir()
         (self.project_dir / "prompts" / "test-feature153-create-page.sql").touch()
         (self.project_dir / "prompts" / "test-database-migration.sql").touch()
-        files = detach.get_autocoder_files(self.project_dir)
+        files = detach.get_autoforge_files(self.project_dir)
         names = {f.name for f in files}
         self.assertIn("prompts", names)
         self.assertIn("test-feature153-create-page.sql", names)
@@ -110,24 +110,24 @@ class TestGetAutocoderFiles(unittest.TestCase):
         self.assertEqual(len(files), 3)  # 1 directory + 2 files
 
     def test_detects_php_test_files(self):
-        """Should detect test-*.php files in Autocoder directories."""
-        (self.project_dir / ".autocoder").mkdir()
-        (self.project_dir / ".autocoder" / "test-feature28-create-page.php").touch()
-        (self.project_dir / ".autocoder" / "test-api-endpoint.php").touch()
-        files = detach.get_autocoder_files(self.project_dir)
+        """Should detect test-*.php files in AutoForge directories."""
+        (self.project_dir / ".autoforge").mkdir()
+        (self.project_dir / ".autoforge" / "test-feature28-create-page.php").touch()
+        (self.project_dir / ".autoforge" / "test-api-endpoint.php").touch()
+        files = detach.get_autoforge_files(self.project_dir)
         names = {f.name for f in files}
-        self.assertIn(".autocoder", names)
+        self.assertIn(".autoforge", names)
         self.assertIn("test-feature28-create-page.php", names)
         self.assertIn("test-api-endpoint.php", names)
         self.assertEqual(len(files), 3)  # 1 directory + 2 files
 
     def test_detects_test_helper_php_files(self):
-        """Should detect create-*-test*.php helper scripts in Autocoder directories."""
+        """Should detect create-*-test*.php helper scripts in AutoForge directories."""
         (self.project_dir / ".playwright-mcp").mkdir()
         (self.project_dir / ".playwright-mcp" / "create-xss-direct-test.php").touch()
         (self.project_dir / ".playwright-mcp" / "create-xss-test-page.php").touch()
         (self.project_dir / ".playwright-mcp" / "create-csrf-test.php").touch()
-        files = detach.get_autocoder_files(self.project_dir)
+        files = detach.get_autoforge_files(self.project_dir)
         names = {f.name for f in files}
         self.assertIn(".playwright-mcp", names)
         self.assertIn("create-xss-direct-test.php", names)
@@ -136,11 +136,11 @@ class TestGetAutocoderFiles(unittest.TestCase):
         self.assertEqual(len(files), 4)  # 1 directory + 3 files
 
     def test_detects_rollback_json_files(self):
-        """Should detect rollback-*.json files in Autocoder directories."""
+        """Should detect rollback-*.json files in AutoForge directories."""
         (self.project_dir / "prompts").mkdir()
         (self.project_dir / "prompts" / "rollback-test-translated.json").touch()
         (self.project_dir / "prompts" / "rollback-migration-v2.json").touch()
-        files = detach.get_autocoder_files(self.project_dir)
+        files = detach.get_autoforge_files(self.project_dir)
         names = {f.name for f in files}
         self.assertIn("prompts", names)
         self.assertIn("rollback-test-translated.json", names)
@@ -151,14 +151,14 @@ class TestGetAutocoderFiles(unittest.TestCase):
         """Should NOT capture generic user files matching patterns if at project root.
 
         This prevents accidentally moving user files like test-myfeature.py.
-        Generic patterns are only applied within Autocoder-owned directories.
+        Generic patterns are only applied within AutoForge-owned directories.
         More specific patterns (test-feature*.py) are allowed at root.
         """
         # User files at project root - should NOT be captured
         (self.project_dir / "test-myfeature.py").touch()
         (self.project_dir / "test-user-data.json").touch()
 
-        files = detach.get_autocoder_files(self.project_dir)
+        files = detach.get_autoforge_files(self.project_dir)
         self.assertEqual(len(files), 0)
         names = {f.name for f in files}
         self.assertNotIn("test-myfeature.py", names)
@@ -173,7 +173,7 @@ class TestGetAutocoderFiles(unittest.TestCase):
         (self.project_dir / "test-feature182-log-archiving.py").touch()
         (self.project_dir / "test-feature100-basic.json").touch()
 
-        files = detach.get_autocoder_files(self.project_dir)
+        files = detach.get_autoforge_files(self.project_dir)
         names = {f.name for f in files}
         self.assertIn("test-feature184-missing-config.py", names)
         self.assertIn("test-feature182-log-archiving.py", names)
@@ -185,7 +185,7 @@ class TestGetAutocoderFiles(unittest.TestCase):
         (self.project_dir / "generate-100items.py").touch()
         (self.project_dir / "generate-test-data.py").touch()
 
-        files = detach.get_autocoder_files(self.project_dir)
+        files = detach.get_autoforge_files(self.project_dir)
         names = {f.name for f in files}
         self.assertIn("generate-100items.py", names)
         self.assertIn("generate-test-data.py", names)
@@ -196,7 +196,7 @@ class TestGetAutocoderFiles(unittest.TestCase):
         (self.project_dir / "mark_feature123.py").touch()
         (self.project_dir / "mark_feature_passing.py").touch()
 
-        files = detach.get_autocoder_files(self.project_dir)
+        files = detach.get_autoforge_files(self.project_dir)
         names = {f.name for f in files}
         self.assertIn("mark_feature123.py", names)
         self.assertIn("mark_feature_passing.py", names)
@@ -207,7 +207,7 @@ class TestGetAutocoderFiles(unittest.TestCase):
         (self.project_dir / "rollback-test-translated.json").touch()
         (self.project_dir / "rollback-migration.json").touch()
 
-        files = detach.get_autocoder_files(self.project_dir)
+        files = detach.get_autoforge_files(self.project_dir)
         names = {f.name for f in files}
         self.assertIn("rollback-test-translated.json", names)
         self.assertIn("rollback-migration.json", names)
@@ -218,7 +218,7 @@ class TestGetAutocoderFiles(unittest.TestCase):
         (self.project_dir / "create-xss-test.php").touch()
         (self.project_dir / "create-csrf-test-page.php").touch()
 
-        files = detach.get_autocoder_files(self.project_dir)
+        files = detach.get_autoforge_files(self.project_dir)
         names = {f.name for f in files}
         self.assertIn("create-xss-test.php", names)
         self.assertIn("create-csrf-test-page.php", names)
@@ -230,29 +230,29 @@ class TestGetAutocoderFiles(unittest.TestCase):
         (self.project_dir / "features.db").touch()
 
         # With artifacts
-        files_with = detach.get_autocoder_files(self.project_dir, include_artifacts=True)
+        files_with = detach.get_autoforge_files(self.project_dir, include_artifacts=True)
         names_with = {f.name for f in files_with}
         self.assertIn(".playwright-mcp", names_with)
 
         # Without artifacts
-        files_without = detach.get_autocoder_files(self.project_dir, include_artifacts=False)
+        files_without = detach.get_autoforge_files(self.project_dir, include_artifacts=False)
         names_without = {f.name for f in files_without}
         self.assertNotIn(".playwright-mcp", names_without)
         self.assertIn("features.db", names_without)
 
-    def test_returns_empty_for_non_autocoder_project(self):
-        """Should return empty list for projects without Autocoder files."""
+    def test_returns_empty_for_non_autoforge_project(self):
+        """Should return empty list for projects without AutoForge files."""
         (self.project_dir / "src").mkdir()
         (self.project_dir / "package.json").touch()
-        files = detach.get_autocoder_files(self.project_dir)
+        files = detach.get_autoforge_files(self.project_dir)
         self.assertEqual(len(files), 0)
 
     def test_returns_sorted_results(self):
         """Should return files sorted by name."""
         (self.project_dir / "prompts").mkdir()
-        (self.project_dir / ".autocoder").mkdir()
+        (self.project_dir / ".autoforge").mkdir()
         (self.project_dir / "features.db").touch()
-        files = detach.get_autocoder_files(self.project_dir)
+        files = detach.get_autoforge_files(self.project_dir)
         names = [f.name for f in files]
         self.assertEqual(names, sorted(names))
 
@@ -261,13 +261,13 @@ class TestBackupCreation(unittest.TestCase):
     """Tests for create_backup function."""
 
     def setUp(self):
-        """Create temporary project with Autocoder files."""
+        """Create temporary project with AutoForge files."""
         self.temp_dir = tempfile.mkdtemp()
         self.project_dir = Path(self.temp_dir)
 
-        # Create Autocoder files
-        (self.project_dir / ".autocoder").mkdir()
-        (self.project_dir / ".autocoder" / "config.yaml").write_text("test: true")
+        # Create AutoForge files
+        (self.project_dir / ".autoforge").mkdir()
+        (self.project_dir / ".autoforge" / "config.yaml").write_text("test: true")
         (self.project_dir / "prompts").mkdir()
         (self.project_dir / "prompts" / "app_spec.txt").write_text("spec content")
         (self.project_dir / "features.db").write_bytes(b"SQLite database")
@@ -277,8 +277,8 @@ class TestBackupCreation(unittest.TestCase):
         shutil.rmtree(self.temp_dir)
 
     def test_creates_backup_directory(self):
-        """Should create .autocoder-backup directory."""
-        files = detach.get_autocoder_files(self.project_dir)
+        """Should create .autoforge-backup directory."""
+        files = detach.get_autoforge_files(self.project_dir)
         detach.create_backup(self.project_dir, "test-project", files)
 
         backup_dir = self.project_dir / detach.BACKUP_DIR
@@ -286,24 +286,24 @@ class TestBackupCreation(unittest.TestCase):
 
     def test_moves_files_to_backup(self):
         """Should move all files to backup directory."""
-        files = detach.get_autocoder_files(self.project_dir)
+        files = detach.get_autoforge_files(self.project_dir)
         detach.create_backup(self.project_dir, "test-project", files)
 
         backup_dir = self.project_dir / detach.BACKUP_DIR
 
         # Original locations should be gone
-        self.assertFalse((self.project_dir / ".autocoder").exists())
+        self.assertFalse((self.project_dir / ".autoforge").exists())
         self.assertFalse((self.project_dir / "prompts").exists())
         self.assertFalse((self.project_dir / "features.db").exists())
 
         # Backup locations should exist
-        self.assertTrue((backup_dir / ".autocoder").exists())
+        self.assertTrue((backup_dir / ".autoforge").exists())
         self.assertTrue((backup_dir / "prompts").exists())
         self.assertTrue((backup_dir / "features.db").exists())
 
     def test_creates_manifest(self):
         """Should create manifest.json with correct structure."""
-        files = detach.get_autocoder_files(self.project_dir)
+        files = detach.get_autoforge_files(self.project_dir)
         manifest = detach.create_backup(self.project_dir, "test-project", files)
 
         # Check manifest structure
@@ -320,7 +320,7 @@ class TestBackupCreation(unittest.TestCase):
 
     def test_manifest_contains_checksums(self):
         """Should include checksums for files."""
-        files = detach.get_autocoder_files(self.project_dir)
+        files = detach.get_autoforge_files(self.project_dir)
         manifest = detach.create_backup(self.project_dir, "test-project", files)
 
         for entry in manifest["files"]:
@@ -331,11 +331,11 @@ class TestBackupCreation(unittest.TestCase):
 
     def test_dry_run_does_not_move_files(self):
         """Dry run should not move files or create backup."""
-        files = detach.get_autocoder_files(self.project_dir)
+        files = detach.get_autoforge_files(self.project_dir)
         manifest = detach.create_backup(self.project_dir, "test-project", files, dry_run=True)
 
         # Original files should still exist
-        self.assertTrue((self.project_dir / ".autocoder").exists())
+        self.assertTrue((self.project_dir / ".autoforge").exists())
         self.assertTrue((self.project_dir / "prompts").exists())
         self.assertTrue((self.project_dir / "features.db").exists())
 
@@ -356,14 +356,14 @@ class TestBackupRestore(unittest.TestCase):
         self.temp_dir = tempfile.mkdtemp()
         self.project_dir = Path(self.temp_dir)
 
-        # Create Autocoder files and backup them
-        (self.project_dir / ".autocoder").mkdir()
-        (self.project_dir / ".autocoder" / "config.yaml").write_text("test: true")
+        # Create AutoForge files and backup them
+        (self.project_dir / ".autoforge").mkdir()
+        (self.project_dir / ".autoforge" / "config.yaml").write_text("test: true")
         (self.project_dir / "prompts").mkdir()
         (self.project_dir / "prompts" / "app_spec.txt").write_text("spec content")
         (self.project_dir / "features.db").write_bytes(b"SQLite database")
 
-        files = detach.get_autocoder_files(self.project_dir)
+        files = detach.get_autoforge_files(self.project_dir)
         detach.create_backup(self.project_dir, "test-project", files)
 
     def tearDown(self):
@@ -375,11 +375,11 @@ class TestBackupRestore(unittest.TestCase):
         success, files_restored, conflicts = detach.restore_backup(self.project_dir)
 
         self.assertTrue(success)
-        self.assertEqual(files_restored, 3)  # .autocoder, prompts, features.db
+        self.assertEqual(files_restored, 3)  # .autoforge, prompts, features.db
         self.assertEqual(conflicts, [])  # No conflicts expected
 
         # Files should be restored
-        self.assertTrue((self.project_dir / ".autocoder").exists())
+        self.assertTrue((self.project_dir / ".autoforge").exists())
         self.assertTrue((self.project_dir / "prompts").exists())
         self.assertTrue((self.project_dir / "features.db").exists())
 
@@ -394,7 +394,7 @@ class TestBackupRestore(unittest.TestCase):
         """Should restore correct file contents."""
         detach.restore_backup(self.project_dir)
 
-        config_content = (self.project_dir / ".autocoder" / "config.yaml").read_text()
+        config_content = (self.project_dir / ".autoforge" / "config.yaml").read_text()
         self.assertEqual(config_content, "test: true")
 
         spec_content = (self.project_dir / "prompts" / "app_spec.txt").read_text()
@@ -536,7 +536,7 @@ class TestProjectDetachState(unittest.TestCase):
     def test_state_attached_files_present(self):
         """Should return 'attached' when files present, no manifest."""
         (self.project_dir / "features.db").touch()
-        (self.project_dir / ".autocoder").mkdir()
+        (self.project_dir / ".autoforge").mkdir()
 
         state, files = detach.get_project_detach_state(self.project_dir)
         self.assertEqual(state, "attached")
@@ -561,7 +561,7 @@ class TestProjectDetachState(unittest.TestCase):
 
         # Also create files at root (simulating partial reattach)
         (self.project_dir / "features.db").touch()
-        (self.project_dir / ".autocoder").mkdir()
+        (self.project_dir / ".autoforge").mkdir()
 
         state, files = detach.get_project_detach_state(self.project_dir)
         self.assertEqual(state, "inconsistent")
@@ -572,12 +572,12 @@ class TestDetachProject(unittest.TestCase):
     """Tests for detach_project function."""
 
     def setUp(self):
-        """Create temporary project with Autocoder files."""
+        """Create temporary project with AutoForge files."""
         self.temp_dir = tempfile.mkdtemp()
         self.project_dir = Path(self.temp_dir)
 
-        # Create Autocoder files
-        (self.project_dir / ".autocoder").mkdir()
+        # Create AutoForge files
+        (self.project_dir / ".autoforge").mkdir()
         (self.project_dir / "features.db").touch()
         (self.project_dir / "prompts").mkdir()
 
@@ -613,8 +613,8 @@ class TestDetachProject(unittest.TestCase):
         """Should fail if project is already detached (clean detach state)."""
         mock_get_path.return_value = self.project_dir
 
-        # Remove Autocoder files from root to simulate clean detach
-        shutil.rmtree(self.project_dir / ".autocoder")
+        # Remove AutoForge files from root to simulate clean detach
+        shutil.rmtree(self.project_dir / ".autoforge")
         (self.project_dir / "features.db").unlink()
         shutil.rmtree(self.project_dir / "prompts")
 
@@ -657,10 +657,10 @@ class TestDetachProject(unittest.TestCase):
         self.assertEqual(user_files_restored, 0)
 
     @patch('detach.get_project_path')
-    def test_fails_if_no_autocoder_files(self, mock_get_path):
-        """Should fail if no Autocoder files found."""
-        # Remove Autocoder files
-        shutil.rmtree(self.project_dir / ".autocoder")
+    def test_fails_if_no_autoforge_files(self, mock_get_path):
+        """Should fail if no AutoForge files found."""
+        # Remove AutoForge files
+        shutil.rmtree(self.project_dir / ".autoforge")
         (self.project_dir / "features.db").unlink()
         shutil.rmtree(self.project_dir / "prompts")
 
@@ -669,7 +669,7 @@ class TestDetachProject(unittest.TestCase):
         success, message, manifest, user_files_restored = detach.detach_project("test-project")
 
         self.assertFalse(success)
-        self.assertIn("No Autocoder files found", message)
+        self.assertIn("No AutoForge files found", message)
         self.assertEqual(user_files_restored, 0)
 
     @patch('detach.get_project_path')
@@ -682,7 +682,7 @@ class TestDetachProject(unittest.TestCase):
         backup_dir.mkdir()
         (backup_dir / detach.MANIFEST_FILE).write_text("{}")
 
-        # Autocoder files also exist at root
+        # AutoForge files also exist at root
         success, message, manifest, user_files_restored = detach.detach_project("test-project")
 
         self.assertFalse(success)
@@ -700,7 +700,7 @@ class TestDetachProject(unittest.TestCase):
         (backup_dir / detach.MANIFEST_FILE).write_text("{}")
         (backup_dir / "old_features.db").write_bytes(b"old backup content")
 
-        # Autocoder files also exist at root (from partial reattach)
+        # AutoForge files also exist at root (from partial reattach)
         success, message, manifest, user_files_restored = detach.detach_project(
             "test-project", force=True
         )
@@ -722,7 +722,7 @@ class TestDetachProject(unittest.TestCase):
         # Create orphaned backup directory (simulates partial reattach)
         backup_dir = self.project_dir / detach.BACKUP_DIR
         backup_dir.mkdir()
-        (backup_dir / ".autocoder").mkdir()
+        (backup_dir / ".autoforge").mkdir()
         (backup_dir / "old_features.db").write_bytes(b"orphaned backup content")
         # NO manifest.json - this is the orphaned state
 
@@ -749,11 +749,11 @@ class TestReattachProject(unittest.TestCase):
         self.temp_dir = tempfile.mkdtemp()
         self.project_dir = Path(self.temp_dir)
 
-        # Create and backup Autocoder files
-        (self.project_dir / ".autocoder").mkdir()
+        # Create and backup AutoForge files
+        (self.project_dir / ".autoforge").mkdir()
         (self.project_dir / "features.db").write_bytes(b"test")
 
-        files = detach.get_autocoder_files(self.project_dir)
+        files = detach.get_autoforge_files(self.project_dir)
         detach.create_backup(self.project_dir, "test-project", files)
 
     def tearDown(self):
@@ -770,7 +770,7 @@ class TestReattachProject(unittest.TestCase):
         self.assertTrue(success)
         self.assertGreater(files_restored, 0)
         self.assertEqual(conflicts, [])
-        self.assertTrue((self.project_dir / ".autocoder").exists())
+        self.assertTrue((self.project_dir / ".autoforge").exists())
         self.assertTrue((self.project_dir / "features.db").exists())
 
     @patch('detach.get_project_path')
@@ -810,7 +810,7 @@ class TestReattachProject(unittest.TestCase):
         # Remove backup but keep files at root
         shutil.rmtree(self.project_dir / detach.BACKUP_DIR)
         (self.project_dir / "features.db").write_bytes(b"test")
-        (self.project_dir / ".autocoder").mkdir()
+        (self.project_dir / ".autoforge").mkdir()
 
         success, message, files_restored, conflicts = detach.reattach_project("test-project")
 
@@ -828,14 +828,14 @@ class TestReattachProject(unittest.TestCase):
         """
         mock_get_path.return_value = self.project_dir
 
-        # Backup exists from setUp (with features.db and .autocoder in backup)
+        # Backup exists from setUp (with features.db and .autoforge in backup)
         # Add files at root too (simulates user creating files while detached)
         (self.project_dir / "features.db").write_bytes(b"user-created")
-        (self.project_dir / ".autocoder").mkdir()
+        (self.project_dir / ".autoforge").mkdir()
 
         success, message, files_restored, conflicts = detach.reattach_project("test-project")
 
-        # Should succeed - user files get backed up, autocoder files restored
+        # Should succeed - user files get backed up, autoforge files restored
         self.assertTrue(success)
         self.assertIn("features.db", conflicts)  # User file was backed up
         self.assertGreater(files_restored, 0)
@@ -1105,7 +1105,7 @@ class TestBackupAtomicity(unittest.TestCase):
         self.temp_dir = tempfile.mkdtemp()
         self.project_dir = Path(self.temp_dir)
 
-        # Create Autocoder files (only regular files to test copy2)
+        # Create AutoForge files (only regular files to test copy2)
         (self.project_dir / "features.db").write_bytes(b"database content")
         (self.project_dir / "CLAUDE.md").write_text("# Test")
 
@@ -1115,7 +1115,7 @@ class TestBackupAtomicity(unittest.TestCase):
 
     def test_backup_preserves_originals_on_copy_failure(self):
         """Should preserve originals if copy fails."""
-        files = detach.get_autocoder_files(self.project_dir)
+        files = detach.get_autoforge_files(self.project_dir)
 
         # Mock shutil.copy2 to fail on second file
         original_copy2 = shutil.copy2
@@ -1217,13 +1217,13 @@ class TestFileConflictDetection(unittest.TestCase):
 
     @patch('detach.get_project_path')
     def test_reattach_with_conflicts_preserves_new_files(self, mock_get_path):
-        """Should backup user files when they conflict with autocoder files."""
+        """Should backup user files when they conflict with autoforge files."""
         mock_get_path.return_value = self.project_dir
 
-        # Create Autocoder files and backup them
-        (self.project_dir / "CLAUDE.md").write_text("Autocoder content")
+        # Create AutoForge files and backup them
+        (self.project_dir / "CLAUDE.md").write_text("AutoForge content")
         (self.project_dir / "features.db").write_bytes(b"test")
-        files = detach.get_autocoder_files(self.project_dir)
+        files = detach.get_autoforge_files(self.project_dir)
         detach.create_backup(self.project_dir, "test-project", files)
 
         # Simulate user creating CLAUDE.md while detached
@@ -1236,8 +1236,8 @@ class TestFileConflictDetection(unittest.TestCase):
         self.assertEqual(conflicts, ["CLAUDE.md"])
         self.assertIn("user files saved", message)
 
-        # Autocoder content restored
-        self.assertEqual((self.project_dir / "CLAUDE.md").read_text(), "Autocoder content")
+        # AutoForge content restored
+        self.assertEqual((self.project_dir / "CLAUDE.md").read_text(), "AutoForge content")
 
         # User content backed up
         backup_path = self.project_dir / detach.PRE_REATTACH_BACKUP_DIR
@@ -1249,9 +1249,9 @@ class TestFileConflictDetection(unittest.TestCase):
         """Should not create backup directory when no conflicts exist."""
         mock_get_path.return_value = self.project_dir
 
-        # Create Autocoder files and backup them
-        (self.project_dir / "CLAUDE.md").write_text("Autocoder content")
-        files = detach.get_autocoder_files(self.project_dir)
+        # Create AutoForge files and backup them
+        (self.project_dir / "CLAUDE.md").write_text("AutoForge content")
+        files = detach.get_autoforge_files(self.project_dir)
         detach.create_backup(self.project_dir, "test-project", files)
 
         # No user files created (no conflict)
@@ -1313,8 +1313,8 @@ class TestFileConflictDetection(unittest.TestCase):
         backup_dir.mkdir()
         (backup_dir / "CLAUDE.md").write_text("User content from previous session")
 
-        # Create Autocoder files
-        (self.project_dir / ".autocoder").mkdir()
+        # Create AutoForge files
+        (self.project_dir / ".autoforge").mkdir()
         (self.project_dir / "features.db").touch()
 
         # Detach
@@ -1335,8 +1335,8 @@ class TestFileConflictDetection(unittest.TestCase):
         """Full cycle: detach -> create user file -> reattach -> detach preserves both."""
         mock_get_path.return_value = self.project_dir
 
-        # Initial state: Autocoder files
-        (self.project_dir / "CLAUDE.md").write_text("Autocoder CLAUDE.md")
+        # Initial state: AutoForge files
+        (self.project_dir / "CLAUDE.md").write_text("AutoForge CLAUDE.md")
         (self.project_dir / "features.db").touch()
 
         # Step 1: Detach
@@ -1352,8 +1352,8 @@ class TestFileConflictDetection(unittest.TestCase):
         self.assertTrue(success)
         self.assertEqual(conflicts, ["CLAUDE.md"])  # User file was backed up
 
-        # Autocoder content restored
-        self.assertEqual((self.project_dir / "CLAUDE.md").read_text(), "Autocoder CLAUDE.md")
+        # AutoForge content restored
+        self.assertEqual((self.project_dir / "CLAUDE.md").read_text(), "AutoForge CLAUDE.md")
 
         # User content in pre-reattach backup
         self.assertEqual(
@@ -1387,9 +1387,9 @@ class TestFileConflictDetection(unittest.TestCase):
         backup_dir.mkdir()
         (backup_dir / "old_user_file.txt").write_text("Old user file")
 
-        # Create Autocoder files and backup
-        (self.project_dir / "CLAUDE.md").write_text("Autocoder CLAUDE.md")
-        files = detach.get_autocoder_files(self.project_dir)
+        # Create AutoForge files and backup
+        (self.project_dir / "CLAUDE.md").write_text("AutoForge CLAUDE.md")
+        files = detach.get_autoforge_files(self.project_dir)
         detach.create_backup(self.project_dir, "test", files)
 
         # User creates new CLAUDE.md
@@ -1466,15 +1466,15 @@ class TestOrphanedDbCleanup(unittest.TestCase):
         self.temp_dir = tempfile.mkdtemp()
         self.project_dir = Path(self.temp_dir)
 
-        # Create Autocoder files with realistic database
-        (self.project_dir / ".autocoder").mkdir()
+        # Create AutoForge files with realistic database
+        (self.project_dir / ".autoforge").mkdir()
         # Create a features.db that's larger than an empty one (simulate real data)
         (self.project_dir / "features.db").write_bytes(b"x" * 120000)  # 120KB - realistic size
         (self.project_dir / "features.db-wal").write_bytes(b"wal")
         (self.project_dir / "features.db-shm").write_bytes(b"shm")
 
         # Create backup
-        files = detach.get_autocoder_files(self.project_dir)
+        files = detach.get_autoforge_files(self.project_dir)
         detach.create_backup(self.project_dir, "test-project", files)
 
     def tearDown(self):

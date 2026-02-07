@@ -3,11 +3,11 @@
 Project Detach/Reattach Module
 ==============================
 
-Manages the separation of Autocoder files from project directories,
+Manages the separation of AutoForge files from project directories,
 allowing Claude Code to run without restrictions on completed projects.
 
 Features:
-- Detach: Moves Autocoder files to .autocoder-backup/
+- Detach: Moves AutoForge files to .autoforge-backup/
 - Reattach: Restores files from backup
 - Status: Checks detach state and backup info
 """
@@ -31,10 +31,10 @@ from registry import get_project_path, list_registered_projects
 logger = logging.getLogger(__name__)
 
 # Backup directory name
-BACKUP_DIR = ".autocoder-backup"
+BACKUP_DIR = ".autoforge-backup"
 PRE_REATTACH_BACKUP_DIR = ".pre-reattach-backup"
 MANIFEST_FILE = "manifest.json"
-DETACH_LOCK = ".autocoder-detach.lock"
+DETACH_LOCK = ".autoforge-detach.lock"
 
 # Version for manifest format
 MANIFEST_VERSION = 1
@@ -43,8 +43,8 @@ MANIFEST_VERSION = 1
 LOCK_TIMEOUT_SECONDS = 300
 
 
-def get_autocoder_version() -> str:
-    """Get autocoder version from pyproject.toml, with fallback."""
+def get_autoforge_version() -> str:
+    """Get autoforge version from pyproject.toml, with fallback."""
     try:
         pyproject_path = Path(__file__).parent / "pyproject.toml"
         if pyproject_path.exists():
@@ -57,16 +57,17 @@ def get_autocoder_version() -> str:
     return "1.0.0"  # Fallback
 
 
-# Autocoder file patterns to detect and move
+# AutoForge file patterns to detect and move
 # Directories (will be moved recursively)
-AUTOCODER_DIRECTORIES = {
-    ".autocoder",
+AUTOFORGE_DIRECTORIES = {
+    ".autoforge",
+    ".autocoder",  # Legacy fallback
     "prompts",
     ".playwright-mcp",
 }
 
 # Files with exact names
-AUTOCODER_FILES = {
+AUTOFORGE_FILES = {
     "features.db",
     "features.db-shm",  # SQLite shared memory file
     "features.db-wal",  # SQLite write-ahead log
@@ -80,8 +81,8 @@ AUTOCODER_FILES = {
     "claude-progress.txt",
 }
 
-# Glob patterns for generated files (searched in AUTOCODER_DIRECTORIES only)
-AUTOCODER_PATTERNS = [
+# Glob patterns for generated files (searched in AUTOFORGE_DIRECTORIES only)
+AUTOFORGE_PATTERNS = [
     "test-*.json",
     "test-*.py",
     "test-*.html",
@@ -96,7 +97,7 @@ AUTOCODER_PATTERNS = [
 
 # Patterns for agent-generated files at ROOT level
 # More specific patterns to avoid false positives with user files like test-myfeature.py
-AUTOCODER_ROOT_PATTERNS = [
+AUTOFORGE_ROOT_PATTERNS = [
     "test-feature*.json",   # Feature test data
     "test-feature*.py",     # Feature test scripts
     "test-feature*.html",   # Feature test pages
@@ -181,21 +182,21 @@ def get_directory_info(dir_path: Path) -> tuple[int, int]:
     return total_size, file_count
 
 
-def get_autocoder_files(project_dir: Path, include_artifacts: bool = True) -> list[Path]:
+def get_autoforge_files(project_dir: Path, include_artifacts: bool = True) -> list[Path]:
     """
-    Detect all Autocoder files in a project directory.
+    Detect all AutoForge files in a project directory.
 
     Args:
         project_dir: Path to the project directory
         include_artifacts: Whether to include .playwright-mcp and other artifacts
 
     Returns:
-        List of Path objects for Autocoder files/directories
+        List of Path objects for AutoForge files/directories
     """
     files = []
 
     # Check directories
-    for dir_name in AUTOCODER_DIRECTORIES:
+    for dir_name in AUTOFORGE_DIRECTORIES:
         if not include_artifacts and dir_name == ".playwright-mcp":
             continue
         dir_path = project_dir / dir_name
@@ -203,24 +204,24 @@ def get_autocoder_files(project_dir: Path, include_artifacts: bool = True) -> li
             files.append(dir_path)
 
     # Check exact files
-    for file_name in AUTOCODER_FILES:
+    for file_name in AUTOFORGE_FILES:
         file_path = project_dir / file_name
         if file_path.exists():
             files.append(file_path)
 
-    # Check glob patterns ONLY in Autocoder-owned directories
+    # Check glob patterns ONLY in AutoForge-owned directories
     # to avoid accidentally moving user files like test-myfeature.py
-    for dir_name in AUTOCODER_DIRECTORIES:
+    for dir_name in AUTOFORGE_DIRECTORIES:
         dir_path = project_dir / dir_name
         if dir_path.exists() and dir_path.is_dir():
-            for pattern in AUTOCODER_PATTERNS:
+            for pattern in AUTOFORGE_PATTERNS:
                 for match in dir_path.rglob(pattern):
                     if match.exists() and match not in files:
                         files.append(match)
 
     # Check ROOT-safe patterns at project root level
     # These are more specific patterns to avoid false positives
-    for pattern in AUTOCODER_ROOT_PATTERNS:
+    for pattern in AUTOFORGE_ROOT_PATTERNS:
         for match in project_dir.glob(pattern):  # glob, not rglob - root level only
             if match.exists() and match not in files:
                 files.append(match)
@@ -247,13 +248,13 @@ def get_project_detach_state(project_dir: Path, include_artifacts: bool = True) 
 
     Returns:
         Tuple of (state, files) where state is one of:
-        - "detached": Manifest exists, no Autocoder files at root
+        - "detached": Manifest exists, no AutoForge files at root
         - "attached": No manifest, files present at root
         - "inconsistent": Both manifest and files exist (needs cleanup)
-        - "clean": No manifest, no Autocoder files
+        - "clean": No manifest, no AutoForge files
     """
     manifest_exists = is_project_detached(project_dir)
-    files = get_autocoder_files(project_dir, include_artifacts=include_artifacts)
+    files = get_autoforge_files(project_dir, include_artifacts=include_artifacts)
 
     if manifest_exists and files:
         return "inconsistent", files
@@ -367,7 +368,7 @@ def create_backup(
     dry_run: bool = False
 ) -> Manifest:
     """
-    Create backup of Autocoder files.
+    Create backup of AutoForge files.
 
     Uses copy-then-delete approach to prevent data loss on partial failures.
 
@@ -418,7 +419,7 @@ def create_backup(
         "version": MANIFEST_VERSION,
         "detached_at": datetime.now(timezone.utc).isoformat(),
         "project_name": project_name,
-        "autocoder_version": get_autocoder_version(),
+        "autocoder_version": get_autoforge_version(),
         "files": manifest_files,
         "total_size_bytes": total_size,
         "file_count": total_file_count,
@@ -668,7 +669,7 @@ def update_gitignore(project_dir: Path) -> None:
     gitignore_path = project_dir / ".gitignore"
 
     patterns = [
-        (f"{BACKUP_DIR}/", "Autocoder backup (for reattach)"),
+        (f"{BACKUP_DIR}/", "AutoForge backup (for reattach)"),
         (f"{PRE_REATTACH_BACKUP_DIR}/", "User files backup (for detach)"),
     ]
 
@@ -691,7 +692,7 @@ def detect_conflicts(project_dir: Path, manifest: Manifest) -> list[str]:
     """Return list of relative paths that exist in both backup and project.
 
     These are files the user created/modified after detaching that would
-    be overwritten by restoring autocoder files.
+    be overwritten by restoring autoforge files.
 
     Args:
         project_dir: Path to the project directory
@@ -836,7 +837,7 @@ def detach_project(
     dry_run: bool = False
 ) -> tuple[bool, str, Manifest | None, int]:
     """
-    Detach a project by moving Autocoder files to backup.
+    Detach a project by moving AutoForge files to backup.
 
     Args:
         name_or_path: Project name (from registry) or absolute path
@@ -868,7 +869,7 @@ def detach_project(
         # Clean up old backup and proceed with fresh detach
         if not force:
             return False, (
-                "Inconsistent state detected: backup manifest exists but Autocoder files are also present. "
+                "Inconsistent state detected: backup manifest exists but AutoForge files are also present. "
                 "This can happen after a partial reattach. Use --force to clean up and detach."
             ), None, 0
         # Force mode: remove old backup and proceed
@@ -877,7 +878,7 @@ def detach_project(
             shutil.rmtree(backup_dir)
             logger.info("Removed stale backup directory due to --force")
     elif state == "clean":
-        return False, "No Autocoder files found in project.", None, 0
+        return False, "No AutoForge files found in project.", None, 0
     # state == "attached" -> proceed normally with existing_files
 
     # Clean up orphaned backup directory (exists without manifest)
@@ -899,9 +900,9 @@ def detach_project(
 
     try:
         # Use files from state detection if available, otherwise get them fresh
-        files = existing_files if existing_files else get_autocoder_files(project_dir, include_artifacts)
+        files = existing_files if existing_files else get_autoforge_files(project_dir, include_artifacts)
         if not files:
-            return False, "No Autocoder files found in project.", None, 0
+            return False, "No AutoForge files found in project.", None, 0
 
         # Checkpoint databases to merge WAL files before backup
         if not dry_run:
@@ -989,7 +990,7 @@ def _cleanup_orphaned_db_files(project_dir: Path, manifest: Manifest) -> list[st
 
 def reattach_project(name_or_path: str) -> tuple[bool, str, int, list[str]]:
     """
-    Reattach a project by restoring Autocoder files from backup.
+    Reattach a project by restoring AutoForge files from backup.
 
     Args:
         name_or_path: Project name (from registry) or absolute path
@@ -1014,7 +1015,7 @@ def reattach_project(name_or_path: str) -> tuple[bool, str, int, list[str]]:
     # Check if backup exists
     if not has_backup(project_dir):
         # Distinguish between "attached" (files at root) and "clean" (no files)
-        files_at_root = get_autocoder_files(project_dir)
+        files_at_root = get_autoforge_files(project_dir)
         if files_at_root:
             return False, "Project is already attached. Nothing to restore.", 0, []
         return False, "No backup found. Project is not detached.", 0, []
@@ -1058,7 +1059,7 @@ def get_detach_status(name_or_path: str) -> dict:
         - state: "detached", "attached", "inconsistent", or "clean"
         - is_detached: True if cleanly detached
         - is_inconsistent: True if both manifest and files exist
-        - files_at_root: Number of Autocoder files at project root
+        - files_at_root: Number of AutoForge files at project root
         - backup_exists: True if backup directory exists
     """
     project_dir = get_project_path(name_or_path)
@@ -1116,7 +1117,7 @@ def list_projects_with_status() -> list[dict]:
 def main() -> int:
     """CLI entry point."""
     parser = argparse.ArgumentParser(
-        description="Detach/Reattach Autocoder files from projects",
+        description="Detach/Reattach AutoForge files from projects",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -1234,13 +1235,13 @@ Examples:
             elif state == "inconsistent":
                 print("  Status: INCONSISTENT (needs cleanup)")
                 print(f"  Files at root: {status_info['files_at_root']}")
-                print("  Backup manifest exists but Autocoder files also present.")
+                print("  Backup manifest exists but AutoForge files also present.")
                 print("  Use --force to clean up and detach.")
             elif state == "attached":
-                print("  Status: attached (Autocoder files present)")
+                print("  Status: attached (AutoForge files present)")
                 print(f"  Files at root: {status_info['files_at_root']}")
             else:
-                print("  Status: clean (no Autocoder files)")
+                print("  Status: clean (no AutoForge files)")
             print()
             return 0
 
