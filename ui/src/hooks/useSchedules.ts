@@ -13,11 +13,11 @@ import type { ScheduleCreate, ScheduleUpdate } from '../lib/types'
 /**
  * Hook to fetch all schedules for a project.
  */
-export function useSchedules(projectName: string | null) {
+export function useSchedules(projectName: string | null, isDetached: boolean = false) {
   return useQuery({
     queryKey: ['schedules', projectName],
     queryFn: () => api.listSchedules(projectName!),
-    enabled: !!projectName,
+    enabled: !!projectName && !isDetached,
   })
 }
 
@@ -102,11 +102,11 @@ export function useToggleSchedule(projectName: string) {
  * Hook to fetch the next scheduled run for a project.
  * Polls every 30 seconds to keep status up-to-date.
  */
-export function useNextScheduledRun(projectName: string | null) {
+export function useNextScheduledRun(projectName: string | null, isDetached: boolean = false) {
   return useQuery({
     queryKey: ['nextRun', projectName],
     queryFn: () => api.getNextScheduledRun(projectName!),
-    enabled: !!projectName,
-    refetchInterval: 30000, // Refresh every 30 seconds
+    enabled: !!projectName && !isDetached,
+    refetchInterval: isDetached ? false : 30000, // Refresh every 30 seconds
   })
 }

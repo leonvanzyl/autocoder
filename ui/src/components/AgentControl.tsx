@@ -17,9 +17,10 @@ interface AgentControlProps {
   projectName: string
   status: AgentStatus
   defaultConcurrency?: number
+  isDetached?: boolean
 }
 
-export function AgentControl({ projectName, status, defaultConcurrency = 3 }: AgentControlProps) {
+export function AgentControl({ projectName, status, defaultConcurrency = 3, isDetached = false }: AgentControlProps) {
   const { data: settings } = useSettings()
   const yoloMode = settings?.yolo_mode ?? false
 
@@ -60,7 +61,7 @@ export function AgentControl({ projectName, status, defaultConcurrency = 3 }: Ag
 
   const startAgent = useStartAgent(projectName)
   const stopAgent = useStopAgent(projectName)
-  const { data: nextRun } = useNextScheduledRun(projectName)
+  const { data: nextRun } = useNextScheduledRun(projectName, isDetached)
 
   const [showScheduleModal, setShowScheduleModal] = useState(false)
 
@@ -177,6 +178,7 @@ export function AgentControl({ projectName, status, defaultConcurrency = 3 }: Ag
         projectName={projectName}
         isOpen={showScheduleModal}
         onClose={() => setShowScheduleModal(false)}
+        isDetached={isDetached}
       />
     </>
   )

@@ -14,6 +14,8 @@ from typing import TYPE_CHECKING, Generator, Tuple
 from fastapi import APIRouter, HTTPException
 from sqlalchemy.orm import Session
 
+from ..dependencies import validate_project_not_detached
+
 # Schedule limits to prevent resource exhaustion
 MAX_SCHEDULES_PER_PROJECT = 50
 
@@ -24,7 +26,6 @@ from ..schemas import (
     ScheduleResponse,
     ScheduleUpdate,
 )
-from ..utils.project_helpers import get_project_path as _get_project_path
 from ..utils.validation import validate_project_name
 
 if TYPE_CHECKING:
@@ -54,23 +55,17 @@ def _get_db_session(project_name: str) -> Generator[Tuple[Session, Path], None, 
         with _get_db_session(project_name) as (db, project_path):
             # ... use db ...
         # db is automatically closed
+
+    Raises:
+        HTTPException 404: If project not found
+        HTTPException 409: If project is detached
     """
     from api.database import create_database
 
     project_name = validate_project_name(project_name)
-    project_path = _get_project_path(project_name)
 
-    if not project_path:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Project '{project_name}' not found in registry"
-        )
-
-    if not project_path.exists():
-        raise HTTPException(
-            status_code=404,
-            detail=f"Project directory not found: {project_path}"
-        )
+    # Check detach status before accessing database
+    project_path = validate_project_not_detached(project_name)
 
     _, SessionLocal = create_database(project_path)
     db = SessionLocal()

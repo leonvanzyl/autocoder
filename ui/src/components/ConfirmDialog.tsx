@@ -23,6 +23,7 @@ interface ConfirmDialogProps {
   message: ReactNode
   confirmLabel?: string
   cancelLabel?: string
+  loadingLabel?: string  // Custom label shown during loading (default: confirmLabel + "...")
   variant?: 'danger' | 'warning'
   isLoading?: boolean
   onConfirm: () => void
@@ -35,6 +36,7 @@ export function ConfirmDialog({
   message,
   confirmLabel = 'Confirm',
   cancelLabel = 'Cancel',
+  loadingLabel,
   variant = 'danger',
   isLoading = false,
   onConfirm,
@@ -69,7 +71,7 @@ export function ConfirmDialog({
             onClick={onConfirm}
             disabled={isLoading}
           >
-            {isLoading ? 'Deleting...' : confirmLabel}
+            {isLoading ? (loadingLabel || `${confirmLabel}...`) : confirmLabel}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -116,6 +116,7 @@ npm run lint     # Run ESLint
 ruff check .                          # Lint
 mypy .                                # Type check
 python test_security.py               # Security unit tests (12 tests)
+python test_detach.py                 # Detach/reattach tests (53 tests)
 python test_security_integration.py   # Integration tests (9 tests)
 python -m pytest test_client.py       # Client tests (20 tests)
 python -m pytest test_dependency_resolver.py  # Dependency resolver tests (12 tests)
@@ -175,6 +176,7 @@ Publishing: `npm publish` (triggers `prepublishOnly` which builds UI, then publi
 - `api/database.py` - SQLAlchemy models (Feature, Schedule, ScheduleOverride)
 - `api/dependency_resolver.py` - Cycle detection (Kahn's algorithm + DFS) and dependency validation
 - `api/migration.py` - JSON-to-SQLite migration utility
+- `detach.py` - Project detach/reattach functionality for Claude Code integration
 
 ### Project Registry
 
@@ -393,10 +395,61 @@ blocked_commands:
 **Files:**
 - `security.py` - Command validation logic and hardcoded blocklist
 - `test_security.py` - Unit tests for security system
+- `test_detach.py` - Unit tests for detach/reattach functionality (53 tests)
 - `test_security_integration.py` - Integration tests with real hooks
 - `examples/project_allowed_commands.yaml` - Project config example (all commented by default)
 - `examples/org_config.yaml` - Org config example (all commented by default)
 - `examples/README.md` - Comprehensive guide with use cases, testing, and troubleshooting
+
+#### Project Detach/Reattach
+
+The detach feature allows temporarily removing AutoForge files from a project, enabling Claude Code to run without AutoForge restrictions on completed projects.
+
+**CLI Usage:**
+
+```bash
+# Detach project (move AutoForge files to backup)
+python detach.py my-project
+
+# Reattach project (restore files from backup)
+python detach.py --reattach my-project
+
+# Check status
+python detach.py --status my-project
+
+# List all projects with detach status
+python detach.py --list
+
+# Preview detach operation (dry run)
+python detach.py --dry-run my-project
+
+# Exclude .playwright-mcp artifacts from backup
+python detach.py --no-artifacts my-project
+```
+
+**API Endpoints:**
+
+- `GET /api/projects/{name}/detach-status` - Check if project is detached
+- `POST /api/projects/{name}/detach` - Detach project (move files to backup)
+- `POST /api/projects/{name}/reattach` - Reattach project (restore from backup)
+
+**Security Features:**
+
+- Path traversal protection during restore (validates all paths stay within project directory)
+- Copy-then-delete backup approach (atomic operations prevent data loss on partial failures)
+- Lock file with PID/timestamp for stale lock recovery
+- Manifest version validation for forward compatibility
+
+**Files backed up:**
+
+- `.autoforge/` directory
+- `prompts/` directory (legacy location)
+- `.playwright-mcp/` directory (unless `--no-artifacts`)
+- `features.db`, `assistant.db` (and WAL files)
+- `CLAUDE.md`, `.claude_settings.json`, `.agent.lock`
+- Generated test files (`test-*.json`, `test-*.py`, etc.)
+
+**Tests:** `test_detach.py` (53 tests including security tests)
 
 ### Vertex AI Configuration (Optional)
 

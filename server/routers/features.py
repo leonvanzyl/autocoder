@@ -12,6 +12,7 @@ from typing import Literal
 
 from fastapi import APIRouter, HTTPException
 
+from ..dependencies import validate_project_not_detached
 from ..schemas import (
     DependencyGraphEdge,
     DependencyGraphNode,
@@ -24,7 +25,6 @@ from ..schemas import (
     FeatureResponse,
     FeatureUpdate,
 )
-from ..utils.project_helpers import get_project_path as _get_project_path
 from ..utils.validation import validate_project_name
 
 # Lazy imports to avoid circular dependencies
@@ -118,13 +118,9 @@ async def list_features(project_name: str):
     - done: passes=True
     """
     project_name = validate_project_name(project_name)
-    project_dir = _get_project_path(project_name)
 
-    if not project_dir:
-        raise HTTPException(status_code=404, detail=f"Project '{project_name}' not found in registry")
-
-    if not project_dir.exists():
-        raise HTTPException(status_code=404, detail="Project directory not found")
+    # Check detach status before accessing database
+    project_dir = validate_project_not_detached(project_name)
 
     from autoforge_paths import get_features_db_path
     db_file = get_features_db_path(project_dir)
@@ -169,13 +165,9 @@ async def list_features(project_name: str):
 async def create_feature(project_name: str, feature: FeatureCreate):
     """Create a new feature/test case manually."""
     project_name = validate_project_name(project_name)
-    project_dir = _get_project_path(project_name)
 
-    if not project_dir:
-        raise HTTPException(status_code=404, detail=f"Project '{project_name}' not found in registry")
-
-    if not project_dir.exists():
-        raise HTTPException(status_code=404, detail="Project directory not found")
+    # Check detach status before accessing database
+    project_dir = validate_project_not_detached(project_name)
 
     _, Feature = _get_db_classes()
 
@@ -235,13 +227,9 @@ async def create_features_bulk(project_name: str, bulk: FeatureBulkCreate):
         {"created": N, "features": [...]}
     """
     project_name = validate_project_name(project_name)
-    project_dir = _get_project_path(project_name)
 
-    if not project_dir:
-        raise HTTPException(status_code=404, detail=f"Project '{project_name}' not found in registry")
-
-    if not project_dir.exists():
-        raise HTTPException(status_code=404, detail="Project directory not found")
+    # Check detach status before accessing database
+    project_dir = validate_project_not_detached(project_name)
 
     if not bulk.features:
         return FeatureBulkCreateResponse(created=0, features=[])
@@ -314,13 +302,9 @@ async def get_dependency_graph(project_name: str):
     rendering with React Flow or similar graph libraries.
     """
     project_name = validate_project_name(project_name)
-    project_dir = _get_project_path(project_name)
 
-    if not project_dir:
-        raise HTTPException(status_code=404, detail=f"Project '{project_name}' not found in registry")
-
-    if not project_dir.exists():
-        raise HTTPException(status_code=404, detail="Project directory not found")
+    # Check detach status before accessing database
+    project_dir = validate_project_not_detached(project_name)
 
     from autoforge_paths import get_features_db_path
     db_file = get_features_db_path(project_dir)
@@ -380,13 +364,9 @@ async def get_dependency_graph(project_name: str):
 async def get_feature(project_name: str, feature_id: int):
     """Get details of a specific feature."""
     project_name = validate_project_name(project_name)
-    project_dir = _get_project_path(project_name)
 
-    if not project_dir:
-        raise HTTPException(status_code=404, detail=f"Project '{project_name}' not found in registry")
-
-    if not project_dir.exists():
-        raise HTTPException(status_code=404, detail="Project directory not found")
+    # Check detach status before accessing database
+    project_dir = validate_project_not_detached(project_name)
 
     from autoforge_paths import get_features_db_path
     db_file = get_features_db_path(project_dir)
@@ -420,13 +400,9 @@ async def update_feature(project_name: str, feature_id: int, update: FeatureUpda
     when the agent is stuck or implementing a feature incorrectly.
     """
     project_name = validate_project_name(project_name)
-    project_dir = _get_project_path(project_name)
 
-    if not project_dir:
-        raise HTTPException(status_code=404, detail=f"Project '{project_name}' not found in registry")
-
-    if not project_dir.exists():
-        raise HTTPException(status_code=404, detail="Project directory not found")
+    # Check detach status before accessing database
+    project_dir = validate_project_not_detached(project_name)
 
     _, Feature = _get_db_classes()
 
@@ -482,13 +458,9 @@ async def delete_feature(project_name: str, feature_id: int):
     dependencies that would permanently block features.
     """
     project_name = validate_project_name(project_name)
-    project_dir = _get_project_path(project_name)
 
-    if not project_dir:
-        raise HTTPException(status_code=404, detail=f"Project '{project_name}' not found in registry")
-
-    if not project_dir.exists():
-        raise HTTPException(status_code=404, detail="Project directory not found")
+    # Check detach status before accessing database
+    project_dir = validate_project_not_detached(project_name)
 
     _, Feature = _get_db_classes()
 
@@ -533,13 +505,9 @@ async def skip_feature(project_name: str, feature_id: int):
     so it will be processed last.
     """
     project_name = validate_project_name(project_name)
-    project_dir = _get_project_path(project_name)
 
-    if not project_dir:
-        raise HTTPException(status_code=404, detail=f"Project '{project_name}' not found in registry")
-
-    if not project_dir.exists():
-        raise HTTPException(status_code=404, detail="Project directory not found")
+    # Check detach status before accessing database
+    project_dir = validate_project_not_detached(project_name)
 
     _, Feature = _get_db_classes()
 
@@ -592,13 +560,8 @@ async def add_dependency(project_name: str, feature_id: int, dep_id: int):
     if feature_id == dep_id:
         raise HTTPException(status_code=400, detail="A feature cannot depend on itself")
 
-    project_dir = _get_project_path(project_name)
-
-    if not project_dir:
-        raise HTTPException(status_code=404, detail=f"Project '{project_name}' not found in registry")
-
-    if not project_dir.exists():
-        raise HTTPException(status_code=404, detail="Project directory not found")
+    # Check detach status before accessing database
+    project_dir = validate_project_not_detached(project_name)
 
     would_create_circular_dependency, MAX_DEPENDENCIES_PER_FEATURE = _get_dependency_resolver()
     _, Feature = _get_db_classes()
@@ -644,13 +607,9 @@ async def add_dependency(project_name: str, feature_id: int, dep_id: int):
 async def remove_dependency(project_name: str, feature_id: int, dep_id: int):
     """Remove a dependency from a feature."""
     project_name = validate_project_name(project_name)
-    project_dir = _get_project_path(project_name)
 
-    if not project_dir:
-        raise HTTPException(status_code=404, detail=f"Project '{project_name}' not found in registry")
-
-    if not project_dir.exists():
-        raise HTTPException(status_code=404, detail="Project directory not found")
+    # Check detach status before accessing database
+    project_dir = validate_project_not_detached(project_name)
 
     _, Feature = _get_db_classes()
 
@@ -683,13 +642,9 @@ async def set_dependencies(project_name: str, feature_id: int, update: Dependenc
     Validates: self-reference, existence of all dependencies, circular dependencies, max limit.
     """
     project_name = validate_project_name(project_name)
-    project_dir = _get_project_path(project_name)
 
-    if not project_dir:
-        raise HTTPException(status_code=404, detail=f"Project '{project_name}' not found in registry")
-
-    if not project_dir.exists():
-        raise HTTPException(status_code=404, detail="Project directory not found")
+    # Check detach status before accessing database
+    project_dir = validate_project_not_detached(project_name)
 
     dependency_ids = update.dependency_ids
 
