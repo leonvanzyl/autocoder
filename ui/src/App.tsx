@@ -315,25 +315,40 @@ function App() {
                     <RotateCcw size={18} />
                   </Button>
 
-                  {/* Ollama Mode Indicator */}
-                  {settings?.ollama_mode && (
-                    <div
-                      className="flex items-center gap-1.5 px-2 py-1 bg-card rounded border-2 border-border shadow-sm"
-                      title="Using Ollama local models"
-                    >
-                      <img src="/ollama.png" alt="Ollama" className="w-5 h-5" />
-                      <span className="text-xs font-bold text-foreground">Ollama</span>
-                    </div>
-                  )}
-
-                  {/* GLM Mode Badge */}
-                  {settings?.glm_mode && (
-                    <Badge
-                      className="bg-purple-500 text-white hover:bg-purple-600"
-                      title="Using GLM API"
-                    >
-                      GLM
-                    </Badge>
+                  {/* API Provider Badge - click to open settings */}
+                  {settings?.api_provider && (
+                    settings.api_provider === 'ollama' ? (
+                      <button
+                        onClick={() => setShowSettings(true)}
+                        className="flex items-center gap-1.5 px-2 py-1 bg-card rounded border-2 border-border shadow-sm cursor-pointer hover:opacity-80 transition-opacity"
+                        title="Using Ollama local models - click to change"
+                      >
+                        <img src="/ollama.png" alt="Ollama" className="w-5 h-5" />
+                        <span className="text-xs font-bold text-foreground">Ollama</span>
+                      </button>
+                    ) : (
+                      <Badge
+                        className={`cursor-pointer ${
+                          {
+                            claude: 'bg-orange-500 text-white hover:bg-orange-600',
+                            glm: 'bg-purple-500 text-white hover:bg-purple-600',
+                            kimi: 'bg-blue-500 text-white hover:bg-blue-600',
+                            openrouter: 'bg-emerald-500 text-white hover:bg-emerald-600',
+                            custom: 'bg-gray-500 text-white hover:bg-gray-600',
+                          }[settings.api_provider] ?? 'bg-gray-500 text-white hover:bg-gray-600'
+                        }`}
+                        title={`Using ${settings.api_provider} API - click to change`}
+                        onClick={() => setShowSettings(true)}
+                      >
+                        {{
+                          claude: 'Claude',
+                          glm: 'GLM',
+                          kimi: 'Kimi',
+                          openrouter: 'OpenRouter',
+                          custom: 'Custom',
+                        }[settings.api_provider] ?? settings.api_provider}
+                      </Badge>
+                    )
                   )}
                 </>
               )}

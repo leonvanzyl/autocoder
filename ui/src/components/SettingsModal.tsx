@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { Loader2, AlertCircle, Check, Moon, Sun, Eye, EyeOff, ShieldCheck } from 'lucide-react'
+import { Loader2, AlertCircle, Check, Moon, Sun, Eye, EyeOff, ShieldCheck, Wifi, WifiOff } from 'lucide-react'
 import { useSettings, useUpdateSettings, useAvailableModels, useAvailableProviders } from '../hooks/useProjects'
+import { testProviderConnection } from '../lib/api'
 import { useTheme, THEMES } from '../hooks/useTheme'
 import type { ProviderInfo } from '../lib/types'
 import {
@@ -22,8 +23,9 @@ interface SettingsModalProps {
 const PROVIDER_INFO_TEXT: Record<string, string> = {
   claude: 'Default provider. Uses your Claude CLI credentials.',
   kimi: 'Get an API key at kimi.com',
-  glm: 'Get an API key at open.bigmodel.cn',
+  glm: 'GLM Coding Plan. Get an API key at z.ai',
   ollama: 'Run models locally. Install from ollama.com',
+  openrouter: 'Access 200+ models. Get an API key at openrouter.ai',
   custom: 'Connect to any OpenAI-compatible API endpoint.',
 }
 
@@ -38,6 +40,8 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [authTokenInput, setAuthTokenInput] = useState('')
   const [customModelInput, setCustomModelInput] = useState('')
   const [customBaseUrlInput, setCustomBaseUrlInput] = useState('')
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
+  const [isTesting, setIsTesting] = useState(false)
 
   const handleYoloToggle = () => {
     if (settings && !updateSettings.isPending) {
@@ -71,6 +75,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       setShowAuthToken(false)
       setCustomModelInput('')
       setCustomBaseUrlInput('')
+      setTestResult(null)
     }
   }
 
@@ -92,6 +97,19 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     if (customModelInput.trim() && !updateSettings.isPending) {
       updateSettings.mutate({ api_model: customModelInput.trim() })
       setCustomModelInput('')
+    }
+  }
+
+  const handleTestConnection = async () => {
+    setIsTesting(true)
+    setTestResult(null)
+    try {
+      const result = await testProviderConnection()
+      setTestResult(result)
+    } catch {
+      setTestResult({ success: false, message: 'Request failed' })
+    } finally {
+      setIsTesting(false)
     }
   }
 
@@ -217,13 +235,13 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             {/* API Provider Selection */}
             <div className="space-y-3">
               <Label className="font-medium">API Provider</Label>
-              <div className="flex flex-wrap gap-1.5">
+              <div className="grid grid-cols-3 gap-1.5">
                 {providers.map((provider) => (
                   <button
                     key={provider.id}
                     onClick={() => handleProviderChange(provider.id)}
                     disabled={isSaving}
-                    className={`py-1.5 px-3 text-sm font-medium rounded-md border transition-colors ${
+                    className={`py-1.5 px-2 text-sm font-medium rounded-md border transition-colors truncate ${
                       currentProvider === provider.id
                         ? 'bg-primary text-primary-foreground border-primary'
                         : 'bg-background text-foreground border-border hover:bg-muted'
@@ -233,9 +251,32 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   </button>
                 ))}
               </div>
-              <p className="text-xs text-muted-foreground">
-                {PROVIDER_INFO_TEXT[currentProvider] ?? ''}
-              </p>
+              <div className="flex items-center gap-2">
+                <p className="text-xs text-muted-foreground flex-1">
+                  {PROVIDER_INFO_TEXT[currentProvider] ?? ''}
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0 h-7 text-xs gap-1.5"
+                  onClick={handleTestConnection}
+                  disabled={isTesting}
+                >
+                  {isTesting ? (
+                    <Loader2 size={12} className="animate-spin" />
+                  ) : testResult ? (
+                    testResult.success ? <Wifi size={12} className="text-green-500" /> : <WifiOff size={12} className="text-red-500" />
+                  ) : (
+                    <Wifi size={12} />
+                  )}
+                  Test
+                </Button>
+              </div>
+              {testResult && (
+                <p className={`text-xs ${testResult.success ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                  {testResult.message}
+                </p>
+              )}
 
               {/* Auth Token Field */}
               {showAuthField && (
@@ -312,25 +353,39 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             {/* Model Selection */}
             <div className="space-y-2">
               <Label className="font-medium">Model</Label>
-              {models.length > 0 && (
-                <div className="flex rounded-lg border overflow-hidden">
+              {models.length > 0 && models.length <= 3 ? (
+                <div className={`grid gap-1.5 ${models.length === 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>
                   {models.map((model) => (
                     <button
                       key={model.id}
                       onClick={() => handleModelChange(model.id)}
                       disabled={isSaving}
-                      className={`flex-1 py-2 px-3 text-sm font-medium transition-colors ${
+                      className={`py-2 px-3 text-sm font-medium rounded-md border transition-colors truncate ${
                         (settings.api_model ?? settings.model) === model.id
-                          ? 'bg-primary text-primary-foreground'
-                          : 'bg-background text-foreground hover:bg-muted'
+                          ? 'bg-primary text-primary-foreground border-primary'
+                          : 'bg-background text-foreground border-border hover:bg-muted'
                       } ${isSaving ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
-                      <span className="block">{model.name}</span>
-                      <span className="block text-xs opacity-60">{model.id}</span>
+                      <span className="block truncate">{model.name}</span>
                     </button>
                   ))}
                 </div>
-              )}
+              ) : models.length > 3 ? (
+                <select
+                  value={settings.api_model ?? settings.model}
+                  onChange={(e) => handleModelChange(e.target.value)}
+                  disabled={isSaving}
+                  className={`w-full py-2 px-3 text-sm font-medium rounded-md border border-border bg-background transition-colors ${
+                    isSaving ? 'opacity-50 cursor-not-allowed' : ''
+                  }`}
+                >
+                  {models.map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.name}
+                    </option>
+                  ))}
+                </select>
+              ) : null}
               {/* Custom model input for Ollama/Custom */}
               {showCustomModelInput && (
                 <div className="flex gap-2 pt-1">

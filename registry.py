@@ -671,10 +671,10 @@ API_PROVIDERS: dict[str, dict[str, Any]] = {
         "requires_auth": True,
         "auth_env_var": "ANTHROPIC_AUTH_TOKEN",
         "models": [
-            {"id": "glm-4.7", "name": "GLM 4.7"},
-            {"id": "glm-4.5-air", "name": "GLM 4.5 Air"},
+            {"id": "GLM-4.7", "name": "GLM 4.7"},
+            {"id": "GLM-4.5-Air", "name": "GLM 4.5 Air"},
         ],
-        "default_model": "glm-4.7",
+        "default_model": "GLM-4.7",
     },
     "ollama": {
         "name": "Ollama (Local)",
@@ -685,6 +685,22 @@ API_PROVIDERS: dict[str, dict[str, Any]] = {
             {"id": "deepseek-coder-v2", "name": "DeepSeek Coder V2"},
         ],
         "default_model": "qwen3-coder",
+    },
+    "openrouter": {
+        "name": "OpenRouter",
+        "base_url": "https://openrouter.ai/api/v1",
+        "requires_auth": True,
+        "auth_env_var": "ANTHROPIC_API_KEY",
+        "models": [
+            {"id": "anthropic/claude-opus-4.6", "name": "Claude Opus 4.6"},
+            {"id": "anthropic/claude-sonnet-4-5", "name": "Claude Sonnet 4.5"},
+            {"id": "openai/gpt-5.2-20251211", "name": "GPT-5.2"},
+            {"id": "openai/gpt-5-mini-2025-08-07", "name": "GPT-5 Mini"},
+            {"id": "google/gemini-2.5-pro", "name": "Gemini 2.5 Pro"},
+            {"id": "google/gemini-2.5-flash", "name": "Gemini 2.5 Flash"},
+            {"id": "deepseek/deepseek-chat-v3-0324", "name": "DeepSeek V3"},
+        ],
+        "default_model": "anthropic/claude-sonnet-4-5",
     },
     "custom": {
         "name": "Custom Provider",
@@ -753,8 +769,8 @@ def get_effective_sdk_env() -> dict[str, str]:
     if base_url:
         sdk_env["ANTHROPIC_BASE_URL"] = base_url
 
-    # Auth token
-    auth_token = all_settings.get("api_auth_token")
+    # Auth token - per-provider key first, then global fallback
+    auth_token = all_settings.get(f"api_auth_token.{provider_id}") or all_settings.get("api_auth_token")
     if auth_token:
         sdk_env[auth_env_var] = auth_token
 

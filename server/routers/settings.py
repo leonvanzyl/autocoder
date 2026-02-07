@@ -6,12 +6,19 @@ API endpoints for global settings management.
 Settings are stored in the registry database and shared across all projects.
 """
 
+import asyncio
+import logging
 import mimetypes
+import shutil
 import sys
 
+import httpx
 from fastapi import APIRouter
+from pydantic import BaseModel
 
 from ..schemas import ModelInfo, ModelsResponse, ProviderInfo, ProvidersResponse, SettingsResponse, SettingsUpdate
+
+logger = logging.getLogger(__name__)
 from ..services.chat_constants import ROOT_DIR
 
 # Mimetype fix for Windows - must run before StaticFiles is mounted
@@ -95,29 +102,28 @@ def _parse_bool(value: str | None, default: bool = False) -> bool:
     return value.lower() == "true"
 
 
-@router.get("", response_model=SettingsResponse)
-async def get_settings():
-    """Get current global settings."""
-    all_settings = get_all_settings()
-
+def _build_settings_response(all_settings: dict[str, str]) -> SettingsResponse:
+    """Build SettingsResponse from settings dict (shared by GET and PATCH)."""
     api_provider = all_settings.get("api_provider", "claude")
-
-    glm_mode = api_provider == "glm"
-    ollama_mode = api_provider == "ollama"
-
     return SettingsResponse(
         yolo_mode=_parse_yolo_mode(all_settings.get("yolo_mode")),
         model=all_settings.get("model", DEFAULT_MODEL),
-        glm_mode=glm_mode,
-        ollama_mode=ollama_mode,
+        glm_mode=api_provider == "glm",
+        ollama_mode=api_provider == "ollama",
         testing_agent_ratio=_parse_int(all_settings.get("testing_agent_ratio"), 1),
         playwright_headless=_parse_bool(all_settings.get("playwright_headless"), default=True),
         batch_size=_parse_int(all_settings.get("batch_size"), 3),
         api_provider=api_provider,
         api_base_url=all_settings.get("api_base_url"),
-        api_has_auth_token=bool(all_settings.get("api_auth_token")),
+        api_has_auth_token=bool(all_settings.get(f"api_auth_token.{api_provider}") or all_settings.get("api_auth_token")),
         api_model=all_settings.get("api_model"),
     )
+
+
+@router.get("", response_model=SettingsResponse)
+async def get_settings():
+    """Get current global settings."""
+    return _build_settings_response(get_all_settings())
 
 
 @router.patch("", response_model=SettingsResponse)
@@ -158,27 +164,119 @@ async def update_settings(update: SettingsUpdate):
         set_setting("api_base_url", update.api_base_url)
 
     if update.api_auth_token is not None:
+        current_provider = get_setting("api_provider", "claude")
+        set_setting(f"api_auth_token.{current_provider}", update.api_auth_token)
         set_setting("api_auth_token", update.api_auth_token)
 
     if update.api_model is not None:
         set_setting("api_model", update.api_model)
 
-    # Return updated settings
-    all_settings = get_all_settings()
-    api_provider = all_settings.get("api_provider", "claude")
-    glm_mode = api_provider == "glm"
-    ollama_mode = api_provider == "ollama"
+    return _build_settings_response(get_all_settings())
 
-    return SettingsResponse(
-        yolo_mode=_parse_yolo_mode(all_settings.get("yolo_mode")),
-        model=all_settings.get("model", DEFAULT_MODEL),
-        glm_mode=glm_mode,
-        ollama_mode=ollama_mode,
-        testing_agent_ratio=_parse_int(all_settings.get("testing_agent_ratio"), 1),
-        playwright_headless=_parse_bool(all_settings.get("playwright_headless"), default=True),
-        batch_size=_parse_int(all_settings.get("batch_size"), 3),
-        api_provider=api_provider,
-        api_base_url=all_settings.get("api_base_url"),
-        api_has_auth_token=bool(all_settings.get("api_auth_token")),
-        api_model=all_settings.get("api_model"),
-    )
+
+# =============================================================================
+# Test Connection
+# =============================================================================
+
+
+class TestConnectionResponse(BaseModel):
+    success: bool
+    message: str
+
+
+@router.post("/test-connection", response_model=TestConnectionResponse)
+async def test_provider_connection():
+    """Test connectivity to the current API provider."""
+    all_settings = get_all_settings()
+    provider_id = all_settings.get("api_provider", "claude")
+
+    if provider_id == "claude":
+        return await _test_claude()
+
+    provider = API_PROVIDERS.get(provider_id)
+    if not provider:
+        return TestConnectionResponse(success=False, message=f"Unknown provider: {provider_id}")
+
+    base_url = all_settings.get("api_base_url") or provider.get("base_url")
+    if not base_url:
+        return TestConnectionResponse(success=False, message="No base URL configured")
+
+    auth_token = all_settings.get(f"api_auth_token.{provider_id}") or all_settings.get("api_auth_token")
+    if provider.get("requires_auth") and not auth_token:
+        return TestConnectionResponse(success=False, message="No API key configured")
+
+    return await _test_http_provider(provider_id, base_url, auth_token, provider)
+
+
+async def _test_claude() -> TestConnectionResponse:
+    """Test Claude CLI availability."""
+    claude_path = shutil.which("claude")
+    if not claude_path:
+        return TestConnectionResponse(success=False, message="Claude CLI not found in PATH")
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            claude_path, "--version",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=10)
+        version = stdout.decode().strip() if stdout else "unknown"
+        return TestConnectionResponse(success=True, message=f"Claude CLI: {version}")
+    except asyncio.TimeoutError:
+        return TestConnectionResponse(success=False, message="Claude CLI timed out")
+    except Exception as e:
+        return TestConnectionResponse(success=False, message=f"Claude CLI error: {e}")
+
+
+async def _test_http_provider(
+    provider_id: str, base_url: str, auth_token: str | None, provider: dict,  # type: ignore[type-arg]
+) -> TestConnectionResponse:
+    """Test an HTTP-based API provider by sending a minimal messages request."""
+    base = base_url.rstrip("/")
+    # Try multiple paths - different providers use different API structures
+    candidate_paths = ["/v1/messages", "/messages", "/chat/completions", ""]
+
+    auth_env_var = provider.get("auth_env_var", "ANTHROPIC_AUTH_TOKEN")
+    headers: dict[str, str] = {"content-type": "application/json", "anthropic-version": "2023-06-01"}
+    if auth_token:
+        if auth_env_var == "ANTHROPIC_API_KEY":
+            headers["x-api-key"] = auth_token
+        else:
+            headers["authorization"] = f"Bearer {auth_token}"
+
+    model = provider.get("default_model") or "test"
+    body = {"model": model, "max_tokens": 1, "messages": [{"role": "user", "content": "hi"}]}
+
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            for path in candidate_paths:
+                url = base + path
+                resp = await client.post(url, headers=headers, json=body)
+                if resp.status_code == 404:
+                    continue  # Try next path
+                if resp.status_code == 200:
+                    return TestConnectionResponse(success=True, message=f"Connected to {provider_id}")
+                if resp.status_code == 401:
+                    return TestConnectionResponse(success=False, message="Authentication failed - check API key")
+                if resp.status_code == 403:
+                    return TestConnectionResponse(success=False, message="Access denied - check API key permissions")
+                # Some providers return errors but still prove connectivity
+                try:
+                    data = resp.json()
+                    err_type = data.get("error", {}).get("type", "")
+                    if err_type in ("invalid_request_error", "not_found_error", "overloaded_error"):
+                        return TestConnectionResponse(success=True, message=f"Connected to {provider_id}")
+                except Exception:
+                    pass
+                # Got a non-404 response, so connectivity works even if there's an error
+                return TestConnectionResponse(success=False, message=f"HTTP {resp.status_code}: {resp.text[:200]}")
+
+        # All paths returned 404
+        return TestConnectionResponse(success=False, message=f"No valid endpoint found at {base_url}")
+    except httpx.ConnectError:
+        return TestConnectionResponse(success=False, message=f"Cannot connect to {base_url}")
+    except httpx.TimeoutException:
+        return TestConnectionResponse(success=False, message="Connection timed out")
+    except Exception as e:
+        logger.warning("Test connection error for %s: %s", provider_id, e)
+        return TestConnectionResponse(success=False, message=f"Error: {e}")

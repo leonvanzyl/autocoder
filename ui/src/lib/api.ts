@@ -415,6 +415,15 @@ export async function updateSettings(settings: SettingsUpdate): Promise<Settings
   })
 }
 
+export interface TestConnectionResult {
+  success: boolean
+  message: string
+}
+
+export async function testProviderConnection(): Promise<TestConnectionResult> {
+  return fetchJSON('/settings/test-connection', { method: 'POST' })
+}
+
 // ============================================================================
 // Dev Server API
 // ============================================================================
