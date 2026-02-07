@@ -33,6 +33,9 @@ import type {
   ScheduleUpdate,
   ScheduleListResponse,
   NextRunResponse,
+  DetachResponse,
+  ReattachResponse,
+  DetachStatusResponse,
 } from './types'
 
 const API_BASE = '/api'
@@ -127,6 +130,26 @@ export async function resetProject(
   return fetchJSON(`/projects/${encodeURIComponent(name)}/reset${params}`, {
     method: 'POST',
   })
+}
+
+// ============================================================================
+// Detach/Reattach API
+// ============================================================================
+
+export async function detachProject(name: string): Promise<DetachResponse> {
+  return fetchJSON(`/projects/${encodeURIComponent(name)}/detach`, {
+    method: 'POST',
+  })
+}
+
+export async function reattachProject(name: string): Promise<ReattachResponse> {
+  return fetchJSON(`/projects/${encodeURIComponent(name)}/reattach`, {
+    method: 'POST',
+  })
+}
+
+export async function getDetachStatus(name: string): Promise<DetachStatusResponse> {
+  return fetchJSON(`/projects/${encodeURIComponent(name)}/detach-status`)
 }
 
 // ============================================================================

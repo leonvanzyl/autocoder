@@ -17,6 +17,16 @@ from ..utils.project_helpers import get_project_path as _get_project_path
 from ..utils.validation import validate_project_name
 
 
+def _get_detach_module():
+    """Lazy import of detach module."""
+    import sys
+    root = Path(__file__).parent.parent.parent
+    if str(root) not in sys.path:
+        sys.path.insert(0, str(root))
+    import detach
+    return detach
+
+
 def _get_settings_defaults() -> tuple[bool, str, int, bool, int]:
     """Get defaults from global settings.
 
@@ -93,6 +103,16 @@ async def start_agent(
     request: AgentStartRequest = AgentStartRequest(),
 ):
     """Start the agent for a project."""
+    # Check detach status before starting agent
+    project_dir = _get_project_path(project_name)
+    if project_dir:
+        detach = _get_detach_module()
+        if detach.is_project_detached(project_dir):
+            raise HTTPException(
+                status_code=409,
+                detail=f"Project '{project_name}' is detached. Reattach to start agent."
+            )
+
     manager = get_project_manager(project_name)
 
     # Get defaults from global settings if not provided in request

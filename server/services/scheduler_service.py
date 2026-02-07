@@ -21,6 +21,21 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 logger = logging.getLogger(__name__)
 
+
+def _is_project_detached(project_dir: Path) -> bool:
+    """Check if a project is detached.
+
+    Used by background scheduler to skip detached projects silently.
+
+    Args:
+        project_dir: Path to the project directory
+
+    Returns:
+        True if project is detached, False otherwise
+    """
+    import detach
+    return detach.is_project_detached(project_dir)
+
 # Constants
 MAX_CRASH_RETRIES = 3
 CRASH_BACKOFF_BASE = 10  # seconds
@@ -93,6 +108,11 @@ class SchedulerService:
         """Load schedules for a single project. Returns count of schedules loaded."""
         from api.database import Schedule, create_database
         from autoforge_paths import get_features_db_path
+
+        # Skip detached projects - don't access their database
+        if _is_project_detached(project_dir):
+            logger.debug(f"Skipping detached project '{project_name}' in schedule loading")
+            return 0
 
         db_path = get_features_db_path(project_dir)
         if not db_path.exists():
@@ -212,6 +232,11 @@ class SchedulerService:
         logger.info(f"Scheduled start triggered for {project_name} (schedule {schedule_id})")
         project_dir = Path(project_dir_str)
 
+        # Skip detached projects - don't access their database
+        if _is_project_detached(project_dir):
+            logger.info(f"Skipping scheduled start for detached project '{project_name}'")
+            return
+
         try:
             from api.database import Schedule, ScheduleOverride, create_database
 
@@ -257,6 +282,11 @@ class SchedulerService:
         """Handle scheduled agent stop."""
         logger.info(f"Scheduled stop triggered for {project_name} (schedule {schedule_id})")
         project_dir = Path(project_dir_str)
+
+        # Skip detached projects - don't access their database
+        if _is_project_detached(project_dir):
+            logger.info(f"Skipping scheduled stop for detached project '{project_name}'")
+            return
 
         try:
             from api.database import Schedule, ScheduleOverride, create_database
@@ -415,6 +445,11 @@ class SchedulerService:
 
     async def handle_crash_during_window(self, project_name: str, project_dir: Path):
         """Called when agent crashes. Attempt restart with backoff."""
+        # Skip detached projects - don't access their database
+        if _is_project_detached(project_dir):
+            logger.info(f"Skipping crash recovery for detached project '{project_name}'")
+            return
+
         from api.database import Schedule, create_database
 
         _, SessionLocal = create_database(project_dir)
@@ -472,6 +507,11 @@ class SchedulerService:
 
         Uses atomic delete-then-create pattern to prevent race conditions.
         """
+        # Skip detached projects - don't access their database
+        if _is_project_detached(project_dir):
+            logger.debug(f"Skipping override creation for detached project '{project_name}'")
+            return
+
         from api.database import Schedule, ScheduleOverride, create_database
 
         try:
@@ -567,6 +607,11 @@ class SchedulerService:
         self, project_name: str, project_dir: Path, now: datetime
     ):
         """Check if a project should be started on server startup."""
+        # Skip detached projects - don't access their database
+        if _is_project_detached(project_dir):
+            logger.debug(f"Skipping startup check for detached project '{project_name}'")
+            return
+
         from api.database import Schedule, ScheduleOverride, create_database
         from autoforge_paths import get_features_db_path
 

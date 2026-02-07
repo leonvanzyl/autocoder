@@ -1,9 +1,9 @@
 import { useState } from 'react'
-import { ChevronDown, Plus, FolderOpen, Loader2, Trash2 } from 'lucide-react'
+import { ChevronDown, Plus, FolderOpen, Loader2, Trash2, Unlink, Link2 } from 'lucide-react'
 import type { ProjectSummary } from '../lib/types'
 import { NewProjectModal } from './NewProjectModal'
 import { ConfirmDialog } from './ConfirmDialog'
-import { useDeleteProject } from '../hooks/useProjects'
+import { useDeleteProject, useDetachProject, useReattachProject } from '../hooks/useProjects'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -32,8 +32,12 @@ export function ProjectSelector({
   const [isOpen, setIsOpen] = useState(false)
   const [showNewProjectModal, setShowNewProjectModal] = useState(false)
   const [projectToDelete, setProjectToDelete] = useState<string | null>(null)
+  const [projectToDetach, setProjectToDetach] = useState<string | null>(null)
+  const [projectToReattach, setProjectToReattach] = useState<string | null>(null)
 
   const deleteProject = useDeleteProject()
+  const detachProject = useDetachProject()
+  const reattachProject = useReattachProject()
 
   const handleProjectCreated = (projectName: string) => {
     onSelectProject(projectName)
@@ -63,6 +67,44 @@ export function ProjectSelector({
 
   const handleCancelDelete = () => {
     setProjectToDelete(null)
+  }
+
+  const handleDetachClick = (e: React.MouseEvent, projectName: string) => {
+    e.stopPropagation()
+    e.preventDefault()
+    setProjectToDetach(projectName)
+  }
+
+  const handleReattachClick = (e: React.MouseEvent, projectName: string) => {
+    e.stopPropagation()
+    e.preventDefault()
+    setProjectToReattach(projectName)
+  }
+
+  const handleConfirmDetach = async () => {
+    if (!projectToDetach) return
+
+    try {
+      const result = await detachProject.mutateAsync(projectToDetach)
+      console.log(`Project detached: ${result.files_moved} files moved to backup`)
+      setProjectToDetach(null)
+    } catch (error) {
+      console.error('Failed to detach project:', error)
+      setProjectToDetach(null)
+    }
+  }
+
+  const handleConfirmReattach = async () => {
+    if (!projectToReattach) return
+
+    try {
+      const result = await reattachProject.mutateAsync(projectToReattach)
+      console.log(`Project reattached: ${result.files_restored} files restored`)
+      setProjectToReattach(null)
+    } catch (error) {
+      console.error('Failed to reattach project:', error)
+      setProjectToReattach(null)
+    }
   }
 
   const selectedProjectData = projects.find(p => p.name === selectedProject)
@@ -108,23 +150,51 @@ export function ProjectSelector({
                     onSelectProject(project.name)
                   }}
                 >
-                  <span className="flex items-center gap-2 flex-1">
-                    <FolderOpen size={16} />
-                    {project.name}
-                    {project.stats.total > 0 && (
-                      <span className="text-sm font-mono text-muted-foreground ml-auto">
+                  <span className="flex items-center gap-2 flex-1 min-w-0">
+                    <FolderOpen size={16} className="shrink-0" />
+                    <span className="truncate">{project.name}</span>
+                    {project.is_detached && (
+                      <Badge variant="outline" className="shrink-0 text-xs bg-warning/10 text-warning border-warning/30">
+                        DETACHED
+                      </Badge>
+                    )}
+                    {project.stats.total > 0 && !project.is_detached && (
+                      <span className="text-sm font-mono text-muted-foreground ml-auto shrink-0">
                         {project.stats.passing}/{project.stats.total}
                       </span>
                     )}
                   </span>
-                  <Button
-                    variant="ghost"
-                    size="icon-xs"
-                    onClick={(e: React.MouseEvent) => handleDeleteClick(e, project.name)}
-                    className="text-muted-foreground hover:text-destructive"
-                  >
-                    <Trash2 size={14} />
-                  </Button>
+                  <div className="flex items-center gap-1 shrink-0 ml-2">
+                    {project.is_detached ? (
+                      <Button
+                        variant="ghost"
+                        size="icon-xs"
+                        onClick={(e: React.MouseEvent) => handleReattachClick(e, project.name)}
+                        className="text-muted-foreground hover:text-primary"
+                        title="Reattach project (restore Autocoder files)"
+                      >
+                        <Link2 size={14} />
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="ghost"
+                        size="icon-xs"
+                        onClick={(e: React.MouseEvent) => handleDetachClick(e, project.name)}
+                        className="text-muted-foreground hover:text-warning"
+                        title="Detach project (move Autocoder files to backup)"
+                      >
+                        <Unlink size={14} />
+                      </Button>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="icon-xs"
+                      onClick={(e: React.MouseEvent) => handleDeleteClick(e, project.name)}
+                      className="text-muted-foreground hover:text-destructive"
+                    >
+                      <Trash2 size={14} />
+                    </Button>
+                  </div>
                 </DropdownMenuItem>
               ))}
             </div>
@@ -169,6 +239,32 @@ export function ProjectSelector({
         isLoading={deleteProject.isPending}
         onConfirm={handleConfirmDelete}
         onCancel={handleCancelDelete}
+      />
+
+      {/* Detach Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={projectToDetach !== null}
+        title="Detach Project"
+        message={`This will move all Autocoder files for "${projectToDetach}" to a backup folder. Claude Code will have full access without restrictions. You can reattach later to continue with Autocoder.`}
+        confirmLabel="Detach"
+        cancelLabel="Cancel"
+        variant="warning"
+        isLoading={detachProject.isPending}
+        onConfirm={handleConfirmDetach}
+        onCancel={() => setProjectToDetach(null)}
+      />
+
+      {/* Reattach Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={projectToReattach !== null}
+        title="Reattach Project"
+        message={`This will restore all Autocoder files for "${projectToReattach}" from backup. The project will return to managed mode with security restrictions.`}
+        confirmLabel="Reattach"
+        cancelLabel="Cancel"
+        variant="warning"
+        isLoading={reattachProject.isPending}
+        onConfirm={handleConfirmReattach}
+        onCancel={() => setProjectToReattach(null)}
       />
     </div>
   )

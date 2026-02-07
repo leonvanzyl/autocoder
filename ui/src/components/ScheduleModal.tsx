@@ -41,14 +41,15 @@ interface ScheduleModalProps {
   projectName: string
   isOpen: boolean
   onClose: () => void
+  isDetached?: boolean
 }
 
-export function ScheduleModal({ projectName, isOpen, onClose }: ScheduleModalProps) {
+export function ScheduleModal({ projectName, isOpen, onClose, isDetached = false }: ScheduleModalProps) {
   const modalRef = useRef<HTMLDivElement>(null)
   const firstFocusableRef = useRef<HTMLButtonElement>(null)
 
   // Queries and mutations
-  const { data: schedulesData, isLoading } = useSchedules(projectName)
+  const { data: schedulesData, isLoading } = useSchedules(projectName, isDetached)
   const createSchedule = useCreateSchedule(projectName)
   const deleteSchedule = useDeleteSchedule(projectName)
   const toggleSchedule = useToggleSchedule(projectName)

@@ -1,3 +1,7 @@
+[project]
+name = "autocoder"
+version = "1.0.0"
+
 [tool.ruff]
 line-length = 120
 target-version = "py311"
