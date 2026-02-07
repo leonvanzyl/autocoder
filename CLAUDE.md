@@ -287,6 +287,7 @@ Projects can be stored in any directory (registered in `~/.autoforge/registry.db
 - `.autoforge/features.db` - SQLite database with feature test cases
 - `.autoforge/.agent.lock` - Lock file to prevent multiple agent instances
 - `.autoforge/allowed_commands.yaml` - Project-specific bash command allowlist (optional)
+- `.autoforge/validation` - Agent produced artifacts when validating work
 - `.autoforge/.gitignore` - Ignores runtime files
 - `CLAUDE.md` - Stays at project root (SDK convention)
 - `app_spec.txt` - Root copy for agent template compatibility

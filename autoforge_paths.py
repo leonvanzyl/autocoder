@@ -43,6 +43,7 @@ assistant.db-shm
 .claude_assistant_settings.json
 .claude_settings.expand.*.json
 .progress_cache
+validation/
 """
 
 

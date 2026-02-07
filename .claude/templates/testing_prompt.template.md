@@ -31,7 +31,7 @@ For the feature returned:
 1. Read and understand the feature's verification steps
 2. Navigate to the relevant part of the application
 3. Execute each verification step using browser automation
-4. Take screenshots to document the verification
+4. Take screenshots to document the verification and store them in the `.autoforge/validation` directory
 5. Check for console errors
 
 Use browser automation tools:
