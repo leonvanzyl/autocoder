@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Loader2, AlertCircle, Check, Moon, Sun, Eye, EyeOff, ShieldCheck, ChevronDown, ChevronRight } from 'lucide-react'
 import { useSettings, useUpdateSettings, useAvailableModels, useAvailableProviders } from '../hooks/useProjects'
 import { useTheme, THEMES } from '../hooks/useTheme'
@@ -39,6 +39,22 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [customModelInput, setCustomModelInput] = useState('')
   const [customBaseUrlInput, setCustomBaseUrlInput] = useState('')
   const [showRoleModels, setShowRoleModels] = useState(false)
+  const [toast, setToast] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 4000)
+      return () => clearTimeout(timer)
+    }
+  }, [toast])
+
+  const ALL_ROLES = ['initializer', 'coding', 'testing', 'spec_creation', 'expand', 'assistant', 'log_review'] as const
+
+  const allRolesMatch = (modelId: string): boolean => {
+    const rm = settings?.role_models
+    if (!rm) return false
+    return ALL_ROLES.every(r => rm[r] === modelId)
+  }
 
   const handleYoloToggle = () => {
     if (settings && !updateSettings.isPending) {
@@ -48,7 +64,21 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
   const handleModelChange = (modelId: string) => {
     if (!updateSettings.isPending) {
-      updateSettings.mutate({ api_model: modelId })
+      updateSettings.mutate({
+        api_model: modelId,
+        role_models: {
+          initializer: modelId,
+          coding: modelId,
+          testing: modelId,
+          spec_creation: modelId,
+          expand: modelId,
+          assistant: modelId,
+          log_review: modelId,
+        },
+      })
+      const modelName = models.find(m => m.id === modelId)?.name ?? modelId
+      setToast(`All task roles updated to ${modelName}. Customize per-task below.`)
+      setShowRoleModels(true)
     }
   }
 
@@ -327,7 +357,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                       onClick={() => handleModelChange(model.id)}
                       disabled={isSaving}
                       className={`flex-1 py-2 px-3 text-sm font-medium transition-colors ${
-                        (settings.api_model ?? settings.model) === model.id
+                        allRolesMatch(model.id)
                           ? 'bg-primary text-primary-foreground'
                           : 'bg-background text-foreground hover:bg-muted'
                       } ${isSaving ? 'opacity-50 cursor-not-allowed' : ''}`}
@@ -336,6 +366,12 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                       <span className="block text-xs opacity-60">{model.id}</span>
                     </button>
                   ))}
+                </div>
+              )}
+              {toast && (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-green-500/10 border border-green-500/30 text-green-700 dark:text-green-400 text-xs animate-slide-in-down">
+                  <Check size={14} className="shrink-0" />
+                  <span>{toast}</span>
                 </div>
               )}
               {/* Custom model input for Ollama/Custom */}
