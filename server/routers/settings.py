@@ -111,6 +111,7 @@ async def get_settings():
         glm_mode=glm_mode,
         ollama_mode=ollama_mode,
         testing_agent_ratio=_parse_int(all_settings.get("testing_agent_ratio"), 1),
+        testing_mode=all_settings.get("testing_mode", "full"),
         playwright_headless=_parse_bool(all_settings.get("playwright_headless"), default=True),
         batch_size=_parse_int(all_settings.get("batch_size"), 3),
         api_provider=api_provider,
@@ -137,6 +138,9 @@ async def update_settings(update: SettingsUpdate):
 
     if update.batch_size is not None:
         set_setting("batch_size", str(update.batch_size))
+
+    if update.testing_mode is not None:
+        set_setting("testing_mode", update.testing_mode)
 
     # API provider settings
     if update.api_provider is not None:
@@ -175,6 +179,7 @@ async def update_settings(update: SettingsUpdate):
         glm_mode=glm_mode,
         ollama_mode=ollama_mode,
         testing_agent_ratio=_parse_int(all_settings.get("testing_agent_ratio"), 1),
+        testing_mode=all_settings.get("testing_mode", "full"),
         playwright_headless=_parse_bool(all_settings.get("playwright_headless"), default=True),
         batch_size=_parse_int(all_settings.get("batch_size"), 3),
         api_provider=api_provider,

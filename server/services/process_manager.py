@@ -85,6 +85,7 @@ class AgentProcessManager:
         self.parallel_mode: bool = False  # Parallel execution mode
         self.max_concurrency: int | None = None  # Max concurrent agents
         self.testing_agent_ratio: int = 1  # Regression testing agents (0-3)
+        self.testing_mode: str = "full"  # Testing mode: full, smart
 
         # Support multiple callbacks (for multiple WebSocket clients)
         self._output_callbacks: Set[Callable[[str], Awaitable[None]]] = set()
@@ -340,6 +341,7 @@ class AgentProcessManager:
         testing_agent_ratio: int = 1,
         playwright_headless: bool = True,
         batch_size: int = 3,
+        testing_mode: str = "full",
     ) -> tuple[bool, str]:
         """
         Start the agent as a subprocess.
@@ -351,6 +353,7 @@ class AgentProcessManager:
             max_concurrency: Max concurrent coding agents (1-5, default 1)
             testing_agent_ratio: Number of regression testing agents (0-3, default 1)
             playwright_headless: If True, run browser in headless mode
+            testing_mode: Testing mode (full, smart)
 
         Returns:
             Tuple of (success, message)
@@ -370,6 +373,7 @@ class AgentProcessManager:
         self.parallel_mode = True  # Always True now (unified orchestrator)
         self.max_concurrency = max_concurrency or 1
         self.testing_agent_ratio = testing_agent_ratio
+        self.testing_mode = testing_mode
 
         # Build command - unified orchestrator with --concurrency
         cmd = [
@@ -396,6 +400,9 @@ class AgentProcessManager:
 
         # Add --batch-size flag for multi-feature batching
         cmd.extend(["--batch-size", str(batch_size)])
+
+        # Add testing mode configuration
+        cmd.extend(["--testing-mode", testing_mode])
 
         try:
             # Start subprocess with piped stdout/stderr
@@ -490,6 +497,7 @@ class AgentProcessManager:
             self.parallel_mode = False  # Reset parallel mode
             self.max_concurrency = None  # Reset concurrency
             self.testing_agent_ratio = 1  # Reset testing ratio
+            self.testing_mode = "full"  # Reset testing mode
 
             return True, "Agent stopped"
         except Exception as e:
@@ -576,6 +584,7 @@ class AgentProcessManager:
             "parallel_mode": self.parallel_mode,
             "max_concurrency": self.max_concurrency,
             "testing_agent_ratio": self.testing_agent_ratio,
+            "testing_mode": self.testing_mode,
         }
 
 

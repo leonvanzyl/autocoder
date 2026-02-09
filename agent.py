@@ -144,6 +144,7 @@ async def run_autonomous_agent(
     agent_type: Optional[str] = None,
     testing_feature_id: Optional[int] = None,
     testing_feature_ids: Optional[list[int]] = None,
+    testing_mode: str = "full",
 ) -> None:
     """
     Run the autonomous agent loop.
@@ -158,6 +159,7 @@ async def run_autonomous_agent(
         agent_type: Type of agent: "initializer", "coding", "testing", or None (auto-detect)
         testing_feature_id: For testing agents, the pre-claimed feature ID to test (legacy single mode)
         testing_feature_ids: For testing agents, list of feature IDs to batch test
+        testing_mode: Testing mode - "full" or "smart"
     """
     print("\n" + "=" * 70)
     print("  AUTONOMOUS CODING AGENT")
@@ -250,7 +252,29 @@ async def run_autonomous_agent(
             agent_id = f"feature-{feature_id}"
         else:
             agent_id = None
-        client = create_client(project_dir, model, yolo_mode=yolo_mode, agent_id=agent_id, agent_type=agent_type)
+
+        # Get feature category for smart testing mode
+        feature_category = None
+        if feature_id and testing_mode == "smart":
+            try:
+                from api.database import Feature, get_session
+                session = get_session(str(project_dir))
+                feature = session.query(Feature).filter(Feature.id == feature_id).first()
+                if feature:
+                    feature_category = feature.category
+                    print(f"   Feature category: {feature_category} (for smart testing)")
+                session.close()
+            except Exception as e:
+                print(f"   Warning: Could not get feature category: {e}")
+
+        client = create_client(
+            project_dir, model,
+            yolo_mode=yolo_mode,
+            agent_id=agent_id,
+            agent_type=agent_type,
+            testing_mode=testing_mode,
+            feature_category=feature_category,
+        )
 
         # Choose prompt based on agent type
         if agent_type == "initializer":

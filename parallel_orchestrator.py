@@ -155,6 +155,7 @@ class ParallelOrchestrator:
         testing_agent_ratio: int = 1,
         testing_batch_size: int = DEFAULT_TESTING_BATCH_SIZE,
         batch_size: int = 3,
+        testing_mode: str = "full",
         on_output: Callable[[int, str], None] | None = None,
         on_status: Callable[[int, str], None] | None = None,
     ):
@@ -170,6 +171,7 @@ class ParallelOrchestrator:
                 0 = disabled, 1-3 = maintain that many testing agents running independently.
             testing_batch_size: Number of features to include per testing session (1-5).
                 Each testing agent receives this many features to regression test.
+            testing_mode: Testing mode - full (always Playwright) or smart (UI only)
             on_output: Callback for agent output (feature_id, line)
             on_status: Callback for agent status changes (feature_id, status)
         """
@@ -178,6 +180,7 @@ class ParallelOrchestrator:
         self.model = model
         self.yolo_mode = yolo_mode
         self.testing_agent_ratio = min(max(testing_agent_ratio, 0), 3)  # Clamp 0-3
+        self.testing_mode = testing_mode
         self.testing_batch_size = min(max(testing_batch_size, 1), 5)  # Clamp 1-5
         self.batch_size = min(max(batch_size, 1), 3)  # Clamp 1-3
         self.on_output = on_output
@@ -828,6 +831,7 @@ class ParallelOrchestrator:
             "--max-iterations", "1",
             "--agent-type", "coding",
             "--feature-id", str(feature_id),
+            "--testing-mode", self.testing_mode,
         ]
         if self.model:
             cmd.extend(["--model", self.model])
@@ -1668,6 +1672,7 @@ async def run_parallel_orchestrator(
     testing_agent_ratio: int = 1,
     testing_batch_size: int = DEFAULT_TESTING_BATCH_SIZE,
     batch_size: int = 3,
+    testing_mode: str = "full",
 ) -> None:
     """Run the unified orchestrator.
 
@@ -1679,8 +1684,9 @@ async def run_parallel_orchestrator(
         testing_agent_ratio: Number of regression agents to maintain (0-3)
         testing_batch_size: Number of features per testing batch (1-5)
         batch_size: Max features per coding agent batch (1-3)
+        testing_mode: Testing mode - full or smart
     """
-    print(f"[ORCHESTRATOR] run_parallel_orchestrator called with max_concurrency={max_concurrency}", flush=True)
+    print(f"[ORCHESTRATOR] run_parallel_orchestrator called with max_concurrency={max_concurrency}, testing_mode={testing_mode}", flush=True)
     orchestrator = ParallelOrchestrator(
         project_dir=project_dir,
         max_concurrency=max_concurrency,
@@ -1689,6 +1695,7 @@ async def run_parallel_orchestrator(
         testing_agent_ratio=testing_agent_ratio,
         testing_batch_size=testing_batch_size,
         batch_size=batch_size,
+        testing_mode=testing_mode,
     )
 
     # Set up cleanup to run on exit (handles normal exit, exceptions)
@@ -1780,6 +1787,13 @@ def main():
         default=3,
         help="Max features per coding agent batch (1-5, default: 3)",
     )
+    parser.add_argument(
+        "--testing-mode",
+        type=str,
+        default="full",
+        choices=["full", "smart"],
+        help="Testing mode: full (always Playwright), smart (Playwright for UI only)",
+    )
 
     args = parser.parse_args()
 
@@ -1808,6 +1822,7 @@ def main():
             testing_agent_ratio=args.testing_agent_ratio,
             testing_batch_size=args.testing_batch_size,
             batch_size=args.batch_size,
+            testing_mode=args.testing_mode,
         ))
     except KeyboardInterrupt:
         print("\n\nInterrupted by user", flush=True)

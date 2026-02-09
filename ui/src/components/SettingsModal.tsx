@@ -57,6 +57,12 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     }
   }
 
+  const handleTestingModeChange = (mode: string) => {
+    if (!updateSettings.isPending) {
+      updateSettings.mutate({ testing_mode: mode })
+    }
+  }
+
   const handleBatchSizeChange = (size: number) => {
     if (!updateSettings.isPending) {
       updateSettings.mutate({ batch_size: size })
@@ -371,6 +377,35 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 onCheckedChange={handleYoloToggle}
                 disabled={isSaving}
               />
+            </div>
+
+            {/* Browser Testing Mode */}
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label className="font-medium">Browser Testing</Label>
+                <p className="text-sm text-muted-foreground">
+                  {(settings.testing_mode || 'full') === 'smart' ? 'UI features only' : 'All features'}
+                </p>
+              </div>
+              <div className={`flex rounded-lg border overflow-hidden ${settings.yolo_mode ? 'opacity-50' : ''}`}>
+                {[
+                  { id: 'full', label: 'Full' },
+                  { id: 'smart', label: 'Smart' },
+                ].map((mode) => (
+                  <button
+                    key={mode.id}
+                    onClick={() => handleTestingModeChange(mode.id)}
+                    disabled={isSaving || settings.yolo_mode}
+                    className={`py-1.5 px-3 text-sm font-medium transition-colors ${
+                      (settings.testing_mode || 'full') === mode.id
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-background text-foreground hover:bg-muted'
+                    } ${(isSaving || settings.yolo_mode) ? 'cursor-not-allowed' : ''}`}
+                  >
+                    {mode.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Headless Browser Toggle */}

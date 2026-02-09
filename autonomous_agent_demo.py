@@ -186,6 +186,14 @@ Authentication:
         help="Max features per coding agent batch (1-3, default: 3)",
     )
 
+    parser.add_argument(
+        "--testing-mode",
+        type=str,
+        default="full",
+        choices=["full", "smart"],
+        help="Testing mode: full (always Playwright), smart (Playwright for UI only)",
+    )
+
     return parser.parse_args()
 
 
@@ -269,6 +277,7 @@ def main() -> None:
                     agent_type=args.agent_type,
                     testing_feature_id=args.testing_feature_id,
                     testing_feature_ids=testing_feature_ids,
+                    testing_mode=args.testing_mode,
                 )
             )
         else:
@@ -300,6 +309,7 @@ def main() -> None:
                     testing_agent_ratio=args.testing_ratio,
                     testing_batch_size=args.testing_batch_size,
                     batch_size=args.batch_size,
+                    testing_mode=args.testing_mode,
                 )
             )
     except KeyboardInterrupt:

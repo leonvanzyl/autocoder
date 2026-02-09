@@ -278,12 +278,45 @@ BUILTIN_TOOLS = [
 ]
 
 
+def should_use_playwright(testing_mode: str, feature_category: str | None, yolo_mode: bool) -> bool:
+    """
+    Determine if Playwright tools should be included based on testing mode and feature category.
+
+    Args:
+        testing_mode: Testing mode - "full" or "smart"
+        feature_category: Category of the feature (e.g., "API", "UI", "Database")
+        yolo_mode: Whether YOLO mode is enabled (overrides everything)
+
+    Returns:
+        True if Playwright tools should be included, False otherwise
+    """
+    # YOLO mode always disables Playwright
+    if yolo_mode:
+        return False
+
+    # "smart" mode only uses Playwright for UI features
+    if testing_mode == "smart":
+        if feature_category:
+            category_lower = feature_category.lower()
+            # Exclude for API/backend features
+            api_keywords = ["api", "backend", "database", "db", "server", "endpoint", "service"]
+            if any(kw in category_lower for kw in api_keywords):
+                return False
+        # Default: use Playwright (for UI features or unknown categories)
+        return True
+
+    # "full" mode (default) always uses Playwright
+    return True
+
+
 def create_client(
     project_dir: Path,
     model: str,
     yolo_mode: bool = False,
     agent_id: str | None = None,
     agent_type: str = "coding",
+    testing_mode: str = "full",
+    feature_category: str | None = None,
 ):
     """
     Create a Claude Agent SDK client with multi-layered security.
@@ -296,6 +329,8 @@ def create_client(
                   When provided, each agent gets its own browser profile.
         agent_type: One of "coding", "testing", or "initializer". Controls which
                     MCP tools are exposed and the max_turns limit.
+        testing_mode: Testing mode - "full" (always Playwright), "smart" (UI only)
+        feature_category: Category of the feature being worked on (for smart mode)
 
     Returns:
         Configured ClaudeSDKClient (from claude_agent_sdk)
@@ -327,10 +362,12 @@ def create_client(
     }
     max_turns = max_turns_map.get(agent_type, 300)
 
+    # Determine if Playwright should be used
+    use_playwright = should_use_playwright(testing_mode, feature_category, yolo_mode)
+
     # Build allowed tools list based on mode and agent type.
-    # In YOLO mode, exclude Playwright tools for faster prototyping.
     allowed_tools = [*BUILTIN_TOOLS, *feature_tools]
-    if not yolo_mode:
+    if use_playwright:
         allowed_tools.extend(PLAYWRIGHT_TOOLS)
 
     # Build permissions list.
@@ -363,8 +400,8 @@ def create_client(
         permissions_list.append(f"Glob({path}/**)")
         permissions_list.append(f"Grep({path}/**)")
 
-    if not yolo_mode:
-        # Allow Playwright MCP tools for browser automation (standard mode only)
+    if use_playwright:
+        # Allow Playwright MCP tools for browser automation
         permissions_list.extend(PLAYWRIGHT_TOOLS)
 
     # Create comprehensive security settings
@@ -394,8 +431,11 @@ def create_client(
     if extra_read_paths:
         print(f"   - Extra read paths (validated): {', '.join(str(p) for p in extra_read_paths)}")
     print("   - Bash commands restricted to allowlist (see security.py)")
-    if yolo_mode:
-        print("   - MCP servers: features (database) - YOLO MODE (no Playwright)")
+    if not use_playwright:
+        reason = "YOLO MODE" if yolo_mode else f"testing_mode={testing_mode}"
+        if testing_mode == "smart" and feature_category:
+            reason += f", category={feature_category}"
+        print(f"   - MCP servers: features (database) - NO Playwright ({reason})")
     else:
         print("   - MCP servers: playwright (browser), features (database)")
     print("   - Project settings enabled (skills, commands, CLAUDE.md)")
@@ -421,8 +461,8 @@ def create_client(
             },
         },
     }
-    if not yolo_mode:
-        # Include Playwright MCP server for browser automation (standard mode only)
+    if use_playwright:
+        # Include Playwright MCP server for browser automation
         # Browser and headless mode configurable via environment variables
         browser = get_playwright_browser()
         playwright_args = [

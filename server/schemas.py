@@ -20,6 +20,12 @@ if str(_root) not in sys.path:
 
 from registry import DEFAULT_MODEL, VALID_MODELS
 
+# Valid testing modes for Playwright browser control
+# - "full": Always use Playwright for all features
+# - "smart": Use Playwright only for UI features (skip for API features)
+VALID_TESTING_MODES = {"full", "smart"}
+DEFAULT_TESTING_MODE = "full"
+
 # ============================================================================
 # Project Schemas
 # ============================================================================
@@ -186,6 +192,15 @@ class AgentStartRequest(BaseModel):
     parallel_mode: bool | None = None  # DEPRECATED: Use max_concurrency instead
     max_concurrency: int | None = None  # Max concurrent coding agents (1-5)
     testing_agent_ratio: int | None = None  # Regression testing agents (0-3)
+    testing_mode: str | None = None  # Testing mode: full, smart
+
+    @field_validator('testing_mode')
+    @classmethod
+    def validate_testing_mode(cls, v: str | None) -> str | None:
+        """Validate testing_mode is in the allowed list."""
+        if v is not None and v not in VALID_TESTING_MODES:
+            raise ValueError(f"Invalid testing_mode. Must be one of: {VALID_TESTING_MODES}")
+        return v
 
     @field_validator('model')
     @classmethod
@@ -225,6 +240,7 @@ class AgentStatus(BaseModel):
     parallel_mode: bool = False  # DEPRECATED: Always True now (unified orchestrator)
     max_concurrency: int | None = None
     testing_agent_ratio: int = 1  # Regression testing agents (0-3)
+    testing_mode: str = "full"  # Testing mode: full, smart
 
 
 class AgentActionResponse(BaseModel):
@@ -417,6 +433,7 @@ class SettingsResponse(BaseModel):
     glm_mode: bool = False  # True when api_provider is "glm"
     ollama_mode: bool = False  # True when api_provider is "ollama"
     testing_agent_ratio: int = 1  # Regression testing agents (0-3)
+    testing_mode: str = DEFAULT_TESTING_MODE  # Testing mode: full, smart
     playwright_headless: bool = True
     batch_size: int = 3  # Features per coding agent batch (1-3)
     api_provider: str = "claude"
@@ -436,6 +453,7 @@ class SettingsUpdate(BaseModel):
     yolo_mode: bool | None = None
     model: str | None = None
     testing_agent_ratio: int | None = None  # 0-3
+    testing_mode: str | None = None  # full, smart
     playwright_headless: bool | None = None
     batch_size: int | None = None  # Features per agent batch (1-3)
     api_provider: str | None = None
@@ -462,6 +480,13 @@ class SettingsUpdate(BaseModel):
                 return v
             if v not in VALID_MODELS:
                 raise ValueError(f"Invalid model. Must be one of: {VALID_MODELS}")
+        return v
+
+    @field_validator('testing_mode')
+    @classmethod
+    def validate_testing_mode(cls, v: str | None) -> str | None:
+        if v is not None and v not in VALID_TESTING_MODES:
+            raise ValueError(f"Invalid testing_mode. Must be one of: {VALID_TESTING_MODES}")
         return v
 
     @field_validator('testing_agent_ratio')

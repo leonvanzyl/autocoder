@@ -551,6 +551,7 @@ export interface Settings {
   glm_mode: boolean
   ollama_mode: boolean
   testing_agent_ratio: number  // Regression testing agents (0-3)
+  testing_mode: string  // "full", "smart"
   playwright_headless: boolean
   batch_size: number  // Features per coding agent batch (1-3)
   api_provider: string
@@ -563,6 +564,7 @@ export interface SettingsUpdate {
   yolo_mode?: boolean
   model?: string
   testing_agent_ratio?: number
+  testing_mode?: string
   playwright_headless?: boolean
   batch_size?: number
   api_provider?: string
