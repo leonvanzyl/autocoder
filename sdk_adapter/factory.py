@@ -37,11 +37,30 @@ DEFAULT_SDK: SDKType = "claude"
 
 def get_sdk_type() -> SDKType:
     """
-    Get the SDK type from environment variable.
+    Get the SDK type from DB settings, falling back to environment variable.
+
+    Priority:
+        1. DB setting (sdk_type) from Settings UI
+        2. AUTOFORGE_SDK environment variable
+        3. Default: "claude"
 
     Returns:
-        "claude" (default) or "codex" based on AUTOFORGE_SDK env var.
+        "claude" (default) or "codex".
     """
+    # Check DB settings first
+    try:
+        import sys
+        root = str(Path(__file__).parent.parent)
+        if root not in sys.path:
+            sys.path.insert(0, root)
+        from registry import get_setting
+        db_value = get_setting("sdk_type")
+        if db_value and db_value.lower() in ("claude", "codex"):
+            return db_value.lower()  # type: ignore[return-value]
+    except Exception:
+        pass  # DB not available, fall back to env var
+
+    # Fall back to environment variable
     raw_value = os.getenv(SDK_TYPE_VAR)
     sdk_type = (raw_value or DEFAULT_SDK).lower()
 

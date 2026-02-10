@@ -214,6 +214,32 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
             <hr className="border-border" />
 
+            {/* SDK Selection */}
+            <div className="space-y-2">
+              <Label className="font-medium">SDK</Label>
+              <div className="flex flex-wrap gap-1.5">
+                {(['claude', 'codex'] as const).map((sdk) => (
+                  <button
+                    key={sdk}
+                    onClick={() => !isSaving && updateSettings.mutate({ sdk_type: sdk })}
+                    disabled={isSaving}
+                    className={`py-1.5 px-3 text-sm font-medium rounded-md border transition-colors ${
+                      (settings.sdk_type ?? 'claude') === sdk
+                        ? 'bg-primary text-primary-foreground border-primary'
+                        : 'bg-background text-foreground border-border hover:bg-muted'
+                    } ${isSaving ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  >
+                    {sdk === 'claude' ? 'Claude' : 'Codex'}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {(settings.sdk_type ?? 'claude') === 'claude'
+                  ? 'Claude Agent SDK (default)'
+                  : 'OpenAI Codex SDK'}
+              </p>
+            </div>
+
             {/* API Provider Selection */}
             <div className="space-y-3">
               <Label className="font-medium">API Provider</Label>

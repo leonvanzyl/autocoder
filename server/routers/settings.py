@@ -113,6 +113,7 @@ async def get_settings():
         testing_agent_ratio=_parse_int(all_settings.get("testing_agent_ratio"), 1),
         playwright_headless=_parse_bool(all_settings.get("playwright_headless"), default=True),
         batch_size=_parse_int(all_settings.get("batch_size"), 3),
+        sdk_type=all_settings.get("sdk_type", "claude"),
         api_provider=api_provider,
         api_base_url=all_settings.get("api_base_url"),
         api_has_auth_token=bool(all_settings.get("api_auth_token")),
@@ -137,6 +138,10 @@ async def update_settings(update: SettingsUpdate):
 
     if update.batch_size is not None:
         set_setting("batch_size", str(update.batch_size))
+
+    if update.sdk_type is not None:
+        if update.sdk_type in ("claude", "codex"):
+            set_setting("sdk_type", update.sdk_type)
 
     # API provider settings
     if update.api_provider is not None:
@@ -177,6 +182,7 @@ async def update_settings(update: SettingsUpdate):
         testing_agent_ratio=_parse_int(all_settings.get("testing_agent_ratio"), 1),
         playwright_headless=_parse_bool(all_settings.get("playwright_headless"), default=True),
         batch_size=_parse_int(all_settings.get("batch_size"), 3),
+        sdk_type=all_settings.get("sdk_type", "claude"),
         api_provider=api_provider,
         api_base_url=all_settings.get("api_base_url"),
         api_has_auth_token=bool(all_settings.get("api_auth_token")),
