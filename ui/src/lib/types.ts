@@ -16,10 +16,29 @@ export interface ProjectSummary {
   has_spec: boolean
   stats: ProjectStats
   default_concurrency: number
+  boilerplate_id: string | null
+  style_id: string | null
 }
 
 export interface ProjectDetail extends ProjectSummary {
   prompts_dir: string
+}
+
+// Boilerplate types
+export interface BoilerplateOption {
+  id: string
+  name: string
+  description: string
+  tech_summary: string
+  repo_url: string | null
+  available: boolean
+  pre_built: string[]
+}
+
+export interface BoilerplateCategory {
+  category: string
+  label: string
+  options: BoilerplateOption[]
 }
 
 // Filesystem types

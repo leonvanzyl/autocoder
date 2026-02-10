@@ -127,6 +127,30 @@ class SpecChatSession:
         project_path = str(self.project_dir.resolve())
         system_prompt = skill_content.replace("$ARGUMENTS", project_path)
 
+        # Inject boilerplate context if the project was created from a boilerplate
+        from .boilerplate_manager import get_boilerplate_option, load_project_config
+        project_config = load_project_config(self.project_dir)
+        if project_config:
+            bp_info = project_config.get("boilerplate", {})
+            bp_option_id = bp_info.get("option_id", "")
+            if bp_option_id and bp_option_id != "scratch":
+                bp_option = get_boilerplate_option(bp_option_id)
+                if bp_option:
+                    pre_built = bp_option.get("pre_built", [])
+                    pre_built_lines = "\n".join(f"- {item}" for item in pre_built)
+                    boilerplate_ctx = (
+                        "\n\n## BOILERPLATE CONTEXT\n\n"
+                        f"This project was created from the **{bp_option['name']}** boilerplate.\n\n"
+                        f"**Tech Stack:** {bp_option['tech_summary']}\n\n"
+                        "**The following features are ALREADY BUILT and must NOT be included in the spec:**\n"
+                        f"{pre_built_lines}\n\n"
+                        "**Important:** Skip Phase 3 (tech preferences) entirely — the tech stack is decided.\n"
+                        "Skip database/auth/payments questions — those are pre-built.\n"
+                        "Focus ONLY on what makes this app unique: the core idea, app-specific screens, and business logic.\n"
+                        "The feature count should be LOWER than a from-scratch project because infrastructure is done.\n"
+                    )
+                    system_prompt = system_prompt + boilerplate_ctx
+
         # Write system prompt to CLAUDE.md file to avoid Windows command line length limit
         # The SDK will read this via setting_sources=["project"]
         claude_md_path = self.project_dir / "CLAUDE.md"

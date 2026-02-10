@@ -4,18 +4,33 @@
  * Multi-step modal for creating new projects:
  * 1. Enter project name
  * 2. Select project folder
- * 3. Choose spec method (Claude or manual)
- * 4a. If Claude: Show SpecCreationChat
- * 4b. If manual: Create project and close
+ * 3. Choose boilerplate (web, mobile, scratch, etc.)
+ * 4. Choose design style (placeholder - coming soon)
+ * 5. Choose spec method (Claude or manual)
+ * 6a. If Claude: Show SpecCreationChat
+ * 6b. If manual: Create project and close
  */
 
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Bot, FileEdit, ArrowRight, ArrowLeft, Loader2, CheckCircle2, Folder } from 'lucide-react'
-import { useCreateProject } from '../hooks/useProjects'
+import {
+  Bot,
+  FileEdit,
+  ArrowRight,
+  ArrowLeft,
+  Loader2,
+  CheckCircle2,
+  Folder,
+  Globe,
+  Smartphone,
+  Layers,
+  Zap,
+} from 'lucide-react'
+import { useCreateProject, useBoilerplates } from '../hooks/useProjects'
 import { SpecCreationChat } from './SpecCreationChat'
 import { FolderBrowser } from './FolderBrowser'
 import { startAgent } from '../lib/api'
+import type { BoilerplateCategory } from '../lib/types'
 import {
   Dialog,
   DialogContent,
@@ -33,8 +48,16 @@ import { Card, CardContent } from '@/components/ui/card'
 
 type InitializerStatus = 'idle' | 'starting' | 'error'
 
-type Step = 'name' | 'folder' | 'method' | 'chat' | 'complete'
+type Step = 'name' | 'folder' | 'boilerplate' | 'style' | 'method' | 'chat' | 'complete'
 type SpecMethod = 'claude' | 'manual'
+
+/** Map category IDs to lucide-react icons */
+const CATEGORY_ICONS: Record<string, React.ComponentType<{ size?: number; className?: string }>> = {
+  web: Globe,
+  mobile: Smartphone,
+  web_mobile: Layers,
+  scratch: Zap,
+}
 
 interface NewProjectModalProps {
   isOpen: boolean
@@ -52,6 +75,8 @@ export function NewProjectModal({
   const [step, setStep] = useState<Step>('name')
   const [projectName, setProjectName] = useState('')
   const [projectPath, setProjectPath] = useState<string | null>(null)
+  const [boilerplateId, setBoilerplateId] = useState<string | null>(null)
+  const [styleId, setStyleId] = useState<string | null>(null)
   const [_specMethod, setSpecMethod] = useState<SpecMethod | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [initializerStatus, setInitializerStatus] = useState<InitializerStatus>('idle')
@@ -62,6 +87,7 @@ export function NewProjectModal({
   void _specMethod
 
   const createProject = useCreateProject()
+  const { data: boilerplateCategories, isLoading: boilerplatesLoading } = useBoilerplates()
 
   // Wrapper to notify parent of step changes
   const changeStep = (newStep: Step) => {
@@ -91,11 +117,39 @@ export function NewProjectModal({
 
   const handleFolderSelect = (path: string) => {
     setProjectPath(path)
-    changeStep('method')
+    changeStep('boilerplate')
   }
 
   const handleFolderCancel = () => {
     changeStep('name')
+  }
+
+  /**
+   * Handle selecting a boilerplate category card.
+   * Categories with no available options are disabled (coming soon).
+   * Categories with exactly one available option auto-select it.
+   * Categories with multiple available options could expand inline (future).
+   */
+  const handleBoilerplateSelect = (category: BoilerplateCategory) => {
+    const availableOptions = category.options.filter((opt) => opt.available)
+
+    // No available options - card should not be clickable
+    if (availableOptions.length === 0) return
+
+    if (availableOptions.length === 1) {
+      // Single available option - select it directly
+      setBoilerplateId(availableOptions[0].id)
+      changeStep('style')
+    } else {
+      // Multiple options - for now, select the first one.
+      // Future: expand inline to show sub-options.
+      setBoilerplateId(availableOptions[0].id)
+      changeStep('style')
+    }
+  }
+
+  const handleStyleSkip = () => {
+    changeStep('method')
   }
 
   const handleMethodSelect = async (method: SpecMethod) => {
@@ -114,6 +168,8 @@ export function NewProjectModal({
           name: projectName.trim(),
           path: projectPath,
           specMethod: 'manual',
+          boilerplateId,
+          styleId,
         })
         changeStep('complete')
         setTimeout(() => {
@@ -130,6 +186,8 @@ export function NewProjectModal({
           name: projectName.trim(),
           path: projectPath,
           specMethod: 'claude',
+          boilerplateId,
+          styleId,
         })
         changeStep('chat')
       } catch (err: unknown) {
@@ -183,6 +241,8 @@ export function NewProjectModal({
     changeStep('name')
     setProjectName('')
     setProjectPath(null)
+    setBoilerplateId(null)
+    setStyleId(null)
     setSpecMethod(null)
     setError(null)
     setInitializerStatus('idle')
@@ -192,12 +252,18 @@ export function NewProjectModal({
   }
 
   const handleBack = () => {
-    if (step === 'method') {
-      changeStep('folder')
-      setSpecMethod(null)
-    } else if (step === 'folder') {
+    if (step === 'folder') {
       changeStep('name')
       setProjectPath(null)
+    } else if (step === 'boilerplate') {
+      changeStep('folder')
+      setBoilerplateId(null)
+    } else if (step === 'style') {
+      changeStep('boilerplate')
+      setStyleId(null)
+    } else if (step === 'method') {
+      changeStep('style')
+      setSpecMethod(null)
     }
   }
 
@@ -251,10 +317,12 @@ export function NewProjectModal({
 
   return (
     <Dialog open={true} onOpenChange={(open) => !open && handleClose()}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className={step === 'boilerplate' ? 'sm:max-w-xl' : 'sm:max-w-lg'}>
         <DialogHeader>
           <DialogTitle>
             {step === 'name' && 'Create New Project'}
+            {step === 'boilerplate' && 'Choose a Boilerplate'}
+            {step === 'style' && 'Choose a Design Style'}
             {step === 'method' && 'Choose Setup Method'}
             {step === 'complete' && 'Project Created!'}
           </DialogTitle>
@@ -294,7 +362,147 @@ export function NewProjectModal({
           </form>
         )}
 
-        {/* Step 2: Spec Method */}
+        {/* Step 3: Boilerplate Selection */}
+        {step === 'boilerplate' && (
+          <div className="space-y-4">
+            <DialogDescription>
+              Pick a starting point for your project.
+            </DialogDescription>
+
+            {boilerplatesLoading && (
+              <div className="flex items-center justify-center gap-2 py-8 text-muted-foreground">
+                <Loader2 size={16} className="animate-spin" />
+                <span>Loading boilerplates...</span>
+              </div>
+            )}
+
+            {!boilerplatesLoading && boilerplateCategories && (
+              <div className="space-y-3">
+                {boilerplateCategories.map((category) => {
+                  const availableOptions = category.options.filter((opt) => opt.available)
+                  const isDisabled = availableOptions.length === 0
+                  const Icon = CATEGORY_ICONS[category.category] ?? Zap
+
+                  return (
+                    <Card
+                      key={category.category}
+                      className={
+                        isDisabled
+                          ? 'opacity-60 cursor-not-allowed'
+                          : 'cursor-pointer hover:border-primary transition-colors'
+                      }
+                      onClick={() => !isDisabled && handleBoilerplateSelect(category)}
+                    >
+                      <CardContent className="p-4">
+                        <div className="flex items-start gap-4">
+                          <div className="p-2 bg-primary/10 rounded-lg">
+                            <Icon size={24} className="text-primary" />
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold">{category.label}</span>
+                              {isDisabled && (
+                                <Badge variant="secondary">Coming Soon</Badge>
+                              )}
+                            </div>
+
+                            {/* Show available options with tech summaries */}
+                            {availableOptions.length > 0 && (
+                              <div className="mt-1 space-y-1">
+                                {availableOptions.map((option) => (
+                                  <div key={option.id}>
+                                    <p className="text-sm text-muted-foreground">
+                                      {option.tech_summary}
+                                    </p>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            {/* For disabled categories, show a brief explanation */}
+                            {isDisabled && category.options.length > 0 && (
+                              <p className="text-sm text-muted-foreground mt-1">
+                                {category.options[0].description}
+                              </p>
+                            )}
+                            {isDisabled && category.options.length === 0 && (
+                              <p className="text-sm text-muted-foreground mt-1">
+                                More options coming soon.
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )
+                })}
+              </div>
+            )}
+
+            {/* Show pre_built badges for the selected boilerplate */}
+            {boilerplateId && boilerplateCategories && (() => {
+              const selectedOption = boilerplateCategories
+                .flatMap((c) => c.options)
+                .find((opt) => opt.id === boilerplateId)
+              if (!selectedOption || selectedOption.pre_built.length === 0) return null
+              return (
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">Included out of the box:</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {selectedOption.pre_built.map((item) => (
+                      <Badge key={item} variant="secondary">{item}</Badge>
+                    ))}
+                  </div>
+                </div>
+              )
+            })()}
+
+            {error && (
+              <Alert variant="destructive">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+
+            <DialogFooter className="sm:justify-start">
+              <Button variant="ghost" onClick={handleBack}>
+                <ArrowLeft size={16} />
+                Back
+              </Button>
+            </DialogFooter>
+          </div>
+        )}
+
+        {/* Step 4: Design Style (Placeholder) */}
+        {step === 'style' && (
+          <div className="space-y-4">
+            <Card>
+              <CardContent className="p-6 text-center space-y-3">
+                <p className="text-muted-foreground">
+                  This feature is coming soon. You'll be able to pick from graphic design styles, each with their own stylesheet.
+                </p>
+                <div className="flex flex-wrap justify-center gap-2">
+                  <Badge variant="secondary">Neobrutalism</Badge>
+                  <Badge variant="secondary">Glassmorphism</Badge>
+                  <Badge variant="secondary">Swiss / International</Badge>
+                  <Badge variant="secondary">Material Design</Badge>
+                </div>
+              </CardContent>
+            </Card>
+
+            <DialogFooter className="sm:justify-between">
+              <Button variant="ghost" onClick={handleBack}>
+                <ArrowLeft size={16} />
+                Back
+              </Button>
+              <Button onClick={handleStyleSkip}>
+                Skip for Now
+                <ArrowRight size={16} />
+              </Button>
+            </DialogFooter>
+          </div>
+        )}
+
+        {/* Step 5: Spec Method */}
         {step === 'method' && (
           <div className="space-y-4">
             <DialogDescription>
@@ -355,7 +563,11 @@ export function NewProjectModal({
             {createProject.isPending && (
               <div className="flex items-center justify-center gap-2 text-muted-foreground">
                 <Loader2 size={16} className="animate-spin" />
-                <span>Creating project...</span>
+                <span>
+                  {boilerplateId && boilerplateId !== 'scratch'
+                    ? 'Cloning boilerplate...'
+                    : 'Creating project...'}
+                </span>
               </div>
             )}
 
@@ -372,7 +584,7 @@ export function NewProjectModal({
           </div>
         )}
 
-        {/* Step 3: Complete */}
+        {/* Step 6: Complete */}
         {step === 'complete' && (
           <div className="text-center py-8">
             <div className="inline-flex items-center justify-center w-16 h-16 bg-primary/10 rounded-full mb-4">

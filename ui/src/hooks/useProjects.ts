@@ -29,11 +29,25 @@ export function useCreateProject() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: ({ name, path, specMethod }: { name: string; path: string; specMethod?: 'claude' | 'manual' }) =>
-      api.createProject(name, path, specMethod),
+    mutationFn: ({ name, path, specMethod, boilerplateId, styleId }: {
+      name: string
+      path: string
+      specMethod?: 'claude' | 'manual'
+      boilerplateId?: string | null
+      styleId?: string | null
+    }) =>
+      api.createProject(name, path, specMethod, boilerplateId, styleId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['projects'] })
     },
+  })
+}
+
+export function useBoilerplates() {
+  return useQuery({
+    queryKey: ['boilerplates'],
+    queryFn: api.listBoilerplates,
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes - rarely changes
   })
 }
 

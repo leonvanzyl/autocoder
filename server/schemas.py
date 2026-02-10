@@ -29,6 +29,8 @@ class ProjectCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=50, pattern=r'^[a-zA-Z0-9_-]+$')
     path: str = Field(..., min_length=1, description="Absolute path to project directory")
     spec_method: Literal["claude", "manual"] = "claude"
+    boilerplate_id: str | None = Field(None, description="Boilerplate option ID (e.g., 'web-supabase-stripe', 'scratch')")
+    style_id: str | None = Field(None, description="UI style/theme ID (placeholder for future use)")
 
 
 class ProjectStats(BaseModel):
@@ -46,6 +48,8 @@ class ProjectSummary(BaseModel):
     has_spec: bool
     stats: ProjectStats
     default_concurrency: int = 3
+    boilerplate_id: str | None = None
+    style_id: str | None = None
 
 
 class ProjectDetail(BaseModel):
@@ -56,6 +60,8 @@ class ProjectDetail(BaseModel):
     stats: ProjectStats
     prompts_dir: str
     default_concurrency: int = 3
+    boilerplate_id: str | None = None
+    style_id: str | None = None
 
 
 class ProjectPrompts(BaseModel):

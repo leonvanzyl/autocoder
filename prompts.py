@@ -66,9 +66,84 @@ def load_prompt(name: str, project_dir: Path | None = None) -> str:
     )
 
 
+def _get_boilerplate_context(project_dir: Path | None) -> str:
+    """Generate boilerplate context string for injection into prompts.
+
+    If the project was created from a boilerplate, returns a markdown section
+    describing what's pre-built so agents don't duplicate infrastructure.
+
+    Args:
+        project_dir: The project directory to check for project_config.json.
+
+    Returns:
+        A markdown string with boilerplate context, or empty string if none.
+    """
+    if not project_dir:
+        return ""
+
+    config_path = project_dir / ".autoforge" / "project_config.json"
+    if not config_path.exists():
+        return ""
+
+    import json
+    try:
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return ""
+
+    boilerplate = config.get("boilerplate", {})
+    option_id = boilerplate.get("option_id", "")
+
+    # No boilerplate or "from scratch" - no context needed
+    if not option_id or option_id == "scratch":
+        return ""
+
+    option_name = boilerplate.get("option_name", option_id)
+    tech_summary = boilerplate.get("tech_summary", "")
+
+    # Look up pre_built from the boilerplate registry
+    pre_built: list[str] = []
+    try:
+        from server.services.boilerplate_manager import get_boilerplate_option
+        opt = get_boilerplate_option(option_id)
+        if opt:
+            pre_built = opt.get("pre_built", [])
+    except ImportError:
+        pass
+
+    pre_built_lines = "\n".join(f"- {item}" for item in pre_built)
+
+    return f"""
+## BOILERPLATE CONTEXT
+
+This project was created from the **{option_name}** boilerplate.
+
+**Tech Stack:** {tech_summary}
+
+**The following features are ALREADY BUILT and should NOT be recreated:**
+{pre_built_lines}
+
+**Important guidelines for boilerplate projects:**
+- DO NOT create features for auth, payments, credits, admin, or other pre-built infrastructure
+- Build ON TOP of the existing code — follow the patterns already established in the codebase
+- Use existing components, contexts, hooks, and API patterns from the boilerplate
+- New pages go in `src/pages/`, new components in `src/components/`, new API routes in `api/`
+- The boilerplate's CLAUDE.md and AI_RULES.md contain project-specific coding standards — follow them
+- Focus ONLY on features that make this app unique (the app-specific business logic and UI)
+
+"""
+
+
 def get_initializer_prompt(project_dir: Path | None = None) -> str:
-    """Load the initializer prompt (project-specific if available)."""
-    return load_prompt("initializer_prompt", project_dir)
+    """Load the initializer prompt (project-specific if available).
+
+    If the project uses a boilerplate, injects context about pre-built features.
+    """
+    prompt = load_prompt("initializer_prompt", project_dir)
+    boilerplate_ctx = _get_boilerplate_context(project_dir)
+    if boilerplate_ctx:
+        prompt = boilerplate_ctx + prompt
+    return prompt
 
 
 def _strip_browser_testing_sections(prompt: str) -> str:
@@ -131,6 +206,8 @@ def _strip_browser_testing_sections(prompt: str) -> str:
 def get_coding_prompt(project_dir: Path | None = None, yolo_mode: bool = False) -> str:
     """Load the coding agent prompt (project-specific if available).
 
+    If the project uses a boilerplate, injects context about pre-built features.
+
     Args:
         project_dir: Optional project directory for project-specific prompts
         yolo_mode: If True, strip browser automation / Playwright testing
@@ -144,6 +221,10 @@ def get_coding_prompt(project_dir: Path | None = None, yolo_mode: bool = False) 
 
     if yolo_mode:
         prompt = _strip_browser_testing_sections(prompt)
+
+    boilerplate_ctx = _get_boilerplate_context(project_dir)
+    if boilerplate_ctx:
+        prompt = boilerplate_ctx + prompt
 
     return prompt
 

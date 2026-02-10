@@ -7,6 +7,7 @@ import type {
   ProjectDetail,
   ProjectPrompts,
   ProjectSettingsUpdate,
+  BoilerplateCategory,
   FeatureListResponse,
   Feature,
   FeatureCreate,
@@ -70,12 +71,28 @@ export async function listProjects(): Promise<ProjectSummary[]> {
 export async function createProject(
   name: string,
   path: string,
-  specMethod: 'claude' | 'manual' = 'manual'
+  specMethod: 'claude' | 'manual' = 'manual',
+  boilerplateId?: string | null,
+  styleId?: string | null,
 ): Promise<ProjectSummary> {
   return fetchJSON('/projects', {
     method: 'POST',
-    body: JSON.stringify({ name, path, spec_method: specMethod }),
+    body: JSON.stringify({
+      name,
+      path,
+      spec_method: specMethod,
+      boilerplate_id: boilerplateId ?? null,
+      style_id: styleId ?? null,
+    }),
   })
+}
+
+// ============================================================================
+// Boilerplates API
+// ============================================================================
+
+export async function listBoilerplates(): Promise<BoilerplateCategory[]> {
+  return fetchJSON('/boilerplates')
 }
 
 export async function getProject(name: string): Promise<ProjectDetail> {

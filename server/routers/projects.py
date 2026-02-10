@@ -85,7 +85,23 @@ def _get_registry_functions():
     )
 
 
+from ..services.boilerplate_manager import (
+    clone_boilerplate,
+    get_boilerplate_registry,
+    load_project_config,
+    save_project_config,
+)
+
 router = APIRouter(prefix="/api/projects", tags=["projects"])
+
+
+boilerplate_router = APIRouter(prefix="/api/boilerplates", tags=["boilerplates"])
+
+
+@boilerplate_router.get("")
+async def list_boilerplates():
+    """Return the available boilerplate templates organized by category."""
+    return get_boilerplate_registry()
 
 
 def validate_project_name(name: str) -> str:
@@ -134,12 +150,23 @@ async def list_projects():
         has_spec = _check_spec_exists(project_dir)
         stats = get_project_stats(project_dir)
 
+        # Load boilerplate/style info from project config
+        project_config = load_project_config(project_dir)
+        bp_id = None
+        st_id = None
+        if project_config:
+            bp_info = project_config.get("boilerplate")
+            bp_id = bp_info.get("option_id") if isinstance(bp_info, dict) else None
+            st_id = project_config.get("style")
+
         result.append(ProjectSummary(
             name=name,
             path=info["path"],
             has_spec=has_spec,
             stats=stats,
             default_concurrency=info.get("default_concurrency", 3),
+            boilerplate_id=bp_id,
+            style_id=st_id,
         ))
 
     return result
@@ -188,25 +215,53 @@ async def create_project(project: ProjectCreate):
             detail="Cannot create project in system or sensitive directory"
         )
 
-    # Validate the path is usable
-    if project_path.exists():
-        if not project_path.is_dir():
-            raise HTTPException(
-                status_code=400,
-                detail="Path exists but is not a directory"
-            )
-    else:
-        # Create the directory
+    boilerplate_id = project.boilerplate_id
+    style_id = project.style_id
+    needs_clone = boilerplate_id and boilerplate_id != "scratch"
+
+    # For boilerplate clone: target dir must NOT exist (git clone creates it)
+    # For scratch/no boilerplate: create the dir if needed
+    if needs_clone:
+        if project_path.exists():
+            # Directory exists - check if empty (ok) or non-empty (error)
+            if any(project_path.iterdir()):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Directory must be empty for boilerplate clone"
+                )
+            # Remove empty dir so git clone can create it
+            project_path.rmdir()
+
+        # Clone the boilerplate repo
         try:
-            project_path.mkdir(parents=True, exist_ok=True)
-        except OSError as e:
-            raise HTTPException(
-                status_code=500,
-                detail=f"Failed to create directory: {e}"
-            )
+            await clone_boilerplate(boilerplate_id, project_path)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except RuntimeError as e:
+            raise HTTPException(status_code=500, detail=str(e))
+    else:
+        # Standard flow: create directory if needed
+        if project_path.exists():
+            if not project_path.is_dir():
+                raise HTTPException(
+                    status_code=400,
+                    detail="Path exists but is not a directory"
+                )
+        else:
+            try:
+                project_path.mkdir(parents=True, exist_ok=True)
+            except OSError as e:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Failed to create directory: {e}"
+                )
 
     # Scaffold prompts
     _scaffold_project_prompts(project_path)
+
+    # Save project config (boilerplate + style choices)
+    if boilerplate_id:
+        save_project_config(project_path, boilerplate_id, style_id)
 
     # Register in registry
     try:
@@ -223,6 +278,8 @@ async def create_project(project: ProjectCreate):
         has_spec=False,  # Just created, no spec yet
         stats=ProjectStats(passing=0, total=0, percentage=0.0),
         default_concurrency=3,
+        boilerplate_id=boilerplate_id,
+        style_id=style_id,
     )
 
 
@@ -247,6 +304,14 @@ async def get_project(name: str):
     stats = get_project_stats(project_dir)
     prompts_dir = _get_project_prompts_dir(project_dir)
 
+    project_config = load_project_config(project_dir)
+    bp_id = None
+    st_id = None
+    if project_config:
+        bp_info = project_config.get("boilerplate")
+        bp_id = bp_info.get("option_id") if isinstance(bp_info, dict) else None
+        st_id = project_config.get("style")
+
     return ProjectDetail(
         name=name,
         path=project_dir.as_posix(),
@@ -254,6 +319,8 @@ async def get_project(name: str):
         stats=stats,
         prompts_dir=str(prompts_dir),
         default_concurrency=get_project_concurrency(name),
+        boilerplate_id=bp_id,
+        style_id=st_id,
     )
 
 
@@ -514,6 +581,14 @@ async def update_project_settings(name: str, settings: ProjectSettingsUpdate):
     stats = get_project_stats(project_dir)
     prompts_dir = _get_project_prompts_dir(project_dir)
 
+    project_config = load_project_config(project_dir)
+    settings_bp_id = None
+    settings_st_id = None
+    if project_config:
+        bp_info = project_config.get("boilerplate")
+        settings_bp_id = bp_info.get("option_id") if isinstance(bp_info, dict) else None
+        settings_st_id = project_config.get("style")
+
     return ProjectDetail(
         name=name,
         path=project_dir.as_posix(),
@@ -521,4 +596,6 @@ async def update_project_settings(name: str, settings: ProjectSettingsUpdate):
         stats=stats,
         prompts_dir=str(prompts_dir),
         default_concurrency=get_project_concurrency(name),
+        boilerplate_id=settings_bp_id,
+        style_id=settings_st_id,
     )
