@@ -7,6 +7,7 @@ Core agent interaction functions for running autonomous coding sessions.
 
 import asyncio
 import io
+import os
 import re
 import sys
 from datetime import datetime, timedelta
@@ -15,6 +16,8 @@ from typing import Optional
 from zoneinfo import ZoneInfo
 
 from claude_agent_sdk import ClaudeSDKClient
+
+from structured_logging import get_logger
 
 # Fix Windows console encoding for Unicode characters (emoji, etc.)
 # Without this, print() crashes when Claude outputs emoji like ✅
@@ -53,6 +56,7 @@ async def run_agent_session(
     client: ClaudeSDKClient,
     message: str,
     project_dir: Path,
+    logger=None,
 ) -> tuple[str, str]:
     """
     Run a single agent session using Claude Agent SDK.
@@ -61,6 +65,7 @@ async def run_agent_session(
         client: Claude SDK client
         message: The prompt to send
         project_dir: Project directory path
+        logger: Optional structured logger for this session
 
     Returns:
         (status, response_text) where status is:
@@ -68,6 +73,8 @@ async def run_agent_session(
         - "error" if an error occurred
     """
     print("Sending prompt to Claude Agent SDK...\n")
+    if logger:
+        logger.info("Starting agent session", prompt_length=len(message))
 
     try:
         # Send the query
@@ -94,6 +101,8 @@ async def run_agent_session(
                                 print(f"   Input: {input_str[:200]}...", flush=True)
                             else:
                                 print(f"   Input: {input_str}", flush=True)
+                        if logger:
+                            logger.debug("Tool used", tool_name=block.name, input_size=len(str(getattr(block, "input", ""))))
 
             # Handle UserMessage (tool results)
             elif msg_type == "UserMessage" and hasattr(msg, "content"):
@@ -107,20 +116,28 @@ async def run_agent_session(
                         # Check if command was blocked by security hook
                         if "blocked" in str(result_content).lower():
                             print(f"   [BLOCKED] {result_content}", flush=True)
+                            if logger:
+                                logger.error("Security: command blocked", content=str(result_content)[:200])
                         elif is_error:
                             # Show errors (truncated)
                             error_str = str(result_content)[:500]
                             print(f"   [Error] {error_str}", flush=True)
+                            if logger:
+                                logger.error("Tool execution error", error=error_str[:200])
                         else:
                             # Tool succeeded - just show brief confirmation
                             print("   [Done]", flush=True)
 
         print("\n" + "-" * 70 + "\n")
+        if logger:
+            logger.info("Agent session completed", response_length=len(response_text))
         return "continue", response_text
 
     except Exception as e:
         error_str = str(e)
         print(f"Error during agent session: {error_str}")
+        if logger:
+            logger.error("Agent session error", error_type=type(e).__name__, message=error_str[:200])
 
         # Detect rate limit errors from exception message
         if is_rate_limit_error(error_str):
@@ -159,6 +176,27 @@ async def run_autonomous_agent(
         testing_feature_id: For testing agents, the pre-claimed feature ID to test (legacy single mode)
         testing_feature_ids: For testing agents, list of feature IDs to batch test
     """
+    # Initialize structured logger for this agent session
+    # Agent ID format: "initializer", "coding-<feature_id>", "testing-<pid>"
+    if agent_type == "testing":
+        log_agent_id = f"testing-{os.getpid()}"
+    elif feature_id:
+        log_agent_id = f"coding-{feature_id}"
+    elif agent_type == "initializer":
+        log_agent_id = "initializer"
+    else:
+        log_agent_id = "coding-main"
+
+    logger = get_logger(project_dir, agent_id=log_agent_id, console_output=False)
+    logger.info(
+        "Autonomous agent started",
+        agent_type=agent_type or "auto-detect",
+        model=model,
+        yolo_mode=yolo_mode,
+        max_iterations=max_iterations,
+        feature_id=feature_id,
+    )
+
     print("\n" + "=" * 70)
     print("  AUTONOMOUS CODING AGENT")
     print("=" * 70)
@@ -224,6 +262,7 @@ async def run_autonomous_agent(
         if not is_initializer and iteration == 1:
             passing, in_progress, total = count_passing_tests(project_dir)
             if total > 0 and passing == total:
+                logger.info("Project complete on startup", passing=passing, total=total)
                 print("\n" + "=" * 70)
                 print("  ALL FEATURES ALREADY COMPLETE!")
                 print("=" * 70)
@@ -241,7 +280,6 @@ async def run_autonomous_agent(
 
         # Create client (fresh context)
         # Pass agent_id for browser isolation in multi-agent scenarios
-        import os
         if agent_type == "testing":
             agent_id = f"testing-{os.getpid()}"  # Unique ID for testing agents
         elif feature_ids and len(feature_ids) > 1:
@@ -272,9 +310,10 @@ async def run_autonomous_agent(
         # Wrap in try/except to handle MCP server startup failures gracefully
         try:
             async with client:
-                status, response = await run_agent_session(client, prompt, project_dir)
+                status, response = await run_agent_session(client, prompt, project_dir, logger=logger)
         except Exception as e:
             print(f"Client/MCP server error: {e}")
+            logger.error("Client/MCP server error", error_type=type(e).__name__, message=str(e)[:200])
             # Don't crash - return error status so the loop can retry
             status, response = "error", str(e)
 
@@ -299,6 +338,7 @@ async def run_autonomous_agent(
             if is_rate_limit_error(response):
                 print("Claude Agent SDK indicated rate limit reached.")
                 reset_rate_limit_retries = False
+                logger.warn("Rate limit signal in response")
 
                 # Try to extract retry-after from response text first
                 retry_seconds = parse_retry_after(response)
@@ -416,6 +456,7 @@ async def run_autonomous_agent(
             delay_seconds = calculate_error_backoff(error_retries)
             print("\nSession encountered an error")
             print(f"Will retry in {delay_seconds}s (attempt #{error_retries})...")
+            logger.error("Session error, retrying", delay_seconds=delay_seconds, attempt=error_retries)
             await asyncio.sleep(delay_seconds)
 
         # Small delay between sessions
@@ -424,6 +465,14 @@ async def run_autonomous_agent(
             await asyncio.sleep(1)
 
     # Final summary
+    passing, in_progress, total = count_passing_tests(project_dir)
+    logger.info(
+        "Agent session complete",
+        iterations=iteration,
+        passing=passing,
+        in_progress=in_progress,
+        total=total,
+    )
     print("\n" + "=" * 70)
     print("  SESSION COMPLETE")
     print("=" * 70)

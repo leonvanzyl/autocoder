@@ -17,6 +17,7 @@ from claude_agent_sdk.types import HookContext, HookInput, HookMatcher, SyncHook
 from dotenv import load_dotenv
 
 from security import SENSITIVE_DIRECTORIES, bash_security_hook
+from structured_logging import get_logger
 
 # Load environment variables from .env file if present
 load_dotenv()
@@ -309,6 +310,9 @@ def create_client(
     Note: Authentication is handled by start.bat/start.sh before this runs.
     The Claude SDK auto-detects credentials from the Claude CLI configuration
     """
+    # Initialize logger for client configuration events
+    logger = get_logger(project_dir, agent_id="client", console_output=False)
+
     # Select the feature MCP tools appropriate for this agent type
     feature_tools_map = {
         "coding": CODING_AGENT_TOOLS,
@@ -388,6 +392,7 @@ def create_client(
     with open(settings_file, "w") as f:
         json.dump(security_settings, f, indent=2)
 
+    logger.info("Settings file written", file_path=str(settings_file))
     print(f"Created security settings at {settings_file}")
     print("   - Sandbox enabled (OS-level bash isolation)")
     print(f"   - Filesystem restricted to: {project_dir.resolve()}")
@@ -466,6 +471,7 @@ def create_client(
     model = convert_model_for_vertex(model)
     if sdk_env:
         print(f"   - API overrides: {', '.join(sdk_env.keys())}")
+        logger.info("API overrides configured", is_ollama=is_ollama, overrides=list(sdk_env.keys()))
         if is_vertex:
             project_id = sdk_env.get("ANTHROPIC_VERTEX_PROJECT_ID", "unknown")
             region = sdk_env.get("CLOUD_ML_REGION", "unknown")
@@ -554,6 +560,17 @@ def create_client(
                 "customInstructions": compaction_guidance,
             }
         )
+
+    # Log client creation
+    logger.info(
+        "Client created",
+        model=model,
+        yolo_mode=yolo_mode,
+        agent_id=agent_id,
+        agent_type=agent_type,
+        is_alternative_api=is_alternative_api,
+        max_turns=max_turns,
+    )
 
     # PROMPT CACHING: The Claude Code CLI applies cache_control breakpoints internally.
     # Our system_prompt benefits from automatic caching without explicit configuration.
