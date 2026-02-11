@@ -19,6 +19,7 @@
     "ui/dist/",
     "ui/package.json",
     ".claude/commands/",
+    ".claude/skills/",
     ".claude/templates/",
     "examples/",
     "start.py",

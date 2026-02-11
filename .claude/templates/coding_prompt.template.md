@@ -86,24 +86,33 @@ Implement the chosen feature thoroughly:
 
 **CRITICAL:** You MUST verify features through the actual UI.
 
-Use browser automation tools:
+Use `playwright-cli` for browser automation:
 
-- Navigate to the app in a real browser
-- Interact like a human user (click, type, scroll)
-- Take screenshots at each step (use inline screenshots only -- do NOT save screenshot files to disk)
-- Verify both functionality AND visual appearance
+- Open the browser: `playwright-cli open http://localhost:PORT`
+- Take a snapshot to see page elements: `playwright-cli snapshot`
+- Read the snapshot YAML file to see element refs
+- Click elements by ref: `playwright-cli click e5`
+- Type text: `playwright-cli type "search query"`
+- Fill form fields: `playwright-cli fill e3 "value"`
+- Take screenshots: `playwright-cli screenshot`
+- Read the screenshot file to verify visual appearance
+- Check console errors: `playwright-cli console`
+- Close browser when done: `playwright-cli close`
+
+**Token-efficient workflow:** `playwright-cli screenshot` and `snapshot` save files
+to `.playwright-cli/`. You will see a file link in the output. Read the file only
+when you need to verify visual appearance or find element refs.
 
 **DO:**
-
 - Test through the UI with clicks and keyboard input
-- Take screenshots to verify visual appearance (inline only, never save to disk)
-- Check for console errors in browser
+- Take screenshots and read them to verify visual appearance
+- Check for console errors with `playwright-cli console`
 - Verify complete user workflows end-to-end
+- Always run `playwright-cli close` when finished testing
 
 **DON'T:**
-
-- Only test with curl commands (backend testing alone is insufficient)
-- Use JavaScript evaluation to bypass UI (no shortcuts)
+- Only test with curl commands
+- Use JavaScript evaluation to bypass UI (`eval` and `run-code` are blocked)
 - Skip visual verification
 - Mark tests passing without thorough verification
 
@@ -145,7 +154,7 @@ Use the feature_mark_passing tool with feature_id=42
 - Combine or consolidate features
 - Reorder features
 
-**ONLY MARK A FEATURE AS PASSING AFTER VERIFICATION WITH SCREENSHOTS.**
+**ONLY MARK A FEATURE AS PASSING AFTER VERIFICATION WITH BROWSER AUTOMATION.**
 
 ### STEP 7: COMMIT YOUR PROGRESS
 
@@ -192,11 +201,15 @@ Before context fills up:
 
 ## BROWSER AUTOMATION
 
-Use Playwright MCP tools (`browser_*`) for UI verification. Key tools: `navigate`, `click`, `type`, `fill_form`, `take_screenshot`, `console_messages`, `network_requests`. All tools have auto-wait built in.
+Use `playwright-cli` commands for UI verification. Key commands: `open`, `goto`,
+`snapshot`, `click`, `type`, `fill`, `screenshot`, `console`, `close`.
 
-**Screenshot rule:** Always use inline mode (base64). NEVER save screenshots as files to disk.
+**How it works:** `playwright-cli` uses a persistent browser daemon. `open` starts it,
+subsequent commands interact via socket, `close` shuts it down. Screenshots and snapshots
+save to `.playwright-cli/` -- read the files when you need to verify content.
 
-Test like a human user with mouse and keyboard. Use `browser_console_messages` to detect errors. Don't bypass UI with JavaScript evaluation.
+Test like a human user with mouse and keyboard. Use `playwright-cli console` to detect
+JS errors. Don't bypass UI with JavaScript evaluation.
 
 ---
 

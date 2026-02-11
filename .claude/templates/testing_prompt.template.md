@@ -31,26 +31,32 @@ For the feature returned:
 1. Read and understand the feature's verification steps
 2. Navigate to the relevant part of the application
 3. Execute each verification step using browser automation
-4. Take screenshots to document the verification (inline only -- do NOT save to disk)
+4. Take screenshots and read them to verify visual appearance
 5. Check for console errors
 
-Use browser automation tools:
+### Browser Automation (Playwright CLI)
 
 **Navigation & Screenshots:**
-- browser_navigate - Navigate to a URL
-- browser_take_screenshot - Capture screenshot (inline mode only -- never save to disk)
-- browser_snapshot - Get accessibility tree snapshot
+- `playwright-cli open <url>` - Open browser and navigate
+- `playwright-cli goto <url>` - Navigate to URL
+- `playwright-cli screenshot` - Save screenshot to `.playwright-cli/`
+- `playwright-cli snapshot` - Save page snapshot with element refs to `.playwright-cli/`
 
 **Element Interaction:**
-- browser_click - Click elements
-- browser_type - Type text into editable elements
-- browser_fill_form - Fill multiple form fields
-- browser_select_option - Select dropdown options
-- browser_press_key - Press keyboard keys
+- `playwright-cli click <ref>` - Click elements (ref from snapshot)
+- `playwright-cli type <text>` - Type text
+- `playwright-cli fill <ref> <text>` - Fill form fields
+- `playwright-cli select <ref> <val>` - Select dropdown
+- `playwright-cli press <key>` - Keyboard input
 
 **Debugging:**
-- browser_console_messages - Get browser console output (check for errors)
-- browser_network_requests - Monitor API calls
+- `playwright-cli console` - Check for JS errors
+- `playwright-cli network` - Monitor API calls
+
+**Cleanup:**
+- `playwright-cli close` - Close browser when done (ALWAYS do this)
+
+**Note:** Screenshots and snapshots save to files. Read the file to see the content.
 
 ### STEP 3: HANDLE RESULTS
 
@@ -79,7 +85,7 @@ A regression has been introduced. You MUST fix it:
 
 4. **Verify the fix:**
    - Run through all verification steps again
-   - Take screenshots confirming the fix (inline only, never save to disk)
+   - Take screenshots and read them to confirm the fix
 
 5. **Mark as passing after fix:**
    ```
@@ -98,7 +104,7 @@ A regression has been introduced. You MUST fix it:
 
 ---
 
-## AVAILABLE MCP TOOLS
+## AVAILABLE TOOLS
 
 ### Feature Management
 - `feature_get_stats` - Get progress overview (passing/in_progress/total counts)
@@ -106,19 +112,17 @@ A regression has been introduced. You MUST fix it:
 - `feature_mark_failing` - Mark a feature as failing (when you find a regression)
 - `feature_mark_passing` - Mark a feature as passing (after fixing a regression)
 
-### Browser Automation (Playwright)
-All interaction tools have **built-in auto-wait** -- no manual timeouts needed.
-
-- `browser_navigate` - Navigate to URL
-- `browser_take_screenshot` - Capture screenshot (inline only, never save to disk)
-- `browser_snapshot` - Get accessibility tree
-- `browser_click` - Click elements
-- `browser_type` - Type text
-- `browser_fill_form` - Fill form fields
-- `browser_select_option` - Select dropdown
-- `browser_press_key` - Keyboard input
-- `browser_console_messages` - Check for JS errors
-- `browser_network_requests` - Monitor API calls
+### Browser Automation (Playwright CLI)
+Use `playwright-cli` commands for browser interaction. Key commands:
+- `playwright-cli open <url>` - Open browser
+- `playwright-cli goto <url>` - Navigate to URL
+- `playwright-cli screenshot` - Take screenshot (saved to `.playwright-cli/`)
+- `playwright-cli snapshot` - Get page snapshot with element refs
+- `playwright-cli click <ref>` - Click element
+- `playwright-cli type <text>` - Type text
+- `playwright-cli fill <ref> <text>` - Fill form field
+- `playwright-cli console` - Check for JS errors
+- `playwright-cli close` - Close browser (always do this when done)
 
 ---
 

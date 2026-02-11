@@ -16,6 +16,9 @@ from pathlib import Path
 # Base templates location (generic templates)
 TEMPLATES_DIR = Path(__file__).parent / ".claude" / "templates"
 
+# Migration version — bump when adding new migration steps
+CURRENT_MIGRATION_VERSION = 1
+
 
 def get_project_prompts_dir(project_dir: Path) -> Path:
     """Get the prompts directory for a specific project."""
@@ -99,9 +102,9 @@ def _strip_browser_testing_sections(prompt: str) -> str:
         flags=re.DOTALL,
     )
 
-    # Replace the screenshots-only marking rule with YOLO-appropriate wording
+    # Replace the marking rule with YOLO-appropriate wording
     prompt = prompt.replace(
-        "**ONLY MARK A FEATURE AS PASSING AFTER VERIFICATION WITH SCREENSHOTS.**",
+        "**ONLY MARK A FEATURE AS PASSING AFTER VERIFICATION WITH BROWSER AUTOMATION.**",
         "**YOLO mode: Mark a feature as passing after lint/type-check succeeds and server starts cleanly.**",
     )
 
@@ -351,8 +354,69 @@ def scaffold_project_prompts(project_dir: Path) -> Path:
         except (OSError, PermissionError) as e:
             print(f"  Warning: Could not copy allowed_commands.yaml: {e}")
 
+    # Copy Playwright CLI skill for browser automation
+    skills_src = Path(__file__).parent / ".claude" / "skills" / "playwright-cli"
+    skills_dest = project_dir / ".claude" / "skills" / "playwright-cli"
+    if skills_src.exists() and not skills_dest.exists():
+        try:
+            shutil.copytree(skills_src, skills_dest)
+            copied_files.append(".claude/skills/playwright-cli/")
+        except (OSError, PermissionError) as e:
+            print(f"  Warning: Could not copy playwright-cli skill: {e}")
+
+    # Ensure .playwright-cli/ and .playwright/ are in project .gitignore
+    project_gitignore = project_dir / ".gitignore"
+    entries_to_add = [".playwright-cli/", ".playwright/"]
+    existing_lines: list[str] = []
+    if project_gitignore.exists():
+        try:
+            existing_lines = project_gitignore.read_text(encoding="utf-8").splitlines()
+        except (OSError, PermissionError):
+            pass
+    missing_entries = [e for e in entries_to_add if e not in existing_lines]
+    if missing_entries:
+        try:
+            with open(project_gitignore, "a", encoding="utf-8") as f:
+                # Add newline before entries if file doesn't end with one
+                if existing_lines and existing_lines[-1].strip():
+                    f.write("\n")
+                for entry in missing_entries:
+                    f.write(f"{entry}\n")
+        except (OSError, PermissionError) as e:
+            print(f"  Warning: Could not update .gitignore: {e}")
+
+    # Scaffold .playwright/cli.config.json for browser settings
+    playwright_config_dir = project_dir / ".playwright"
+    playwright_config_file = playwright_config_dir / "cli.config.json"
+    if not playwright_config_file.exists():
+        try:
+            playwright_config_dir.mkdir(parents=True, exist_ok=True)
+            import json
+            config = {
+                "browser": {
+                    "browserName": "chromium",
+                    "launchOptions": {
+                        "channel": "chrome",
+                        "headless": True,
+                    },
+                    "contextOptions": {
+                        "viewport": {"width": 1280, "height": 720},
+                    },
+                    "isolated": True,
+                },
+            }
+            with open(playwright_config_file, "w", encoding="utf-8") as f:
+                json.dump(config, f, indent=2)
+                f.write("\n")
+            copied_files.append(".playwright/cli.config.json")
+        except (OSError, PermissionError) as e:
+            print(f"  Warning: Could not create playwright config: {e}")
+
     if copied_files:
         print(f"  Created project files: {', '.join(copied_files)}")
+
+    # Stamp new projects at the current migration version so they never trigger migration
+    _set_migration_version(project_dir, CURRENT_MIGRATION_VERSION)
 
     return project_prompts
 
@@ -425,3 +489,330 @@ def copy_spec_to_project(project_dir: Path) -> None:
             return
 
     print("Warning: No app_spec.txt found to copy to project directory")
+
+
+# ---------------------------------------------------------------------------
+# Project version migration
+# ---------------------------------------------------------------------------
+
+# Replacement content: coding_prompt.md STEP 5 section (Playwright CLI)
+_CLI_STEP5_CONTENT = """\
+### STEP 5: VERIFY WITH BROWSER AUTOMATION
+
+**CRITICAL:** You MUST verify features through the actual UI.
+
+Use `playwright-cli` for browser automation:
+
+- Open the browser: `playwright-cli open http://localhost:PORT`
+- Take a snapshot to see page elements: `playwright-cli snapshot`
+- Read the snapshot YAML file to see element refs
+- Click elements by ref: `playwright-cli click e5`
+- Type text: `playwright-cli type "search query"`
+- Fill form fields: `playwright-cli fill e3 "value"`
+- Take screenshots: `playwright-cli screenshot`
+- Read the screenshot file to verify visual appearance
+- Check console errors: `playwright-cli console`
+- Close browser when done: `playwright-cli close`
+
+**Token-efficient workflow:** `playwright-cli screenshot` and `snapshot` save files
+to `.playwright-cli/`. You will see a file link in the output. Read the file only
+when you need to verify visual appearance or find element refs.
+
+**DO:**
+- Test through the UI with clicks and keyboard input
+- Take screenshots and read them to verify visual appearance
+- Check for console errors with `playwright-cli console`
+- Verify complete user workflows end-to-end
+- Always run `playwright-cli close` when finished testing
+
+**DON'T:**
+- Only test with curl commands
+- Use JavaScript evaluation to bypass UI (`eval` and `run-code` are blocked)
+- Skip visual verification
+- Mark tests passing without thorough verification
+
+"""
+
+# Replacement content: coding_prompt.md BROWSER AUTOMATION reference section
+_CLI_BROWSER_SECTION = """\
+## BROWSER AUTOMATION
+
+Use `playwright-cli` commands for UI verification. Key commands: `open`, `goto`,
+`snapshot`, `click`, `type`, `fill`, `screenshot`, `console`, `close`.
+
+**How it works:** `playwright-cli` uses a persistent browser daemon. `open` starts it,
+subsequent commands interact via socket, `close` shuts it down. Screenshots and snapshots
+save to `.playwright-cli/` -- read the files when you need to verify content.
+
+Test like a human user with mouse and keyboard. Use `playwright-cli console` to detect
+JS errors. Don't bypass UI with JavaScript evaluation.
+
+"""
+
+# Replacement content: testing_prompt.md STEP 2 section (Playwright CLI)
+_CLI_TESTING_STEP2 = """\
+### STEP 2: VERIFY THE FEATURE
+
+**CRITICAL:** You MUST verify the feature through the actual UI using browser automation.
+
+For the feature returned:
+1. Read and understand the feature's verification steps
+2. Navigate to the relevant part of the application
+3. Execute each verification step using browser automation
+4. Take screenshots and read them to verify visual appearance
+5. Check for console errors
+
+### Browser Automation (Playwright CLI)
+
+**Navigation & Screenshots:**
+- `playwright-cli open <url>` - Open browser and navigate
+- `playwright-cli goto <url>` - Navigate to URL
+- `playwright-cli screenshot` - Save screenshot to `.playwright-cli/`
+- `playwright-cli snapshot` - Save page snapshot with element refs to `.playwright-cli/`
+
+**Element Interaction:**
+- `playwright-cli click <ref>` - Click elements (ref from snapshot)
+- `playwright-cli type <text>` - Type text
+- `playwright-cli fill <ref> <text>` - Fill form fields
+- `playwright-cli select <ref> <val>` - Select dropdown
+- `playwright-cli press <key>` - Keyboard input
+
+**Debugging:**
+- `playwright-cli console` - Check for JS errors
+- `playwright-cli network` - Monitor API calls
+
+**Cleanup:**
+- `playwright-cli close` - Close browser when done (ALWAYS do this)
+
+**Note:** Screenshots and snapshots save to files. Read the file to see the content.
+
+"""
+
+# Replacement content: testing_prompt.md AVAILABLE TOOLS browser subsection
+_CLI_TESTING_TOOLS = """\
+### Browser Automation (Playwright CLI)
+Use `playwright-cli` commands for browser interaction. Key commands:
+- `playwright-cli open <url>` - Open browser
+- `playwright-cli goto <url>` - Navigate to URL
+- `playwright-cli screenshot` - Take screenshot (saved to `.playwright-cli/`)
+- `playwright-cli snapshot` - Get page snapshot with element refs
+- `playwright-cli click <ref>` - Click element
+- `playwright-cli type <text>` - Type text
+- `playwright-cli fill <ref> <text>` - Fill form field
+- `playwright-cli console` - Check for JS errors
+- `playwright-cli close` - Close browser (always do this when done)
+
+"""
+
+
+def _get_migration_version(project_dir: Path) -> int:
+    """Read the migration version from .autoforge/.migration_version."""
+    from autoforge_paths import get_autoforge_dir
+    version_file = get_autoforge_dir(project_dir) / ".migration_version"
+    if not version_file.exists():
+        return 0
+    try:
+        return int(version_file.read_text().strip())
+    except (ValueError, OSError):
+        return 0
+
+
+def _set_migration_version(project_dir: Path, version: int) -> None:
+    """Write the migration version to .autoforge/.migration_version."""
+    from autoforge_paths import get_autoforge_dir
+    version_file = get_autoforge_dir(project_dir) / ".migration_version"
+    version_file.parent.mkdir(parents=True, exist_ok=True)
+    version_file.write_text(str(version))
+
+
+def _migrate_coding_prompt_to_cli(content: str) -> str:
+    """Replace MCP-based Playwright sections with CLI-based content in coding prompt."""
+    # Replace STEP 5 section (from header to just before STEP 5.5)
+    content = re.sub(
+        r"### STEP 5: VERIFY WITH BROWSER AUTOMATION.*?(?=### STEP 5\.5:)",
+        _CLI_STEP5_CONTENT,
+        content,
+        count=1,
+        flags=re.DOTALL,
+    )
+
+    # Replace BROWSER AUTOMATION reference section (from header to next ---)
+    content = re.sub(
+        r"## BROWSER AUTOMATION\n\n.*?(?=---)",
+        _CLI_BROWSER_SECTION,
+        content,
+        count=1,
+        flags=re.DOTALL,
+    )
+
+    # Replace inline screenshot rule
+    content = content.replace(
+        "**ONLY MARK A FEATURE AS PASSING AFTER VERIFICATION WITH SCREENSHOTS.**",
+        "**ONLY MARK A FEATURE AS PASSING AFTER VERIFICATION WITH BROWSER AUTOMATION.**",
+    )
+
+    # Replace inline screenshot references (various phrasings from old templates)
+    for old_phrase in (
+        "(inline only -- do NOT save to disk)",
+        "(inline only, never save to disk)",
+        "(inline mode only -- never save to disk)",
+    ):
+        content = content.replace(old_phrase, "(saved to `.playwright-cli/`)")
+
+    return content
+
+
+def _migrate_testing_prompt_to_cli(content: str) -> str:
+    """Replace MCP-based Playwright sections with CLI-based content in testing prompt."""
+    # Replace AVAILABLE TOOLS browser subsection FIRST (before STEP 2, to avoid
+    # matching the new CLI subsection header that the STEP 2 replacement inserts).
+    # In old prompts, ### Browser Automation (Playwright) only exists in AVAILABLE TOOLS.
+    content = re.sub(
+        r"### Browser Automation \(Playwright[^)]*\)\n.*?(?=---)",
+        _CLI_TESTING_TOOLS,
+        content,
+        count=1,
+        flags=re.DOTALL,
+    )
+
+    # Replace STEP 2 verification section (from header to just before STEP 3)
+    content = re.sub(
+        r"### STEP 2: VERIFY THE FEATURE.*?(?=### STEP 3:)",
+        _CLI_TESTING_STEP2,
+        content,
+        count=1,
+        flags=re.DOTALL,
+    )
+
+    # Replace inline screenshot references (various phrasings from old templates)
+    for old_phrase in (
+        "(inline only -- do NOT save to disk)",
+        "(inline only, never save to disk)",
+        "(inline mode only -- never save to disk)",
+    ):
+        content = content.replace(old_phrase, "(saved to `.playwright-cli/`)")
+
+    return content
+
+
+def _migrate_v0_to_v1(project_dir: Path) -> list[str]:
+    """Migrate from v0 (MCP-based Playwright) to v1 (Playwright CLI).
+
+    Four idempotent sub-steps:
+    A. Copy playwright-cli skill to project
+    B. Scaffold .playwright/cli.config.json
+    C. Update .gitignore with .playwright-cli/ and .playwright/
+    D. Update coding_prompt.md and testing_prompt.md
+    """
+    import json
+
+    migrated: list[str] = []
+
+    # A. Copy Playwright CLI skill
+    skills_src = Path(__file__).parent / ".claude" / "skills" / "playwright-cli"
+    skills_dest = project_dir / ".claude" / "skills" / "playwright-cli"
+    if skills_src.exists() and not skills_dest.exists():
+        try:
+            shutil.copytree(skills_src, skills_dest)
+            migrated.append("Copied playwright-cli skill")
+        except (OSError, PermissionError) as e:
+            print(f"  Warning: Could not copy playwright-cli skill: {e}")
+
+    # B. Scaffold .playwright/cli.config.json
+    playwright_config_dir = project_dir / ".playwright"
+    playwright_config_file = playwright_config_dir / "cli.config.json"
+    if not playwright_config_file.exists():
+        try:
+            playwright_config_dir.mkdir(parents=True, exist_ok=True)
+            config = {
+                "browser": {
+                    "browserName": "chromium",
+                    "launchOptions": {
+                        "channel": "chrome",
+                        "headless": True,
+                    },
+                    "contextOptions": {
+                        "viewport": {"width": 1280, "height": 720},
+                    },
+                    "isolated": True,
+                },
+            }
+            with open(playwright_config_file, "w", encoding="utf-8") as f:
+                json.dump(config, f, indent=2)
+                f.write("\n")
+            migrated.append("Created .playwright/cli.config.json")
+        except (OSError, PermissionError) as e:
+            print(f"  Warning: Could not create playwright config: {e}")
+
+    # C. Update .gitignore
+    project_gitignore = project_dir / ".gitignore"
+    entries_to_add = [".playwright-cli/", ".playwright/"]
+    existing_lines: list[str] = []
+    if project_gitignore.exists():
+        try:
+            existing_lines = project_gitignore.read_text(encoding="utf-8").splitlines()
+        except (OSError, PermissionError):
+            pass
+    missing_entries = [e for e in entries_to_add if e not in existing_lines]
+    if missing_entries:
+        try:
+            with open(project_gitignore, "a", encoding="utf-8") as f:
+                if existing_lines and existing_lines[-1].strip():
+                    f.write("\n")
+                for entry in missing_entries:
+                    f.write(f"{entry}\n")
+            migrated.append(f"Added {', '.join(missing_entries)} to .gitignore")
+        except (OSError, PermissionError) as e:
+            print(f"  Warning: Could not update .gitignore: {e}")
+
+    # D. Update prompts
+    prompts_dir = get_project_prompts_dir(project_dir)
+
+    # D1. Update coding_prompt.md
+    coding_prompt_path = prompts_dir / "coding_prompt.md"
+    if coding_prompt_path.exists():
+        try:
+            content = coding_prompt_path.read_text(encoding="utf-8")
+            if "Playwright MCP" in content or "browser_navigate" in content or "browser_take_screenshot" in content:
+                updated = _migrate_coding_prompt_to_cli(content)
+                if updated != content:
+                    coding_prompt_path.write_text(updated, encoding="utf-8")
+                    migrated.append("Updated coding_prompt.md to Playwright CLI")
+        except (OSError, PermissionError) as e:
+            print(f"  Warning: Could not update coding_prompt.md: {e}")
+
+    # D2. Update testing_prompt.md
+    testing_prompt_path = prompts_dir / "testing_prompt.md"
+    if testing_prompt_path.exists():
+        try:
+            content = testing_prompt_path.read_text(encoding="utf-8")
+            if "browser_navigate" in content or "browser_take_screenshot" in content:
+                updated = _migrate_testing_prompt_to_cli(content)
+                if updated != content:
+                    testing_prompt_path.write_text(updated, encoding="utf-8")
+                    migrated.append("Updated testing_prompt.md to Playwright CLI")
+        except (OSError, PermissionError) as e:
+            print(f"  Warning: Could not update testing_prompt.md: {e}")
+
+    return migrated
+
+
+def migrate_project_to_current(project_dir: Path) -> list[str]:
+    """Migrate an existing project to the current AutoForge version.
+
+    Idempotent — safe to call on every agent start. Returns list of
+    human-readable descriptions of what was migrated.
+    """
+    current = _get_migration_version(project_dir)
+    if current >= CURRENT_MIGRATION_VERSION:
+        return []
+
+    migrated: list[str] = []
+
+    if current < 1:
+        migrated.extend(_migrate_v0_to_v1(project_dir))
+
+    # Future: if current < 2: migrated.extend(_migrate_v1_to_v2(project_dir))
+
+    _set_migration_version(project_dir, CURRENT_MIGRATION_VERSION)
+    return migrated
