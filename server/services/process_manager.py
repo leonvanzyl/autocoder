@@ -453,6 +453,7 @@ class AgentProcessManager:
             # Build subprocess environment with API provider settings
             from registry import get_effective_sdk_env
             api_env = get_effective_sdk_env()
+
             subprocess_env = {
                 **os.environ,
                 "PYTHONUNBUFFERED": "1",

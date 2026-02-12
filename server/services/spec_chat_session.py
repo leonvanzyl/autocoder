@@ -15,11 +15,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, AsyncGenerator, Optional
 
-from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
 from dotenv import load_dotenv
 
+from sdk_adapter import AdapterOptions, EventType, SDKAdapter, create_adapter
+
 from ..schemas import ImageAttachment
-from .chat_constants import ROOT_DIR, make_multimodal_message
+from .chat_constants import ROOT_DIR
 
 # Load environment variables from .env file if present
 load_dotenv()
@@ -50,23 +51,23 @@ class SpecChatSession:
         """
         self.project_name = project_name
         self.project_dir = project_dir
-        self.client: Optional[ClaudeSDKClient] = None
+        self.adapter: Optional[SDKAdapter] = None
         self.messages: list[dict] = []
         self.complete: bool = False
         self.created_at = datetime.now()
         self._conversation_id: Optional[str] = None
-        self._client_entered: bool = False  # Track if context manager is active
+        self._adapter_entered: bool = False  # Track if context manager is active
 
     async def close(self) -> None:
-        """Clean up resources and close the Claude client."""
-        if self.client and self._client_entered:
+        """Clean up resources and close the adapter."""
+        if self.adapter and self._adapter_entered:
             try:
-                await self.client.__aexit__(None, None, None)
+                await self.adapter.__aexit__(None, None, None)
             except Exception as e:
-                logger.warning(f"Error closing Claude client: {e}")
+                logger.warning(f"Error closing adapter: {e}")
             finally:
-                self._client_entered = False
-                self.client = None
+                self._adapter_entered = False
+                self.adapter = None
 
     async def start(self) -> AsyncGenerator[dict, None]:
         """
@@ -141,48 +142,56 @@ class SpecChatSession:
 
         # Build environment overrides for API configuration
         from registry import DEFAULT_MODEL, get_effective_sdk_env
+        from sdk_adapter.factory import get_sdk_type
         sdk_env = get_effective_sdk_env()
 
-        # Determine model from SDK env (provider-aware) or fallback to env/default
-        model = sdk_env.get("ANTHROPIC_DEFAULT_OPUS_MODEL") or os.getenv("ANTHROPIC_DEFAULT_OPUS_MODEL", DEFAULT_MODEL)
+        # Determine model based on SDK type
+        sdk_type = get_sdk_type()
+        if sdk_type == "codex":
+            # Codex SDK uses its own default model - don't specify
+            model = None
+        else:
+            # Claude SDK uses Anthropic models
+            model = sdk_env.get("ANTHROPIC_DEFAULT_OPUS_MODEL") or os.getenv("ANTHROPIC_DEFAULT_OPUS_MODEL") or DEFAULT_MODEL or "claude-opus-4-6"
 
         try:
-            self.client = ClaudeSDKClient(
-                options=ClaudeAgentOptions(
-                    model=model,
-                    cli_path=system_cli,
-                    # System prompt loaded from CLAUDE.md via setting_sources
-                    # Include "user" for global skills and subagents from ~/.claude/
-                    setting_sources=["project", "user"],
-                    allowed_tools=[
-                        "Read",
-                        "Write",
-                        "Edit",
-                        "Glob",
-                        "WebFetch",
-                        "WebSearch",
-                    ],
-                    permission_mode="acceptEdits",  # Auto-approve file writes for spec creation
-                    max_turns=100,
-                    cwd=str(self.project_dir.resolve()),
-                    settings=str(settings_file.resolve()),
-                    env=sdk_env,
-                )
+            options = AdapterOptions(
+                model=model,
+                project_dir=self.project_dir,
+                cli_path=system_cli,
+                # System prompt loaded from CLAUDE.md via setting_sources
+                # Include "user" for global skills and subagents from ~/.claude/
+                setting_sources=["project"],
+                include_user_settings=True,  # Adds "user" to setting_sources
+                allowed_tools=[
+                    "Read",
+                    "Write",
+                    "Edit",
+                    "Glob",
+                    "WebFetch",
+                    "WebSearch",
+                ],
+                permission_mode="acceptEdits",  # Auto-approve file writes for spec creation
+                max_turns=100,
+                cwd=str(self.project_dir.resolve()),
+                settings_file=str(settings_file.resolve()),
+                env=sdk_env,
             )
+            self.adapter = create_adapter(options)
             # Enter the async context and track it
-            await self.client.__aenter__()
-            self._client_entered = True
+            await self.adapter.__aenter__()
+            self._adapter_entered = True
         except Exception as e:
-            logger.exception("Failed to create Claude client")
+            logger.exception("Failed to create adapter")
             yield {
                 "type": "error",
-                "content": f"Failed to initialize Claude: {str(e)}"
+                "content": f"Failed to initialize adapter: {str(e)}"
             }
             return
 
-        # Start the conversation - Claude will send the Phase 1 greeting
+        # Start the conversation - the agent will send the Phase 1 greeting
         try:
-            async for chunk in self._query_claude("Begin the spec creation process."):
+            async for chunk in self._query_adapter("Begin the spec creation process."):
                 yield chunk
             # Signal that the response is complete (for UI to hide loading indicator)
             yield {"type": "response_done"}
@@ -212,7 +221,7 @@ class SpecChatSession:
             - {"type": "spec_complete", "path": str}
             - {"type": "error", "content": str}
         """
-        if not self.client:
+        if not self.adapter:
             yield {
                 "type": "error",
                 "content": "Session not initialized. Call start() first."
@@ -228,26 +237,26 @@ class SpecChatSession:
         })
 
         try:
-            async for chunk in self._query_claude(user_message, attachments):
+            async for chunk in self._query_adapter(user_message, attachments):
                 yield chunk
             # Signal that the response is complete (for UI to hide loading indicator)
             yield {"type": "response_done"}
         except Exception as e:
-            logger.exception("Error during Claude query")
+            logger.exception("Error during adapter query")
             yield {
                 "type": "error",
                 "content": f"Error: {str(e)}"
             }
 
-    async def _query_claude(
+    async def _query_adapter(
         self,
         message: str,
         attachments: list[ImageAttachment] | None = None
     ) -> AsyncGenerator[dict, None]:
         """
-        Internal method to query Claude and stream responses.
+        Internal method to query the adapter and stream responses.
 
-        Handles tool calls (Write) and text responses.
+        Handles tool calls (Write) and text responses using unified event model.
         Supports multimodal content with image attachments.
 
         IMPORTANT: Spec creation requires BOTH files to be written:
@@ -256,7 +265,7 @@ class SpecChatSession:
 
         We only signal spec_complete when BOTH files are verified on disk.
         """
-        if not self.client:
+        if not self.adapter:
             return
 
         # Build the message content
@@ -279,13 +288,12 @@ class SpecChatSession:
                     }
                 })
 
-            # Send multimodal content to Claude using async generator format
-            # The SDK's query() accepts AsyncIterable[dict] for custom message formats
-            await self.client.query(make_multimodal_message(content_blocks))
+            # Send multimodal content to adapter
+            await self.adapter.query(content_blocks)
             logger.info(f"Sent multimodal message with {len(attachments)} image(s)")
         else:
             # Text-only message: use string format
-            await self.client.query(message)
+            await self.adapter.query(message)
 
         current_text = ""
 
@@ -304,117 +312,110 @@ class SpecChatSession:
         # Store paths for the completion message
         spec_path = None
 
-        # Stream the response using receive_response
-        async for msg in self.client.receive_response():
-            msg_type = type(msg).__name__
+        # Stream the response using unified events
+        async for event in self.adapter.receive_events():
+            if event.type == EventType.TEXT:
+                # Accumulate text and yield it
+                if event.content:
+                    current_text += event.content
+                    yield {"type": "text", "content": event.content}
 
-            if msg_type == "AssistantMessage" and hasattr(msg, "content"):
-                # Process content blocks in the assistant message
-                for block in msg.content:
-                    block_type = type(block).__name__
+                    # Store in message history
+                    self.messages.append({
+                        "role": "assistant",
+                        "content": event.content,
+                        "timestamp": datetime.now().isoformat()
+                    })
 
-                    if block_type == "TextBlock" and hasattr(block, "text"):
-                        # Accumulate text and yield it
-                        text = block.text
-                        if text:
-                            current_text += text
-                            yield {"type": "text", "content": text}
+            elif event.type == EventType.TOOL_CALL:
+                tool_name = event.tool_name or ""
+                tool_input = event.tool_input
+                tool_id = event.tool_id or ""
 
-                            # Store in message history
-                            self.messages.append({
-                                "role": "assistant",
-                                "content": text,
-                                "timestamp": datetime.now().isoformat()
-                            })
+                if tool_name in ("Write", "Edit"):
+                    # File being written or edited - track for verification
+                    file_path = tool_input.get("file_path", "")
 
-                    elif block_type == "ToolUseBlock" and hasattr(block, "name"):
-                        tool_name = block.name
-                        tool_input = getattr(block, "input", {})
-                        tool_id = getattr(block, "id", "")
+                    # Track app_spec.txt
+                    if "app_spec.txt" in str(file_path):
+                        pending_writes["app_spec"] = {
+                            "tool_id": tool_id,
+                            "path": file_path
+                        }
+                        logger.info(f"{tool_name} tool called for app_spec.txt: {file_path}")
 
-                        if tool_name in ("Write", "Edit"):
-                            # File being written or edited - track for verification
-                            file_path = tool_input.get("file_path", "")
+                    # Track initializer_prompt.md
+                    elif "initializer_prompt.md" in str(file_path):
+                        pending_writes["initializer"] = {
+                            "tool_id": tool_id,
+                            "path": file_path
+                        }
+                        logger.info(f"{tool_name} tool called for initializer_prompt.md: {file_path}")
 
-                            # Track app_spec.txt
-                            if "app_spec.txt" in str(file_path):
-                                pending_writes["app_spec"] = {
-                                    "tool_id": tool_id,
-                                    "path": file_path
-                                }
-                                logger.info(f"{tool_name} tool called for app_spec.txt: {file_path}")
+            elif event.type == EventType.TOOL_RESULT:
+                tool_use_id = event.tool_id or ""
+                is_error = event.is_error
 
-                            # Track initializer_prompt.md
-                            elif "initializer_prompt.md" in str(file_path):
-                                pending_writes["initializer"] = {
-                                    "tool_id": tool_id,
-                                    "path": file_path
-                                }
-                                logger.info(f"{tool_name} tool called for initializer_prompt.md: {file_path}")
+                if is_error:
+                    logger.warning(f"Tool error: {event.content}")
+                    # Clear any pending writes that failed
+                    for key in pending_writes:
+                        pending_write = pending_writes[key]
+                        if pending_write is not None and tool_use_id == pending_write.get("tool_id"):
+                            logger.error(f"{key} write failed: {event.content}")
+                            pending_writes[key] = None
+                else:
+                    # Tool succeeded - check which file was written
 
-            elif msg_type == "UserMessage" and hasattr(msg, "content"):
-                # Tool results - check for write confirmations and errors
-                for block in msg.content:
-                    block_type = type(block).__name__
-                    if block_type == "ToolResultBlock":
-                        is_error = getattr(block, "is_error", False)
-                        tool_use_id = getattr(block, "tool_use_id", "")
+                    # Check app_spec.txt
+                    if pending_writes["app_spec"] and tool_use_id == pending_writes["app_spec"].get("tool_id"):
+                        file_path = pending_writes["app_spec"]["path"]
+                        full_path = Path(file_path) if Path(file_path).is_absolute() else self.project_dir / file_path
+                        if full_path.exists():
+                            logger.info(f"app_spec.txt verified at: {full_path}")
+                            files_written["app_spec"] = True
+                            spec_path = file_path
 
-                        if is_error:
-                            content = getattr(block, "content", "Unknown error")
-                            logger.warning(f"Tool error: {content}")
-                            # Clear any pending writes that failed
-                            for key in pending_writes:
-                                pending_write = pending_writes[key]
-                                if pending_write is not None and tool_use_id == pending_write.get("tool_id"):
-                                    logger.error(f"{key} write failed: {content}")
-                                    pending_writes[key] = None
+                            # Notify about file write (but NOT completion yet)
+                            yield {
+                                "type": "file_written",
+                                "path": str(file_path)
+                            }
                         else:
-                            # Tool succeeded - check which file was written
+                            logger.error(f"app_spec.txt not found after write: {full_path}")
+                        pending_writes["app_spec"] = None
 
-                            # Check app_spec.txt
-                            if pending_writes["app_spec"] and tool_use_id == pending_writes["app_spec"].get("tool_id"):
-                                file_path = pending_writes["app_spec"]["path"]
-                                full_path = Path(file_path) if Path(file_path).is_absolute() else self.project_dir / file_path
-                                if full_path.exists():
-                                    logger.info(f"app_spec.txt verified at: {full_path}")
-                                    files_written["app_spec"] = True
-                                    spec_path = file_path
+                    # Check initializer_prompt.md
+                    if pending_writes["initializer"] and tool_use_id == pending_writes["initializer"].get("tool_id"):
+                        file_path = pending_writes["initializer"]["path"]
+                        full_path = Path(file_path) if Path(file_path).is_absolute() else self.project_dir / file_path
+                        if full_path.exists():
+                            logger.info(f"initializer_prompt.md verified at: {full_path}")
+                            files_written["initializer"] = True
 
-                                    # Notify about file write (but NOT completion yet)
-                                    yield {
-                                        "type": "file_written",
-                                        "path": str(file_path)
-                                    }
-                                else:
-                                    logger.error(f"app_spec.txt not found after write: {full_path}")
-                                pending_writes["app_spec"] = None
+                            # Notify about file write
+                            yield {
+                                "type": "file_written",
+                                "path": str(file_path)
+                            }
+                        else:
+                            logger.error(f"initializer_prompt.md not found after write: {full_path}")
+                        pending_writes["initializer"] = None
 
-                            # Check initializer_prompt.md
-                            if pending_writes["initializer"] and tool_use_id == pending_writes["initializer"].get("tool_id"):
-                                file_path = pending_writes["initializer"]["path"]
-                                full_path = Path(file_path) if Path(file_path).is_absolute() else self.project_dir / file_path
-                                if full_path.exists():
-                                    logger.info(f"initializer_prompt.md verified at: {full_path}")
-                                    files_written["initializer"] = True
+                    # Check if BOTH files are now written - only then signal completion
+                    if files_written["app_spec"] and files_written["initializer"]:
+                        logger.info("Both app_spec.txt and initializer_prompt.md verified - signaling completion")
+                        self.complete = True
+                        yield {
+                            "type": "spec_complete",
+                            "path": str(spec_path)
+                        }
 
-                                    # Notify about file write
-                                    yield {
-                                        "type": "file_written",
-                                        "path": str(file_path)
-                                    }
-                                else:
-                                    logger.error(f"initializer_prompt.md not found after write: {full_path}")
-                                pending_writes["initializer"] = None
+            elif event.type == EventType.ERROR:
+                yield {"type": "error", "content": event.content}
 
-                            # Check if BOTH files are now written - only then signal completion
-                            if files_written["app_spec"] and files_written["initializer"]:
-                                logger.info("Both app_spec.txt and initializer_prompt.md verified - signaling completion")
-                                self.complete = True
-                                yield {
-                                    "type": "spec_complete",
-                                    "path": str(spec_path)
-                                }
+            elif event.type == EventType.DONE:
+                break
 
     def is_complete(self) -> bool:
         """Check if spec creation is complete."""

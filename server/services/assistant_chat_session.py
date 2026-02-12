@@ -17,8 +17,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import AsyncGenerator, Optional
 
-from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
 from dotenv import load_dotenv
+
+from sdk_adapter import AdapterOptions, EventType, SDKAdapter, create_adapter
 
 from .assistant_database import (
     add_message,
@@ -181,21 +182,21 @@ class AssistantChatSession:
         self.project_name = project_name
         self.project_dir = project_dir
         self.conversation_id = conversation_id
-        self.client: Optional[ClaudeSDKClient] = None
-        self._client_entered: bool = False
+        self.adapter: Optional[SDKAdapter] = None
+        self._adapter_entered: bool = False
         self.created_at = datetime.now()
         self._history_loaded: bool = False  # Track if we've loaded history for resumed conversations
 
     async def close(self) -> None:
-        """Clean up resources and close the Claude client."""
-        if self.client and self._client_entered:
+        """Clean up resources and close the adapter."""
+        if self.adapter and self._adapter_entered:
             try:
-                await self.client.__aexit__(None, None, None)
+                await self.adapter.__aexit__(None, None, None)
             except Exception as e:
-                logger.warning(f"Error closing Claude client: {e}")
+                logger.warning(f"Error closing adapter: {e}")
             finally:
-                self._client_entered = False
-                self.client = None
+                self._adapter_entered = False
+                self.adapter = None
 
     async def start(self) -> AsyncGenerator[dict, None]:
         """
@@ -262,40 +263,48 @@ class AssistantChatSession:
             f.write(system_prompt)
         logger.info(f"Wrote assistant system prompt to {claude_md_path}")
 
-        # Use system Claude CLI
+        # Use system Claude CLI (for Claude SDK)
         system_cli = shutil.which("claude")
 
         # Build environment overrides for API configuration
         from registry import DEFAULT_MODEL, get_effective_sdk_env
+        from sdk_adapter.factory import get_sdk_type
         sdk_env = get_effective_sdk_env()
 
-        # Determine model from SDK env (provider-aware) or fallback to env/default
-        model = sdk_env.get("ANTHROPIC_DEFAULT_OPUS_MODEL") or os.getenv("ANTHROPIC_DEFAULT_OPUS_MODEL", DEFAULT_MODEL)
+        # Determine model based on SDK type
+        sdk_type = get_sdk_type()
+        if sdk_type == "codex":
+            # Codex SDK uses its own default model - don't specify
+            model = None
+        else:
+            # Claude SDK uses Anthropic models
+            model = sdk_env.get("ANTHROPIC_DEFAULT_OPUS_MODEL") or os.getenv("ANTHROPIC_DEFAULT_OPUS_MODEL") or DEFAULT_MODEL or "claude-opus-4-6"
 
         try:
-            logger.info("Creating ClaudeSDKClient...")
-            self.client = ClaudeSDKClient(
-                options=ClaudeAgentOptions(
-                    model=model,
-                    cli_path=system_cli,
-                    # System prompt loaded from CLAUDE.md via setting_sources
-                    # This avoids Windows command line length limit (~8191 chars)
-                    setting_sources=["project"],
-                    allowed_tools=[*READONLY_BUILTIN_TOOLS, *ASSISTANT_FEATURE_TOOLS],
-                    mcp_servers=mcp_servers,  # type: ignore[arg-type]  # SDK accepts dict config at runtime
-                    permission_mode="bypassPermissions",
-                    max_turns=100,
-                    cwd=str(self.project_dir.resolve()),
-                    settings=str(settings_file.resolve()),
-                    env=sdk_env,
-                )
+            logger.info("Creating SDK adapter...")
+            options = AdapterOptions(
+                model=model,
+                project_dir=self.project_dir,
+                cli_path=system_cli,
+                # System prompt loaded from CLAUDE.md via setting_sources
+                # This avoids Windows command line length limit (~8191 chars)
+                setting_sources=["project"],
+                allowed_tools=[*READONLY_BUILTIN_TOOLS, *ASSISTANT_FEATURE_TOOLS],
+                mcp_servers=mcp_servers,
+                permission_mode="bypassPermissions",
+                include_user_settings=False,
+                max_turns=100,
+                cwd=str(self.project_dir.resolve()),
+                settings_file=str(settings_file.resolve()),
+                env=sdk_env,
             )
-            logger.info("Entering Claude client context...")
-            await self.client.__aenter__()
-            self._client_entered = True
-            logger.info("Claude client ready")
+            self.adapter = create_adapter(options)
+            logger.info("Entering adapter context...")
+            await self.adapter.__aenter__()
+            self._adapter_entered = True
+            logger.info("Adapter ready")
         except Exception as e:
-            logger.exception("Failed to create Claude client")
+            logger.exception("Failed to create adapter")
             yield {"type": "error", "content": f"Failed to initialize assistant: {str(e)}"}
             return
 
@@ -336,7 +345,7 @@ class AssistantChatSession:
             - {"type": "response_done"}
             - {"type": "error", "content": str}
         """
-        if not self.client:
+        if not self.adapter:
             yield {"type": "error", "content": "Session not initialized. Call start() first."}
             return
 
@@ -381,51 +390,50 @@ class AssistantChatSession:
 
     async def _query_claude(self, message: str) -> AsyncGenerator[dict, None]:
         """
-        Internal method to query Claude and stream responses.
+        Internal method to query the adapter and stream responses.
 
-        Handles tool calls and text responses.
+        Handles tool calls and text responses using unified event model.
         """
-        if not self.client:
+        if not self.adapter:
             return
 
-        # Send message to Claude
-        await self.client.query(message)
+        # Send message to adapter
+        await self.adapter.query(message)
 
         full_response = ""
 
-        # Stream the response
-        async for msg in self.client.receive_response():
-            msg_type = type(msg).__name__
+        # Stream the response using unified events
+        async for event in self.adapter.receive_events():
+            if event.type == EventType.TEXT:
+                if event.content:
+                    full_response += event.content
+                    yield {"type": "text", "content": event.content}
 
-            if msg_type == "AssistantMessage" and hasattr(msg, "content"):
-                for block in msg.content:
-                    block_type = type(block).__name__
+            elif event.type == EventType.TOOL_CALL:
+                tool_name = event.tool_name or ""
+                tool_input = event.tool_input
 
-                    if block_type == "TextBlock" and hasattr(block, "text"):
-                        text = block.text
-                        if text:
-                            full_response += text
-                            yield {"type": "text", "content": text}
-
-                    elif block_type == "ToolUseBlock" and hasattr(block, "name"):
-                        tool_name = block.name
-                        tool_input = getattr(block, "input", {})
-
-                        # Intercept ask_user tool calls -> yield as question message
-                        if tool_name == "mcp__features__ask_user":
-                            questions = tool_input.get("questions", [])
-                            if questions:
-                                yield {
-                                    "type": "question",
-                                    "questions": questions,
-                                }
-                                continue
-
+                # Intercept ask_user tool calls -> yield as question message
+                if tool_name == "mcp__features__ask_user":
+                    questions = tool_input.get("questions", [])
+                    if questions:
                         yield {
-                            "type": "tool_call",
-                            "tool": tool_name,
-                            "input": tool_input,
+                            "type": "question",
+                            "questions": questions,
                         }
+                        continue
+
+                yield {
+                    "type": "tool_call",
+                    "tool": tool_name,
+                    "input": tool_input,
+                }
+
+            elif event.type == EventType.ERROR:
+                yield {"type": "error", "content": event.content}
+
+            elif event.type == EventType.DONE:
+                break
 
         # Store the complete response in the database
         if full_response and self.conversation_id:

@@ -784,3 +784,51 @@ def get_effective_sdk_env() -> dict[str, str]:
         sdk_env["API_TIMEOUT_MS"] = timeout
 
     return sdk_env
+
+
+def get_effective_sdk_env_for_codex() -> dict[str, str]:
+    """Build environment variable dict for Codex SDK based on current API provider settings.
+
+    Maps provider settings to OpenAI-compatible environment variables:
+    - OPENAI_BASE_URL (instead of ANTHROPIC_BASE_URL)
+    - OPENAI_API_KEY (instead of ANTHROPIC_AUTH_TOKEN/ANTHROPIC_API_KEY)
+
+    For the default provider (claude/openai), uses standard env vars.
+    For alternative providers (e.g., custom), builds from stored settings.
+
+    Returns:
+        Dict ready to pass to Codex SDK as environment overrides.
+    """
+    all_settings = get_all_settings()
+    provider_id = all_settings.get("api_provider", "claude")
+
+    sdk_env: dict[str, str] = {}
+
+    if provider_id in ("claude", "openai"):
+        # Default behavior: use standard OpenAI env vars
+        api_key = os.getenv("OPENAI_API_KEY")
+        if api_key:
+            sdk_env["OPENAI_API_KEY"] = api_key
+
+        base_url = os.getenv("OPENAI_BASE_URL")
+        if base_url:
+            sdk_env["OPENAI_BASE_URL"] = base_url
+
+        return sdk_env
+
+    # Alternative provider: build env from settings
+    # Map ANTHROPIC settings to OpenAI equivalents
+    base_url = all_settings.get("api_base_url")
+    if base_url:
+        sdk_env["OPENAI_BASE_URL"] = base_url
+
+    auth_token = all_settings.get("api_auth_token")
+    if auth_token:
+        sdk_env["OPENAI_API_KEY"] = auth_token
+
+    # Model (Codex uses ThreadOptions.model, but env var can set default)
+    model = all_settings.get("api_model")
+    if model:
+        sdk_env["OPENAI_MODEL"] = model
+
+    return sdk_env

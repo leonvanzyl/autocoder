@@ -14,7 +14,8 @@ from pathlib import Path
 from typing import Optional
 from zoneinfo import ZoneInfo
 
-from claude_agent_sdk import ClaudeSDKClient
+from sdk_adapter import SDKAdapter
+from sdk_adapter.types import EventType
 
 # Fix Windows console encoding for Unicode characters (emoji, etc.)
 # Without this, print() crashes when Claude outputs emoji like ✅
@@ -50,15 +51,15 @@ AUTO_CONTINUE_DELAY_SECONDS = 3
 
 
 async def run_agent_session(
-    client: ClaudeSDKClient,
+    client: SDKAdapter,
     message: str,
     project_dir: Path,
 ) -> tuple[str, str]:
     """
-    Run a single agent session using Claude Agent SDK.
+    Run a single agent session using SDK adapter.
 
     Args:
-        client: Claude SDK client
+        client: SDK adapter (Claude or Codex)
         message: The prompt to send
         project_dir: Project directory path
 
@@ -67,53 +68,48 @@ async def run_agent_session(
         - "continue" if agent should continue working
         - "error" if an error occurred
     """
-    print("Sending prompt to Claude Agent SDK...\n")
+    from sdk_adapter.factory import get_sdk_type
+
+    sdk_type = get_sdk_type()
+    print(f"Sending prompt to {sdk_type.upper()} Agent SDK...\n")
 
     try:
         # Send the query
         await client.query(message)
 
-        # Collect response text and show tool use
+        # Collect response text using unified event model
         response_text = ""
-        async for msg in client.receive_response():
-            msg_type = type(msg).__name__
+        async for event in client.receive_events():
+            if event.type == EventType.TEXT:
+                response_text += event.content
+                print(event.content, end="", flush=True)
 
-            # Handle AssistantMessage (text and tool use)
-            if msg_type == "AssistantMessage" and hasattr(msg, "content"):
-                for block in msg.content:
-                    block_type = type(block).__name__
+            elif event.type == EventType.TOOL_CALL:
+                print(f"\n[Tool: {event.tool_name}]", flush=True)
+                if event.tool_input:
+                    input_str = str(event.tool_input)
+                    if len(input_str) > 200:
+                        print(f"   Input: {input_str[:200]}...", flush=True)
+                    else:
+                        print(f"   Input: {input_str}", flush=True)
 
-                    if block_type == "TextBlock" and hasattr(block, "text"):
-                        response_text += block.text
-                        print(block.text, end="", flush=True)
-                    elif block_type == "ToolUseBlock" and hasattr(block, "name"):
-                        print(f"\n[Tool: {block.name}]", flush=True)
-                        if hasattr(block, "input"):
-                            input_str = str(block.input)
-                            if len(input_str) > 200:
-                                print(f"   Input: {input_str[:200]}...", flush=True)
-                            else:
-                                print(f"   Input: {input_str}", flush=True)
+            elif event.type == EventType.TOOL_RESULT:
+                # Check if command was blocked by security hook
+                if "blocked" in event.content.lower():
+                    print(f"   [BLOCKED] {event.content}", flush=True)
+                elif event.is_error:
+                    # Show errors (truncated)
+                    error_str = event.content[:500]
+                    print(f"   [Error] {error_str}", flush=True)
+                else:
+                    # Tool succeeded - just show brief confirmation
+                    print("   [Done]", flush=True)
 
-            # Handle UserMessage (tool results)
-            elif msg_type == "UserMessage" and hasattr(msg, "content"):
-                for block in msg.content:
-                    block_type = type(block).__name__
+            elif event.type == EventType.ERROR:
+                print(f"\n[Error] {event.content}", flush=True)
 
-                    if block_type == "ToolResultBlock":
-                        result_content = getattr(block, "content", "")
-                        is_error = getattr(block, "is_error", False)
-
-                        # Check if command was blocked by security hook
-                        if "blocked" in str(result_content).lower():
-                            print(f"   [BLOCKED] {result_content}", flush=True)
-                        elif is_error:
-                            # Show errors (truncated)
-                            error_str = str(result_content)[:500]
-                            print(f"   [Error] {error_str}", flush=True)
-                        else:
-                            # Tool succeeded - just show brief confirmation
-                            print("   [Done]", flush=True)
+            elif event.type == EventType.DONE:
+                break
 
         print("\n" + "-" * 70 + "\n")
         return "continue", response_text

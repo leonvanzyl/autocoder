@@ -18,11 +18,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, AsyncGenerator, Optional
 
-from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
 from dotenv import load_dotenv
 
+from sdk_adapter import AdapterOptions, EventType, SDKAdapter, create_adapter
+
 from ..schemas import ImageAttachment
-from .chat_constants import ROOT_DIR, make_multimodal_message
+from .chat_constants import ROOT_DIR
 
 # Load environment variables from .env file if present
 load_dotenv()
@@ -57,27 +58,27 @@ class ExpandChatSession:
         """
         self.project_name = project_name
         self.project_dir = project_dir
-        self.client: Optional[ClaudeSDKClient] = None
+        self.adapter: Optional[SDKAdapter] = None
         self.messages: list[dict] = []
         self.complete: bool = False
         self.created_at = datetime.now()
         self._conversation_id: Optional[str] = None
-        self._client_entered: bool = False
+        self._adapter_entered: bool = False
         self.features_created: int = 0
         self.created_feature_ids: list[int] = []
         self._settings_file: Optional[Path] = None
         self._query_lock = asyncio.Lock()
 
     async def close(self) -> None:
-        """Clean up resources and close the Claude client."""
-        if self.client and self._client_entered:
+        """Clean up resources and close the adapter."""
+        if self.adapter and self._adapter_entered:
             try:
-                await self.client.__aexit__(None, None, None)
+                await self.adapter.__aexit__(None, None, None)
             except Exception as e:
-                logger.warning(f"Error closing Claude client: {e}")
+                logger.warning(f"Error closing adapter: {e}")
             finally:
-                self._client_entered = False
-                self.client = None
+                self._adapter_entered = False
+                self.adapter = None
 
         # Clean up temporary settings file
         if self._settings_file and self._settings_file.exists():
@@ -155,10 +156,17 @@ class ExpandChatSession:
 
         # Build environment overrides for API configuration
         from registry import DEFAULT_MODEL, get_effective_sdk_env
+        from sdk_adapter.factory import get_sdk_type
         sdk_env = get_effective_sdk_env()
 
-        # Determine model from SDK env (provider-aware) or fallback to env/default
-        model = sdk_env.get("ANTHROPIC_DEFAULT_OPUS_MODEL") or os.getenv("ANTHROPIC_DEFAULT_OPUS_MODEL", DEFAULT_MODEL)
+        # Determine model based on SDK type
+        sdk_type = get_sdk_type()
+        if sdk_type == "codex":
+            # Codex SDK uses its own default model - don't specify
+            model = None
+        else:
+            # Claude SDK uses Anthropic models
+            model = sdk_env.get("ANTHROPIC_DEFAULT_OPUS_MODEL") or os.getenv("ANTHROPIC_DEFAULT_OPUS_MODEL") or DEFAULT_MODEL or "claude-opus-4-6"
 
         # Build MCP servers config for feature creation
         mcp_servers = {
@@ -172,36 +180,37 @@ class ExpandChatSession:
             },
         }
 
-        # Create Claude SDK client
+        # Create SDK adapter
         try:
-            self.client = ClaudeSDKClient(
-                options=ClaudeAgentOptions(
-                    model=model,
-                    cli_path=system_cli,
-                    system_prompt=system_prompt,
-                    allowed_tools=[
-                        "Read",
-                        "Glob",
-                        "Grep",
-                        "WebFetch",
-                        "WebSearch",
-                        *EXPAND_FEATURE_TOOLS,
-                    ],
-                    mcp_servers=mcp_servers,  # type: ignore[arg-type]  # SDK accepts dict config at runtime
-                    permission_mode="bypassPermissions",
-                    max_turns=100,
-                    cwd=str(self.project_dir.resolve()),
-                    settings=str(settings_file.resolve()),
-                    env=sdk_env,
-                )
+            options = AdapterOptions(
+                model=model,
+                project_dir=self.project_dir,
+                cli_path=system_cli,
+                system_prompt=system_prompt,
+                allowed_tools=[
+                    "Read",
+                    "Glob",
+                    "Grep",
+                    "WebFetch",
+                    "WebSearch",
+                    *EXPAND_FEATURE_TOOLS,
+                ],
+                mcp_servers=mcp_servers,
+                permission_mode="bypassPermissions",
+                include_user_settings=False,
+                max_turns=100,
+                cwd=str(self.project_dir.resolve()),
+                settings_file=str(settings_file.resolve()),
+                env=sdk_env,
             )
-            await self.client.__aenter__()
-            self._client_entered = True
+            self.adapter = create_adapter(options)
+            await self.adapter.__aenter__()
+            self._adapter_entered = True
         except Exception:
-            logger.exception("Failed to create Claude client")
+            logger.exception("Failed to create adapter")
             yield {
                 "type": "error",
-                "content": "Failed to initialize Claude"
+                "content": "Failed to initialize adapter"
             }
             return
 
@@ -237,7 +246,7 @@ class ExpandChatSession:
             - {"type": "expansion_complete", "total_added": N}
             - {"type": "error", "content": str}
         """
-        if not self.client:
+        if not self.adapter:
             yield {
                 "type": "error",
                 "content": "Session not initialized. Call start() first."
@@ -271,12 +280,12 @@ class ExpandChatSession:
         attachments: list[ImageAttachment] | None = None
     ) -> AsyncGenerator[dict, None]:
         """
-        Internal method to query Claude and stream responses.
+        Internal method to query the adapter and stream responses.
 
-        Feature creation is handled by Claude calling the feature_create_bulk
+        Feature creation is handled by the adapter calling the feature_create_bulk
         MCP tool directly -- no text parsing needed.
         """
-        if not self.client:
+        if not self.adapter:
             return
 
         # Build the message content
@@ -293,29 +302,28 @@ class ExpandChatSession:
                         "data": att.base64Data,
                     }
                 })
-            await self.client.query(make_multimodal_message(content_blocks))
+            await self.adapter.query(content_blocks)
             logger.info(f"Sent multimodal message with {len(attachments)} image(s)")
         else:
-            await self.client.query(message)
+            await self.adapter.query(message)
 
-        # Stream the response
-        async for msg in self.client.receive_response():
-            msg_type = type(msg).__name__
+        # Stream the response using unified events
+        async for event in self.adapter.receive_events():
+            if event.type == EventType.TEXT:
+                if event.content:
+                    yield {"type": "text", "content": event.content}
 
-            if msg_type == "AssistantMessage" and hasattr(msg, "content"):
-                for block in msg.content:
-                    block_type = type(block).__name__
+                    self.messages.append({
+                        "role": "assistant",
+                        "content": event.content,
+                        "timestamp": datetime.now().isoformat()
+                    })
 
-                    if block_type == "TextBlock" and hasattr(block, "text"):
-                        text = block.text
-                        if text:
-                            yield {"type": "text", "content": text}
+            elif event.type == EventType.ERROR:
+                yield {"type": "error", "content": event.content}
 
-                            self.messages.append({
-                                "role": "assistant",
-                                "content": text,
-                                "timestamp": datetime.now().isoformat()
-                            })
+            elif event.type == EventType.DONE:
+                break
 
     def get_features_created(self) -> int:
         """Get the total number of features created in this session."""

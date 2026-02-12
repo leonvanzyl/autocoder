@@ -356,7 +356,8 @@ def main() -> None:
     # Load environment variables now that dotenv is installed
     try:
         from dotenv import load_dotenv
-        load_dotenv(ROOT / ".env")
+        env_file = ROOT / ".env"
+        load_dotenv(env_file)
     except ImportError:
         pass  # dotenv is optional for basic functionality
 

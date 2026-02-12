@@ -1,6 +1,7 @@
 # Production runtime dependencies only
 # For development, use requirements.txt (includes ruff, mypy, pytest)
 claude-agent-sdk>=0.1.0,<0.2.0
+codex-sdk-py>=0.0.6  # Optional: Required only when AUTOFORGE_SDK=codex
 python-dotenv>=1.0.0
 sqlalchemy>=2.0.0
 fastapi>=0.115.0

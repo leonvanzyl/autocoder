@@ -1,8 +1,11 @@
 """
-Claude SDK Client Configuration
-===============================
+SDK Client Configuration
+========================
 
-Functions for creating and configuring the Claude Agent SDK client.
+Functions for creating and configuring SDK adapters (Claude or Codex).
+Uses AUTOFORGE_SDK environment variable to select the SDK:
+- "claude" (default): Claude Agent SDK
+- "codex": OpenAI Codex SDK
 """
 
 import json
@@ -16,6 +19,7 @@ from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
 from claude_agent_sdk.types import HookContext, HookInput, HookMatcher, SyncHookJSONOutput
 from dotenv import load_dotenv
 
+from sdk_adapter import AdapterOptions, SDKAdapter, create_adapter, get_sdk_type
 from security import SENSITIVE_DIRECTORIES, bash_security_hook
 
 # Load environment variables from .env file if present
@@ -210,29 +214,38 @@ def create_client(
     model: str,
     yolo_mode: bool = False,
     agent_type: str = "coding",
-):
+) -> SDKAdapter:
     """
-    Create a Claude Agent SDK client with multi-layered security.
+    Create an SDK adapter (Claude or Codex) with multi-layered security.
+
+    Uses AUTOFORGE_SDK environment variable to select SDK:
+    - "claude" (default): Claude Agent SDK
+    - "codex": OpenAI Codex SDK
 
     Args:
         project_dir: Directory for the project
-        model: Claude model to use
+        model: Model to use (Claude or Codex model name)
         yolo_mode: If True, skip browser testing for rapid prototyping
+        agent_id: Optional unique identifier for browser isolation in parallel mode.
+                  When provided, each agent gets its own browser profile.
         agent_type: One of "coding", "testing", or "initializer". Controls which
                     MCP tools are exposed and the max_turns limit.
 
     Returns:
-        Configured ClaudeSDKClient (from claude_agent_sdk)
+        Configured SDKAdapter (Claude or Codex)
 
     Security layers (defense in depth):
     1. Sandbox - OS-level bash command isolation prevents filesystem escape
     2. Permissions - File operations restricted to project_dir only
     3. Security hooks - Bash commands validated against an allowlist
        (see security.py for ALLOWED_COMMANDS)
+       Note: Codex SDK does not support pre-tool-use hooks; relies on built-in sandboxing.
 
     Note: Authentication is handled by start.bat/start.sh before this runs.
-    The Claude SDK auto-detects credentials from the Claude CLI configuration
+    The SDK auto-detects credentials from the respective CLI configuration.
     """
+    sdk_type = get_sdk_type()
+    print(f"   - SDK type: {sdk_type.upper()}")
     # Select the feature MCP tools appropriate for this agent type
     feature_tools_map = {
         "coding": CODING_AGENT_TOOLS,
@@ -339,16 +352,25 @@ def create_client(
         },
     }
     # Build environment overrides for API endpoint configuration
-    # Uses get_effective_sdk_env() which reads provider settings from the database,
-    # ensuring UI-configured alternative providers (GLM, Ollama, Kimi, Custom) propagate
-    # correctly to the Claude CLI subprocess
-    from registry import get_effective_sdk_env
-    sdk_env = get_effective_sdk_env()
+    # Uses get_effective_sdk_env() for Claude or get_effective_sdk_env_for_codex() for Codex
+    # These read provider settings from the database, ensuring UI-configured
+    # alternative providers (GLM, Ollama, Kimi, Custom) propagate correctly
+    from registry import get_effective_sdk_env, get_effective_sdk_env_for_codex
+    if sdk_type == "codex":
+        sdk_env = get_effective_sdk_env_for_codex()
+    else:
+        sdk_env = get_effective_sdk_env()
 
     # Detect alternative API mode (Ollama, GLM, or Vertex AI)
-    base_url = sdk_env.get("ANTHROPIC_BASE_URL", "")
-    is_vertex = sdk_env.get("CLAUDE_CODE_USE_VERTEX") == "1"
-    is_alternative_api = bool(base_url) or is_vertex
+    # For Codex: check OPENAI_BASE_URL; for Claude: check ANTHROPIC_BASE_URL
+    if sdk_type == "codex":
+        base_url = sdk_env.get("OPENAI_BASE_URL", "")
+        is_vertex = False  # Vertex AI is Claude-specific
+        is_alternative_api = bool(base_url)
+    else:
+        base_url = sdk_env.get("ANTHROPIC_BASE_URL", "")
+        is_vertex = sdk_env.get("CLAUDE_CODE_USE_VERTEX") == "1"
+        is_alternative_api = bool(base_url) or is_vertex
     is_ollama = "localhost:11434" in base_url or "127.0.0.1:11434" in base_url
     is_azure = "services.ai.azure.com" in base_url
     model = convert_model_for_vertex(model)
@@ -362,6 +384,8 @@ def create_client(
             print("   - Ollama Mode: Using local models")
         elif is_azure:
             print(f"   - Azure Mode: Using {base_url}")
+        elif sdk_type == "codex" and "OPENAI_BASE_URL" in sdk_env:
+            print(f"   - Custom API: Using {sdk_env['OPENAI_BASE_URL']}")
         elif "ANTHROPIC_BASE_URL" in sdk_env:
             print(f"   - Alternative API: Using {sdk_env['ANTHROPIC_BASE_URL']}")
 
@@ -449,49 +473,78 @@ def create_client(
     # Our system_prompt benefits from automatic caching without explicit configuration.
     # If explicit cache_control is needed, the SDK would need to accept content blocks
     # with cache_control fields (not currently supported in v0.1.x).
-    return ClaudeSDKClient(
-        options=ClaudeAgentOptions(
-            model=model,
-            cli_path=system_cli,  # Use system CLI to avoid bundled Bun crash (exit code 3)
-            system_prompt="You are an expert full-stack developer building a production-quality web application.",
-            setting_sources=["project"],  # Enable skills, commands, and CLAUDE.md from project dir
-            max_buffer_size=10 * 1024 * 1024,  # 10MB for large Playwright screenshots
-            allowed_tools=allowed_tools,
-            mcp_servers=mcp_servers,  # type: ignore[arg-type]  # SDK accepts dict config at runtime
-            hooks={
-                "PreToolUse": [
-                    HookMatcher(matcher="Bash", hooks=[bash_hook_with_context]),
-                ],
-                # PreCompact hook for context management during long sessions.
-                # Compaction is automatic when context approaches token limits.
-                # This hook logs compaction events and can customize summarization.
-                "PreCompact": [
-                    HookMatcher(hooks=[pre_compact_hook]),
-                ],
-            },
-            max_turns=max_turns,
-            cwd=str(project_dir.resolve()),
-            settings=str(settings_file.resolve()),  # Use absolute path
-            env=sdk_env,  # Pass API configuration overrides to CLI subprocess
-            # Enable extended context beta for better handling of long sessions.
-            # This provides up to 1M tokens of context with automatic compaction.
-            # See: https://docs.anthropic.com/en/api/beta-headers
-            # Disabled for alternative APIs (Ollama, GLM, Vertex AI) as they don't support this beta.
-            betas=[] if is_alternative_api else ["context-1m-2025-08-07"],
-            # Note on context management:
-            # The Claude Agent SDK handles context management automatically through the
-            # underlying Claude Code CLI. When context approaches limits, the CLI
-            # automatically compacts/summarizes previous messages.
-            #
-            # The SDK does NOT expose explicit compaction_control or context_management
-            # parameters. Instead, context is managed via:
-            # 1. betas=["context-1m-2025-08-07"] - Extended context window
-            # 2. PreCompact hook - Intercept and customize compaction behavior
-            # 3. max_turns - Limit conversation turns (per agent type: coding=300, testing=100)
-            #
-            # Future SDK versions may add explicit compaction controls. When available,
-            # consider adding:
-            # - compaction_control={"enabled": True, "context_token_threshold": 80000}
-            # - context_management={"edits": [...]} for tool use clearing
+
+    # Branch based on SDK type
+    if sdk_type == "claude":
+        # Claude SDK: use ClaudeSDKClient with full hook support
+        # Note: ClaudeSDKClient has different API than SDKAdapter protocol but works at runtime
+        return ClaudeSDKClient(  # type: ignore[return-value]
+            options=ClaudeAgentOptions(
+                model=model,
+                cli_path=system_cli,  # Use system CLI to avoid bundled Bun crash (exit code 3)
+                system_prompt="You are an expert full-stack developer building a production-quality web application.",
+                setting_sources=["project"],  # Enable skills, commands, and CLAUDE.md from project dir
+                max_buffer_size=10 * 1024 * 1024,  # 10MB for large Playwright screenshots
+                allowed_tools=allowed_tools,
+                mcp_servers=mcp_servers,  # type: ignore[arg-type]  # SDK accepts dict config at runtime
+                hooks={
+                    "PreToolUse": [
+                        HookMatcher(matcher="Bash", hooks=[bash_hook_with_context]),
+                    ],
+                    # PreCompact hook for context management during long sessions.
+                    # Compaction is automatic when context approaches token limits.
+                    # This hook logs compaction events and can customize summarization.
+                    "PreCompact": [
+                        HookMatcher(hooks=[pre_compact_hook]),
+                    ],
+                },
+                max_turns=max_turns,
+                cwd=str(project_dir.resolve()),
+                settings=str(settings_file.resolve()),  # Use absolute path
+                env=sdk_env,  # Pass API configuration overrides to CLI subprocess
+                # Enable extended context beta for better handling of long sessions.
+                # This provides up to 1M tokens of context with automatic compaction.
+                # See: https://docs.anthropic.com/en/api/beta-headers
+                # Disabled for alternative APIs (Ollama, GLM, Vertex AI) as they don't support this beta.
+                betas=[] if is_alternative_api else ["context-1m-2025-08-07"],
+                # Note on context management:
+                # The Claude Agent SDK handles context management automatically through the
+                # underlying Claude Code CLI. When context approaches limits, the CLI
+                # automatically compacts/summarizes previous messages.
+                #
+                # The SDK does NOT expose explicit compaction_control or context_management
+                # parameters. Instead, context is managed via:
+                # 1. betas=["context-1m-2025-08-07"] - Extended context window
+                # 2. PreCompact hook - Intercept and customize compaction behavior
+                # 3. max_turns - Limit conversation turns (per agent type: coding=300, testing=100)
+                #
+                # Future SDK versions may add explicit compaction controls. When available,
+                # consider adding:
+                # - compaction_control={"enabled": True, "context_token_threshold": 80000}
+                # - context_management={"edits": [...]} for tool use clearing
+            )
         )
-    )
+    else:
+        # Codex SDK: use factory with unified adapter interface
+        # Note: Codex does not support PreToolUse hooks - relies on built-in sandboxing
+        print("   - Note: Bash command hooks not available with Codex SDK")
+        print("   - Security relies on Codex's built-in sandboxing")
+
+        options = AdapterOptions(
+            model=None,  # Codex SDK uses its own default model
+            project_dir=project_dir,
+            system_prompt="You are an expert full-stack developer building a production-quality web application.",
+            max_turns=max_turns,
+            agent_type=agent_type,
+            cli_path=system_cli,
+            setting_sources=["project"],
+            max_buffer_size=10 * 1024 * 1024,
+            allowed_tools=allowed_tools,
+            mcp_servers=mcp_servers,
+            settings_file=str(settings_file.resolve()),
+            cwd=str(project_dir.resolve()),
+            env=sdk_env,
+            yolo_mode=yolo_mode,
+            betas=[] if is_alternative_api else ["context-1m-2025-08-07"],
+        )
+        return create_adapter(options)
