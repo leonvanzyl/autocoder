@@ -75,6 +75,7 @@ export function ProjectSelector({
             variant="outline"
             className="min-w-[140px] sm:min-w-[200px] justify-between"
             disabled={isLoading}
+            title={selectedProjectData?.path}
           >
             {isLoading ? (
               <Loader2 size={18} className="animate-spin" />
@@ -101,6 +102,7 @@ export function ProjectSelector({
               {projects.map(project => (
                 <DropdownMenuItem
                   key={project.name}
+                  title={project.path}
                   className={`flex items-center justify-between cursor-pointer ${
                     project.name === selectedProject ? 'bg-primary/10' : ''
                   }`}

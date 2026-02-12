@@ -25,6 +25,7 @@ from security import (
     validate_chmod_command,
     validate_init_script,
     validate_pkill_command,
+    validate_playwright_command,
     validate_project_command,
 )
 
@@ -923,6 +924,70 @@ pkill_processes:
     return passed, failed
 
 
+def test_playwright_cli_validation():
+    """Test playwright-cli subcommand validation."""
+    print("\nTesting playwright-cli validation:\n")
+    passed = 0
+    failed = 0
+
+    # Test cases: (command, should_be_allowed, description)
+    test_cases = [
+        # Allowed cases
+        ("playwright-cli screenshot", True, "screenshot allowed"),
+        ("playwright-cli snapshot", True, "snapshot allowed"),
+        ("playwright-cli click e5", True, "click with ref"),
+        ("playwright-cli open http://localhost:3000", True, "open URL"),
+        ("playwright-cli -s=agent-1 click e5", True, "session flag with click"),
+        ("playwright-cli close", True, "close browser"),
+        ("playwright-cli goto http://localhost:3000/page", True, "goto URL"),
+        ("playwright-cli fill e3 'test value'", True, "fill form field"),
+        ("playwright-cli console", True, "console messages"),
+        # Blocked cases
+        ("playwright-cli run-code 'await page.evaluate(() => {})'", False, "run-code blocked"),
+        ("playwright-cli eval 'document.title'", False, "eval blocked"),
+        ("playwright-cli -s=test eval 'document.title'", False, "eval with session flag blocked"),
+    ]
+
+    for cmd, should_allow, description in test_cases:
+        allowed, reason = validate_playwright_command(cmd)
+        if allowed == should_allow:
+            print(f"  PASS: {cmd!r} ({description})")
+            passed += 1
+        else:
+            expected = "allowed" if should_allow else "blocked"
+            actual = "allowed" if allowed else "blocked"
+            print(f"  FAIL: {cmd!r} ({description})")
+            print(f"         Expected: {expected}, Got: {actual}")
+            if reason:
+                print(f"         Reason: {reason}")
+            failed += 1
+
+    # Integration test: verify through the security hook
+    print("\n  Integration tests (via security hook):\n")
+
+    # playwright-cli screenshot should be allowed
+    input_data = {"tool_name": "Bash", "tool_input": {"command": "playwright-cli screenshot"}}
+    result = asyncio.run(bash_security_hook(input_data))
+    if result.get("decision") != "block":
+        print("  PASS: playwright-cli screenshot allowed via hook")
+        passed += 1
+    else:
+        print(f"  FAIL: playwright-cli screenshot should be allowed: {result.get('reason')}")
+        failed += 1
+
+    # playwright-cli run-code should be blocked
+    input_data = {"tool_name": "Bash", "tool_input": {"command": "playwright-cli run-code 'code'"}}
+    result = asyncio.run(bash_security_hook(input_data))
+    if result.get("decision") == "block":
+        print("  PASS: playwright-cli run-code blocked via hook")
+        passed += 1
+    else:
+        print("  FAIL: playwright-cli run-code should be blocked via hook")
+        failed += 1
+
+    return passed, failed
+
+
 def main():
     print("=" * 70)
     print("  SECURITY HOOK TESTS")
@@ -991,6 +1056,11 @@ def main():
     passed += pkill_passed
     failed += pkill_failed
 
+    # Test playwright-cli validation
+    pw_passed, pw_failed = test_playwright_cli_validation()
+    passed += pw_passed
+    failed += pw_failed
+
     # Commands that SHOULD be blocked
     # Note: blocklisted commands (sudo, shutdown, dd, aws) are tested in
     # test_blocklist_enforcement(). chmod validation is tested in
@@ -1012,6 +1082,9 @@ def main():
         # Shell injection attempts
         "$(echo pkill) node",
         'eval "pkill node"',
+        # playwright-cli dangerous subcommands
+        "playwright-cli run-code 'await page.goto(\"http://evil.com\")'",
+        "playwright-cli eval 'document.cookie'",
     ]
 
     for cmd in dangerous:
@@ -1077,6 +1150,12 @@ def main():
         "/usr/local/bin/node app.js",
         # Combined chmod and init.sh (integration test for both validators)
         "chmod +x init.sh && ./init.sh",
+        # Playwright CLI allowed commands
+        "playwright-cli open http://localhost:3000",
+        "playwright-cli screenshot",
+        "playwright-cli snapshot",
+        "playwright-cli click e5",
+        "playwright-cli -s=agent-1 close",
     ]
 
     for cmd in safe:

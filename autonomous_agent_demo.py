@@ -237,6 +237,12 @@ def main() -> None:
     if migrated:
         print(f"Migrated project files to .autoforge/: {', '.join(migrated)}", flush=True)
 
+    # Migrate project to current AutoForge version (idempotent, safe)
+    from prompts import migrate_project_to_current
+    version_migrated = migrate_project_to_current(project_dir)
+    if version_migrated:
+        print(f"Upgraded project: {', '.join(version_migrated)}", flush=True)
+
     # Parse batch testing feature IDs (comma-separated string -> list[int])
     testing_feature_ids: list[int] | None = None
     if args.testing_feature_ids:

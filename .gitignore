@@ -10,6 +10,10 @@ issues/
 # Browser profiles for parallel agent execution
 .browser-profiles/
 
+# Playwright CLI daemon artifacts
+.playwright-cli/
+.playwright/
+
 # Log files
 logs/
 *.log

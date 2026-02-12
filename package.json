@@ -1,6 +1,6 @@
 {
   "name": "autoforge-ai",
-  "version": "0.1.10",
+  "version": "0.1.12",
   "description": "Autonomous coding agent with web UI - build complete apps with AI",
   "license": "AGPL-3.0",
   "bin": {
@@ -19,6 +19,7 @@
     "ui/dist/",
     "ui/package.json",
     ".claude/commands/",
+    ".claude/skills/",
     ".claude/templates/",
     "examples/",
     "start.py",

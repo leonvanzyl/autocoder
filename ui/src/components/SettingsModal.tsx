@@ -85,6 +85,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const handleSaveCustomBaseUrl = () => {
     if (customBaseUrlInput.trim() && !updateSettings.isPending) {
       updateSettings.mutate({ api_base_url: customBaseUrlInput.trim() })
+      setCustomBaseUrlInput('')
     }
   }
 
@@ -102,12 +103,12 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const currentProviderInfo: ProviderInfo | undefined = providers.find(p => p.id === currentProvider)
   const isAlternativeProvider = currentProvider !== 'claude'
   const showAuthField = isAlternativeProvider && currentProviderInfo?.requires_auth
-  const showBaseUrlField = currentProvider === 'custom'
+  const showBaseUrlField = currentProvider === 'custom' || currentProvider === 'azure'
   const showCustomModelInput = currentProvider === 'custom' || currentProvider === 'ollama'
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent aria-describedby={undefined} className="sm:max-w-sm max-h-[85vh] overflow-y-auto">
+      <DialogContent aria-describedby={undefined} className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             Settings
@@ -315,22 +316,38 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               {showBaseUrlField && (
                 <div className="space-y-2 pt-1">
                   <Label className="text-sm">Base URL</Label>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={customBaseUrlInput || settings.api_base_url || ''}
-                      onChange={(e) => setCustomBaseUrlInput(e.target.value)}
-                      placeholder="https://api.example.com/v1"
-                      className="flex-1 py-1.5 px-3 text-sm border rounded-md bg-background"
-                    />
-                    <Button
-                      size="sm"
-                      onClick={handleSaveCustomBaseUrl}
-                      disabled={!customBaseUrlInput.trim() || isSaving}
-                    >
-                      Save
-                    </Button>
-                  </div>
+                  {settings.api_base_url && !customBaseUrlInput && (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <ShieldCheck size={14} className="text-green-500" />
+                      <span className="truncate">{settings.api_base_url}</span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-auto py-0.5 px-2 text-xs shrink-0"
+                        onClick={() => setCustomBaseUrlInput(settings.api_base_url || '')}
+                      >
+                        Change
+                      </Button>
+                    </div>
+                  )}
+                  {(!settings.api_base_url || customBaseUrlInput) && (
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={customBaseUrlInput}
+                        onChange={(e) => setCustomBaseUrlInput(e.target.value)}
+                        placeholder={currentProvider === 'azure' ? 'https://your-resource.services.ai.azure.com/anthropic' : 'https://api.example.com/v1'}
+                        className="flex-1 py-1.5 px-3 text-sm border rounded-md bg-background"
+                      />
+                      <Button
+                        size="sm"
+                        onClick={handleSaveCustomBaseUrl}
+                        disabled={!customBaseUrlInput.trim() || isSaving}
+                      >
+                        Save
+                      </Button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

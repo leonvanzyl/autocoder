@@ -85,7 +85,7 @@ python autonomous_agent_demo.py --project-dir my-app --yolo
 
 **What's different in YOLO mode:**
 - No regression testing
-- No Playwright MCP server (browser automation disabled)
+- No Playwright CLI (browser automation disabled)
 - Features marked passing after lint/type-check succeeds
 - Faster iteration for prototyping
 
@@ -163,7 +163,7 @@ Publishing: `npm publish` (triggers `prepublishOnly` which builds UI, then publi
 - `autonomous_agent_demo.py` - Entry point for running the agent (supports `--yolo`, `--parallel`, `--batch-size`, `--batch-features`)
 - `autoforge_paths.py` - Central path resolution with dual-path backward compatibility and migration
 - `agent.py` - Agent session loop using Claude Agent SDK
-- `client.py` - ClaudeSDKClient configuration with security hooks, MCP servers, and Vertex AI support
+- `client.py` - ClaudeSDKClient configuration with security hooks, feature MCP server, and Vertex AI support
 - `security.py` - Bash command allowlist validation (ALLOWED_COMMANDS whitelist)
 - `prompts.py` - Prompt template loading with project-specific fallback and batch feature prompts
 - `progress.py` - Progress tracking, database queries, webhook notifications
@@ -288,6 +288,9 @@ Projects can be stored in any directory (registered in `~/.autoforge/registry.db
 - `.autoforge/.agent.lock` - Lock file to prevent multiple agent instances
 - `.autoforge/allowed_commands.yaml` - Project-specific bash command allowlist (optional)
 - `.autoforge/.gitignore` - Ignores runtime files
+- `.claude/skills/playwright-cli/` - Playwright CLI skill for browser automation
+- `.playwright/cli.config.json` - Browser configuration (headless, viewport, etc.)
+- `.playwright-cli/` - Playwright CLI daemon artifacts (screenshots, snapshots) - gitignored
 - `CLAUDE.md` - Stays at project root (SDK convention)
 - `app_spec.txt` - Root copy for agent template compatibility
 
@@ -445,6 +448,7 @@ Alternative providers are configured via the **Settings UI** (gear icon > API Pr
 **Skills** (`.claude/skills/`):
 - `frontend-design` - Distinctive, production-grade UI design
 - `gsd-to-autoforge-spec` - Convert GSD codebase mapping to AutoForge app_spec format
+- `playwright-cli` - Browser automation via Playwright CLI (copied to each project)
 
 **Other:**
 - `.claude/templates/` - Prompt templates copied to new projects
@@ -479,7 +483,7 @@ When running with `--parallel`, the orchestrator:
 1. Spawns multiple Claude agents as subprocesses (up to `--max-concurrency`)
 2. Each agent claims features atomically via `feature_claim_and_get`
 3. Features blocked by unmet dependencies are skipped
-4. Browser contexts are isolated per agent using `--isolated` flag
+4. Browser sessions are isolated per agent via `PLAYWRIGHT_CLI_SESSION` environment variable
 5. AgentTracker parses output and emits `agent_update` messages for UI
 
 ### Process Limits (Parallel Mode)

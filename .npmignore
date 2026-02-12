@@ -28,5 +28,4 @@ start.sh
 start_ui.sh
 start_ui.py
 .claude/agents/
-.claude/skills/
 .claude/settings.json

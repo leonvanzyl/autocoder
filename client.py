@@ -25,16 +25,6 @@ from security import SENSITIVE_DIRECTORIES, bash_security_hook
 # Load environment variables from .env file if present
 load_dotenv()
 
-# Default Playwright headless mode - can be overridden via PLAYWRIGHT_HEADLESS env var
-# When True, browser runs invisibly in background (default - saves CPU)
-# When False, browser window is visible (useful for monitoring agent progress)
-DEFAULT_PLAYWRIGHT_HEADLESS = True
-
-# Default browser for Playwright - can be overridden via PLAYWRIGHT_BROWSER env var
-# Options: chrome, firefox, webkit, msedge
-# Firefox is recommended for lower CPU usage
-DEFAULT_PLAYWRIGHT_BROWSER = "firefox"
-
 # Extra read paths for cross-project file access (read-only)
 # Set EXTRA_READ_PATHS environment variable with comma-separated absolute paths
 # Example: EXTRA_READ_PATHS=/Volumes/Data/dev,/Users/shared/libs
@@ -44,6 +34,7 @@ EXTRA_READ_PATHS_VAR = "EXTRA_READ_PATHS"
 # Delegates to the canonical SENSITIVE_DIRECTORIES set in security.py so that
 # this blocklist and the filesystem browser API share a single source of truth.
 EXTRA_READ_PATHS_BLOCKLIST = SENSITIVE_DIRECTORIES
+
 
 def convert_model_for_vertex(model: str) -> str:
     """
@@ -74,43 +65,6 @@ def convert_model_for_vertex(model: str) -> str:
 
     # If already in @ format or doesn't match expected pattern, return as-is
     return model
-
-
-def get_playwright_headless() -> bool:
-    """
-    Get the Playwright headless mode setting.
-
-    Reads from PLAYWRIGHT_HEADLESS environment variable, defaults to True.
-    Returns True for headless mode (invisible browser), False for visible browser.
-    """
-    value = os.getenv("PLAYWRIGHT_HEADLESS", str(DEFAULT_PLAYWRIGHT_HEADLESS).lower()).strip().lower()
-    truthy = {"true", "1", "yes", "on"}
-    falsy = {"false", "0", "no", "off"}
-    if value not in truthy | falsy:
-        print(f"   - Warning: Invalid PLAYWRIGHT_HEADLESS='{value}', defaulting to {DEFAULT_PLAYWRIGHT_HEADLESS}")
-        return DEFAULT_PLAYWRIGHT_HEADLESS
-    return value in truthy
-
-
-# Valid browsers supported by Playwright MCP
-VALID_PLAYWRIGHT_BROWSERS = {"chrome", "firefox", "webkit", "msedge"}
-
-
-def get_playwright_browser() -> str:
-    """
-    Get the browser to use for Playwright.
-
-    Reads from PLAYWRIGHT_BROWSER environment variable, defaults to firefox.
-    Options: chrome, firefox, webkit, msedge
-    Firefox is recommended for lower CPU usage.
-    """
-    value = os.getenv("PLAYWRIGHT_BROWSER", DEFAULT_PLAYWRIGHT_BROWSER).strip().lower()
-    if value not in VALID_PLAYWRIGHT_BROWSERS:
-        print(f"   - Warning: Invalid PLAYWRIGHT_BROWSER='{value}', "
-              f"valid options: {', '.join(sorted(VALID_PLAYWRIGHT_BROWSERS))}. "
-              f"Defaulting to {DEFAULT_PLAYWRIGHT_BROWSER}")
-        return DEFAULT_PLAYWRIGHT_BROWSER
-    return value
 
 
 def get_extra_read_paths() -> list[Path]:
@@ -191,7 +145,6 @@ def get_extra_read_paths() -> list[Path]:
 # overhead and preventing agents from calling tools meant for other roles.
 #
 # Tools intentionally omitted from ALL agent lists (UI/orchestrator only):
-#   feature_get_ready, feature_get_blocked, feature_get_graph,
 #   feature_remove_dependency
 #
 # The ghost tool "feature_release_testing" was removed entirely -- it was
@@ -201,6 +154,9 @@ CODING_AGENT_TOOLS = [
     "mcp__features__feature_get_stats",
     "mcp__features__feature_get_by_id",
     "mcp__features__feature_get_summary",
+    "mcp__features__feature_get_ready",
+    "mcp__features__feature_get_blocked",
+    "mcp__features__feature_get_graph",
     "mcp__features__feature_claim_and_get",
     "mcp__features__feature_mark_in_progress",
     "mcp__features__feature_mark_passing",
@@ -213,12 +169,18 @@ TESTING_AGENT_TOOLS = [
     "mcp__features__feature_get_stats",
     "mcp__features__feature_get_by_id",
     "mcp__features__feature_get_summary",
+    "mcp__features__feature_get_ready",
+    "mcp__features__feature_get_blocked",
+    "mcp__features__feature_get_graph",
     "mcp__features__feature_mark_passing",
     "mcp__features__feature_mark_failing",
 ]
 
 INITIALIZER_AGENT_TOOLS = [
     "mcp__features__feature_get_stats",
+    "mcp__features__feature_get_ready",
+    "mcp__features__feature_get_blocked",
+    "mcp__features__feature_get_graph",
     "mcp__features__feature_create_bulk",
     "mcp__features__feature_create",
     "mcp__features__feature_add_dependency",
@@ -231,41 +193,6 @@ INITIALIZER_AGENT_TOOLS = [
 ALL_FEATURE_MCP_TOOLS = sorted(
     set(CODING_AGENT_TOOLS) | set(TESTING_AGENT_TOOLS) | set(INITIALIZER_AGENT_TOOLS)
 )
-
-# Playwright MCP tools for browser automation.
-# Full set of tools for comprehensive UI testing including drag-and-drop,
-# hover menus, file uploads, tab management, etc.
-PLAYWRIGHT_TOOLS = [
-    # Core navigation & screenshots
-    "mcp__playwright__browser_navigate",
-    "mcp__playwright__browser_navigate_back",
-    "mcp__playwright__browser_take_screenshot",
-    "mcp__playwright__browser_snapshot",
-
-    # Element interaction
-    "mcp__playwright__browser_click",
-    "mcp__playwright__browser_type",
-    "mcp__playwright__browser_fill_form",
-    "mcp__playwright__browser_select_option",
-    "mcp__playwright__browser_press_key",
-    "mcp__playwright__browser_drag",
-    "mcp__playwright__browser_hover",
-    "mcp__playwright__browser_file_upload",
-
-    # JavaScript & debugging
-    "mcp__playwright__browser_evaluate",
-    # "mcp__playwright__browser_run_code",  # REMOVED - causes Playwright MCP server crash
-    "mcp__playwright__browser_console_messages",
-    "mcp__playwright__browser_network_requests",
-
-    # Browser management
-    "mcp__playwright__browser_resize",
-    "mcp__playwright__browser_wait_for",
-    "mcp__playwright__browser_handle_dialog",
-    "mcp__playwright__browser_install",
-    "mcp__playwright__browser_close",
-    "mcp__playwright__browser_tabs",
-]
 
 # Built-in tools available to agents.
 # WebFetch and WebSearch are included so coding agents can look up current
@@ -286,7 +213,6 @@ def create_client(
     project_dir: Path,
     model: str,
     yolo_mode: bool = False,
-    agent_id: str | None = None,
     agent_type: str = "coding",
 ) -> SDKAdapter:
     """
@@ -299,7 +225,7 @@ def create_client(
     Args:
         project_dir: Directory for the project
         model: Model to use (Claude or Codex model name)
-        yolo_mode: If True, skip Playwright MCP server for rapid prototyping
+        yolo_mode: If True, skip browser testing for rapid prototyping
         agent_id: Optional unique identifier for browser isolation in parallel mode.
                   When provided, each agent gets its own browser profile.
         agent_type: One of "coding", "testing", or "initializer". Controls which
@@ -338,11 +264,8 @@ def create_client(
     }
     max_turns = max_turns_map.get(agent_type, 300)
 
-    # Build allowed tools list based on mode and agent type.
-    # In YOLO mode, exclude Playwright tools for faster prototyping.
+    # Build allowed tools list based on agent type.
     allowed_tools = [*BUILTIN_TOOLS, *feature_tools]
-    if not yolo_mode:
-        allowed_tools.extend(PLAYWRIGHT_TOOLS)
 
     # Build permissions list.
     # We permit ALL feature MCP tools at the security layer (so the MCP server
@@ -374,10 +297,6 @@ def create_client(
         permissions_list.append(f"Glob({path}/**)")
         permissions_list.append(f"Grep({path}/**)")
 
-    if not yolo_mode:
-        # Allow Playwright MCP tools for browser automation (standard mode only)
-        permissions_list.extend(PLAYWRIGHT_TOOLS)
-
     # Create comprehensive security settings
     # Note: Using relative paths ("./**") restricts access to project directory
     # since cwd is set to project_dir
@@ -406,9 +325,9 @@ def create_client(
         print(f"   - Extra read paths (validated): {', '.join(str(p) for p in extra_read_paths)}")
     print("   - Bash commands restricted to allowlist (see security.py)")
     if yolo_mode:
-        print("   - MCP servers: features (database) - YOLO MODE (no Playwright)")
+        print("   - MCP servers: features (database) - YOLO MODE (no browser testing)")
     else:
-        print("   - MCP servers: playwright (browser), features (database)")
+        print("   - MCP servers: features (database)")
     print("   - Project settings enabled (skills, commands, CLAUDE.md)")
     print()
 
@@ -432,36 +351,6 @@ def create_client(
             },
         },
     }
-    if not yolo_mode:
-        # Include Playwright MCP server for browser automation (standard mode only)
-        # Browser and headless mode configurable via environment variables
-        browser = get_playwright_browser()
-        playwright_args = [
-            "@playwright/mcp@latest",
-            "--viewport-size", "1280x720",
-            "--browser", browser,
-        ]
-        if get_playwright_headless():
-            playwright_args.append("--headless")
-        print(f"   - Browser: {browser} (headless={get_playwright_headless()})")
-
-        # Browser isolation for parallel execution
-        # Each agent gets its own isolated browser context to prevent tab conflicts
-        if agent_id:
-            # Use --isolated for ephemeral browser context
-            # This creates a fresh, isolated context without persistent state
-            # Note: --isolated and --user-data-dir are mutually exclusive
-            playwright_args.append("--isolated")
-            print(f"   - Browser isolation enabled for agent: {agent_id}")
-
-        mcp_servers["playwright"] = {
-            "command": "npx",
-            "args": playwright_args,
-            "env": {
-                "NODE_COMPILE_CACHE": "",  # Disable V8 compile caching to prevent .node file accumulation in %TEMP%
-            },
-        }
-
     # Build environment overrides for API endpoint configuration
     # Uses get_effective_sdk_env() for Claude or get_effective_sdk_env_for_codex() for Codex
     # These read provider settings from the database, ensuring UI-configured
@@ -483,6 +372,7 @@ def create_client(
         is_vertex = sdk_env.get("CLAUDE_CODE_USE_VERTEX") == "1"
         is_alternative_api = bool(base_url) or is_vertex
     is_ollama = "localhost:11434" in base_url or "127.0.0.1:11434" in base_url
+    is_azure = "services.ai.azure.com" in base_url
     model = convert_model_for_vertex(model)
     if sdk_env:
         print(f"   - API overrides: {', '.join(sdk_env.keys())}")
@@ -492,10 +382,12 @@ def create_client(
             print(f"   - Vertex AI Mode: Using GCP project '{project_id}' with model '{model}' in region '{region}'")
         elif is_ollama:
             print("   - Ollama Mode: Using local models")
+        elif is_azure:
+            print(f"   - Azure Mode: Using {base_url}")
         elif sdk_type == "codex" and "OPENAI_BASE_URL" in sdk_env:
             print(f"   - Custom API: Using {sdk_env['OPENAI_BASE_URL']}")
         elif "ANTHROPIC_BASE_URL" in sdk_env:
-            print(f"   - GLM Mode: Using {sdk_env['ANTHROPIC_BASE_URL']}")
+            print(f"   - Alternative API: Using {sdk_env['ANTHROPIC_BASE_URL']}")
 
     # Create a wrapper for bash_security_hook that passes project_dir via context
     async def bash_hook_with_context(input_data, tool_use_id=None, context=None):

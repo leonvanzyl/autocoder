@@ -676,6 +676,18 @@ API_PROVIDERS: dict[str, dict[str, Any]] = {
         ],
         "default_model": "glm-4.7",
     },
+    "azure": {
+        "name": "Azure Anthropic (Claude)",
+        "base_url": "",
+        "requires_auth": True,
+        "auth_env_var": "ANTHROPIC_API_KEY",
+        "models": [
+            {"id": "claude-opus-4-6", "name": "Claude Opus"},
+            {"id": "claude-sonnet-4-5", "name": "Claude Sonnet"},
+            {"id": "claude-haiku-4-5", "name": "Claude Haiku"},
+        ],
+        "default_model": "claude-opus-4-6",
+    },
     "ollama": {
         "name": "Ollama (Local)",
         "base_url": "http://localhost:11434",

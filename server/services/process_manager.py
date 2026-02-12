@@ -227,6 +227,28 @@ class AgentProcessManager:
         """Remove lock file."""
         self.lock_file.unlink(missing_ok=True)
 
+    def _apply_playwright_headless(self, headless: bool) -> None:
+        """Update .playwright/cli.config.json with the current headless setting.
+
+        playwright-cli reads this config file on each ``open`` command, so
+        updating it before the agent starts is sufficient.
+        """
+        config_file = self.project_dir / ".playwright" / "cli.config.json"
+        if not config_file.exists():
+            return
+        try:
+            import json
+            config = json.loads(config_file.read_text(encoding="utf-8"))
+            launch_opts = config.get("browser", {}).get("launchOptions", {})
+            if launch_opts.get("headless") == headless:
+                return  # already correct
+            launch_opts["headless"] = headless
+            config.setdefault("browser", {})["launchOptions"] = launch_opts
+            config_file.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+            logger.info("Set playwright headless=%s for %s", headless, self.project_name)
+        except Exception:
+            logger.warning("Failed to update playwright config", exc_info=True)
+
     def _cleanup_stale_features(self) -> None:
         """Clear in_progress flag for all features when agent stops/crashes.
 
@@ -361,6 +383,15 @@ class AgentProcessManager:
         if not self._check_lock():
             return False, "Another agent instance is already running for this project"
 
+        # Clean up stale browser daemons from previous runs
+        try:
+            subprocess.run(
+                ["playwright-cli", "kill-all"],
+                timeout=5, capture_output=True,
+            )
+        except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+            pass
+
         # Clean up features stuck from a previous crash/stop
         self._cleanup_stale_features()
 
@@ -397,6 +428,10 @@ class AgentProcessManager:
         # Add --batch-size flag for multi-feature batching
         cmd.extend(["--batch-size", str(batch_size)])
 
+        # Apply headless setting to .playwright/cli.config.json so playwright-cli
+        # picks it up (the only mechanism it supports for headless control)
+        self._apply_playwright_headless(playwright_headless)
+
         try:
             # Start subprocess with piped stdout/stderr
             # Use project_dir as cwd so Claude SDK sandbox allows access to project files
@@ -410,7 +445,7 @@ class AgentProcessManager:
             subprocess_env = {
                 **os.environ,
                 "PYTHONUNBUFFERED": "1",
-                "PLAYWRIGHT_HEADLESS": "true" if playwright_headless else "false",
+                "PLAYWRIGHT_CLI_SESSION": f"agent-{self.project_name}-{os.getpid()}",
                 "NODE_COMPILE_CACHE": "",  # Disable V8 compile caching to prevent .node file accumulation in %TEMP%
                 **api_env,
             }
@@ -469,6 +504,15 @@ class AgentProcessManager:
                     await self._output_task
                 except asyncio.CancelledError:
                     pass
+
+            # Kill browser daemons before stopping agent
+            try:
+                subprocess.run(
+                    ["playwright-cli", "kill-all"],
+                    timeout=5, capture_output=True,
+                )
+            except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+                pass
 
             # CRITICAL: Kill entire process tree, not just orchestrator
             # This ensures all spawned coding/testing agents are also terminated
