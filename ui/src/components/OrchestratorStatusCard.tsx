@@ -25,6 +25,10 @@ function getStateText(state: OrchestratorState): string {
       return 'Watching progress...'
     case 'complete':
       return 'Mission accomplished!'
+    case 'draining':
+      return 'Draining agents...'
+    case 'paused':
+      return 'Paused'
     default:
       return 'Orchestrating...'
   }
@@ -42,6 +46,10 @@ function getStateColor(state: OrchestratorState): string {
       return 'text-primary'
     case 'initializing':
       return 'text-yellow-600 dark:text-yellow-400'
+    case 'draining':
+      return 'text-amber-600 dark:text-amber-400'
+    case 'paused':
+      return 'text-muted-foreground'
     default:
       return 'text-muted-foreground'
   }

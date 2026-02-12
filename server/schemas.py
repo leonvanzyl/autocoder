@@ -217,7 +217,7 @@ class AgentStartRequest(BaseModel):
 
 class AgentStatus(BaseModel):
     """Current agent status."""
-    status: Literal["stopped", "running", "paused", "crashed"]
+    status: Literal["stopped", "running", "paused", "crashed", "pausing", "paused_graceful"]
     pid: int | None = None
     started_at: datetime | None = None
     yolo_mode: bool = False

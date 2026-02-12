@@ -77,7 +77,7 @@ class AgentProcessManager:
         self.project_dir = project_dir
         self.root_dir = root_dir
         self.process: subprocess.Popen | None = None
-        self._status: Literal["stopped", "running", "paused", "crashed"] = "stopped"
+        self._status: Literal["stopped", "running", "paused", "crashed", "pausing", "paused_graceful"] = "stopped"
         self.started_at: datetime | None = None
         self._output_task: asyncio.Task | None = None
         self.yolo_mode: bool = False  # YOLO mode for rapid prototyping
@@ -96,11 +96,11 @@ class AgentProcessManager:
         self.lock_file = get_agent_lock_path(self.project_dir)
 
     @property
-    def status(self) -> Literal["stopped", "running", "paused", "crashed"]:
+    def status(self) -> Literal["stopped", "running", "paused", "crashed", "pausing", "paused_graceful"]:
         return self._status
 
     @status.setter
-    def status(self, value: Literal["stopped", "running", "paused", "crashed"]):
+    def status(self, value: Literal["stopped", "running", "paused", "crashed", "pausing", "paused_graceful"]):
         old_status = self._status
         self._status = value
         if old_status != value:
@@ -330,6 +330,12 @@ class AgentProcessManager:
                     for help_line in AUTH_ERROR_HELP.strip().split('\n'):
                         await self._broadcast_output(help_line)
 
+                # Detect graceful pause status transitions from orchestrator output
+                if "All agents drained - paused." in decoded:
+                    self.status = "paused_graceful"
+                elif "Resuming from graceful pause..." in decoded:
+                    self.status = "running"
+
                 await self._broadcast_output(sanitized)
 
         except asyncio.CancelledError:
@@ -377,7 +383,7 @@ class AgentProcessManager:
         Returns:
             Tuple of (success, message)
         """
-        if self.status in ("running", "paused"):
+        if self.status in ("running", "paused", "pausing", "paused_graceful"):
             return False, f"Agent is already {self.status}"
 
         if not self._check_lock():
@@ -526,6 +532,12 @@ class AgentProcessManager:
 
             self._cleanup_stale_features()
             self._remove_lock()
+            # Clean up drain signal file if present
+            try:
+                from autoforge_paths import get_pause_drain_path
+                get_pause_drain_path(self.project_dir).unlink(missing_ok=True)
+            except Exception:
+                pass
             self.status = "stopped"
             self.process = None
             self.started_at = None
@@ -586,6 +598,47 @@ class AgentProcessManager:
             logger.exception("Failed to resume agent")
             return False, f"Failed to resume agent: {e}"
 
+    async def graceful_pause(self) -> tuple[bool, str]:
+        """Request a graceful pause (drain mode).
+
+        Creates a signal file that the orchestrator polls. Running agents
+        finish their current work before the orchestrator enters a paused state.
+
+        Returns:
+            Tuple of (success, message)
+        """
+        if not self.process or self.status not in ("running",):
+            return False, "Agent is not running"
+
+        try:
+            from autoforge_paths import get_pause_drain_path
+            drain_path = get_pause_drain_path(self.project_dir)
+            drain_path.parent.mkdir(parents=True, exist_ok=True)
+            drain_path.write_text(str(self.process.pid))
+            self.status = "pausing"
+            return True, "Graceful pause requested"
+        except Exception as e:
+            logger.exception("Failed to request graceful pause")
+            return False, f"Failed to request graceful pause: {e}"
+
+    async def graceful_resume(self) -> tuple[bool, str]:
+        """Resume from a graceful pause by removing the drain signal file.
+
+        Returns:
+            Tuple of (success, message)
+        """
+        if not self.process or self.status not in ("pausing", "paused_graceful"):
+            return False, "Agent is not in a graceful pause state"
+
+        try:
+            from autoforge_paths import get_pause_drain_path
+            get_pause_drain_path(self.project_dir).unlink(missing_ok=True)
+            self.status = "running"
+            return True, "Agent resumed from graceful pause"
+        except Exception as e:
+            logger.exception("Failed to resume from graceful pause")
+            return False, f"Failed to resume: {e}"
+
     async def healthcheck(self) -> bool:
         """
         Check if the agent process is still alive.
@@ -601,8 +654,14 @@ class AgentProcessManager:
         poll = self.process.poll()
         if poll is not None:
             # Process has terminated
-            if self.status in ("running", "paused"):
+            if self.status in ("running", "paused", "pausing", "paused_graceful"):
                 self._cleanup_stale_features()
+                # Clean up drain signal file if present
+                try:
+                    from autoforge_paths import get_pause_drain_path
+                    get_pause_drain_path(self.project_dir).unlink(missing_ok=True)
+                except Exception:
+                    pass
                 self.status = "crashed"
                 self._remove_lock()
             return False
@@ -687,8 +746,14 @@ def cleanup_orphaned_locks() -> int:
             if not project_path.exists():
                 continue
 
+            # Clean up stale drain signal files
+            from autoforge_paths import get_autoforge_dir, get_pause_drain_path
+            drain_file = get_pause_drain_path(project_path)
+            if drain_file.exists():
+                drain_file.unlink(missing_ok=True)
+                logger.info("Removed stale drain signal file for project '%s'", name)
+
             # Check both legacy and new locations for lock files
-            from autoforge_paths import get_autoforge_dir
             lock_locations = [
                 project_path / ".agent.lock",
                 get_autoforge_dir(project_path) / ".agent.lock",

@@ -78,6 +78,9 @@ ORCHESTRATOR_PATTERNS = {
     'testing_complete': re.compile(r'Feature #(\d+) testing (completed|failed)'),
     'all_complete': re.compile(r'All features complete'),
     'blocked_features': re.compile(r'(\d+) blocked by dependencies'),
+    'drain_start': re.compile(r'Graceful pause requested'),
+    'drain_complete': re.compile(r'All agents drained'),
+    'drain_resume': re.compile(r'Resuming from graceful pause'),
 }
 
 
@@ -560,6 +563,30 @@ class OrchestratorTracker:
                 update = self._create_update(
                     'all_complete',
                     'All features complete!'
+                )
+
+            # Graceful pause (drain mode) events
+            elif ORCHESTRATOR_PATTERNS['drain_start'].search(line):
+                self.state = 'draining'
+                update = self._create_update(
+                    'drain_start',
+                    'Draining active agents...'
+                )
+
+            elif ORCHESTRATOR_PATTERNS['drain_complete'].search(line):
+                self.state = 'paused'
+                self.coding_agents = 0
+                self.testing_agents = 0
+                update = self._create_update(
+                    'drain_complete',
+                    'All agents drained. Paused.'
+                )
+
+            elif ORCHESTRATOR_PATTERNS['drain_resume'].search(line):
+                self.state = 'scheduling'
+                update = self._create_update(
+                    'drain_resume',
+                    'Resuming feature scheduling'
                 )
 
             return update

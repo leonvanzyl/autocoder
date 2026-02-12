@@ -271,6 +271,18 @@ export async function resumeAgent(projectName: string): Promise<AgentActionRespo
   })
 }
 
+export async function gracefulPauseAgent(projectName: string): Promise<AgentActionResponse> {
+  return fetchJSON(`/projects/${encodeURIComponent(projectName)}/agent/graceful-pause`, {
+    method: 'POST',
+  })
+}
+
+export async function gracefulResumeAgent(projectName: string): Promise<AgentActionResponse> {
+  return fetchJSON(`/projects/${encodeURIComponent(projectName)}/agent/graceful-resume`, {
+    method: 'POST',
+  })
+}
+
 // ============================================================================
 // Spec Creation API
 // ============================================================================

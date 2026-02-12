@@ -213,6 +213,9 @@ class ParallelOrchestrator:
         # Signal handlers only set this flag; cleanup happens in the main loop
         self._shutdown_requested = False
 
+        # Graceful pause (drain mode) flag
+        self._drain_requested = False
+
         # Session tracking for logging/debugging
         self.session_start_time: datetime | None = None
 
@@ -1387,6 +1390,9 @@ class ParallelOrchestrator:
         # Must happen before any debug_log.log() calls
         debug_log.start_session()
 
+        # Clear any stale drain signal from a previous session
+        self._clear_drain_signal()
+
         # Log startup to debug file
         debug_log.section("ORCHESTRATOR STARTUP")
         debug_log.log("STARTUP", "Orchestrator run_loop starting",
@@ -1507,6 +1513,34 @@ class ParallelOrchestrator:
                 if self.get_all_complete(feature_dicts):
                     print("\nAll features complete!", flush=True)
                     break
+
+                # --- Graceful pause (drain mode) ---
+                if not self._drain_requested and self._check_drain_signal():
+                    self._drain_requested = True
+                    print("Graceful pause requested - draining running agents...", flush=True)
+                    debug_log.log("DRAIN", "Graceful pause requested, draining running agents")
+
+                if self._drain_requested:
+                    with self._lock:
+                        coding_count = len(self.running_coding_agents)
+                        testing_count = len(self.running_testing_agents)
+
+                    if coding_count == 0 and testing_count == 0:
+                        print("All agents drained - paused.", flush=True)
+                        debug_log.log("DRAIN", "All agents drained, entering paused state")
+                        # Wait until signal file is removed (resume) or shutdown
+                        while self._check_drain_signal() and self.is_running and not self._shutdown_requested:
+                            await asyncio.sleep(1)
+                        if not self.is_running or self._shutdown_requested:
+                            break
+                        self._drain_requested = False
+                        print("Resuming from graceful pause...", flush=True)
+                        debug_log.log("DRAIN", "Resuming from graceful pause")
+                        continue
+                    else:
+                        debug_log.log("DRAIN", f"Waiting for agents to finish: coding={coding_count}, testing={testing_count}")
+                        await self._wait_for_agent_completion()
+                        continue
 
                 # Maintain testing agents independently (runs every iteration)
                 self._maintain_testing_agents(feature_dicts)
@@ -1631,6 +1665,17 @@ class ParallelOrchestrator:
                 "is_running": self.is_running,
                 "yolo_mode": self.yolo_mode,
             }
+
+    def _check_drain_signal(self) -> bool:
+        """Check if the graceful pause (drain) signal file exists."""
+        from autoforge_paths import get_pause_drain_path
+        return get_pause_drain_path(self.project_dir).exists()
+
+    def _clear_drain_signal(self) -> None:
+        """Delete the drain signal file and reset the flag."""
+        from autoforge_paths import get_pause_drain_path
+        get_pause_drain_path(self.project_dir).unlink(missing_ok=True)
+        self._drain_requested = False
 
     def cleanup(self) -> None:
         """Clean up database resources. Safe to call multiple times.

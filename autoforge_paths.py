@@ -39,6 +39,7 @@ assistant.db-wal
 assistant.db-shm
 .agent.lock
 .devserver.lock
+.pause_drain
 .claude_settings.json
 .claude_assistant_settings.json
 .claude_settings.expand.*.json
@@ -144,6 +145,15 @@ def get_claude_settings_path(project_dir: Path) -> Path:
 def get_claude_assistant_settings_path(project_dir: Path) -> Path:
     """Resolve the path to ``.claude_assistant_settings.json``."""
     return _resolve_path(project_dir, ".claude_assistant_settings.json")
+
+
+def get_pause_drain_path(project_dir: Path) -> Path:
+    """Return the path to the ``.pause_drain`` signal file.
+
+    This file is created to request a graceful pause (drain mode).
+    Always uses the new location since it's a transient signal file.
+    """
+    return project_dir / ".autoforge" / ".pause_drain"
 
 
 def get_progress_cache_path(project_dir: Path) -> Path:

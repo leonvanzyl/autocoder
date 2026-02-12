@@ -197,6 +197,28 @@ export function useResumeAgent(projectName: string) {
   })
 }
 
+export function useGracefulPauseAgent(projectName: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: () => api.gracefulPauseAgent(projectName),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['agent-status', projectName] })
+    },
+  })
+}
+
+export function useGracefulResumeAgent(projectName: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: () => api.gracefulResumeAgent(projectName),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['agent-status', projectName] })
+    },
+  })
+}
+
 // ============================================================================
 // Setup
 // ============================================================================

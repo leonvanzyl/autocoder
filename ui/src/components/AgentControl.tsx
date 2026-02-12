@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Play, Square, Loader2, GitBranch, Clock } from 'lucide-react'
+import { Play, Square, Loader2, GitBranch, Clock, Pause, PlayCircle } from 'lucide-react'
 import {
   useStartAgent,
   useStopAgent,
+  useGracefulPauseAgent,
+  useGracefulResumeAgent,
   useSettings,
   useUpdateProjectSettings,
 } from '../hooks/useProjects'
@@ -60,12 +62,14 @@ export function AgentControl({ projectName, status, defaultConcurrency = 3 }: Ag
 
   const startAgent = useStartAgent(projectName)
   const stopAgent = useStopAgent(projectName)
+  const gracefulPause = useGracefulPauseAgent(projectName)
+  const gracefulResume = useGracefulResumeAgent(projectName)
   const { data: nextRun } = useNextScheduledRun(projectName)
 
   const [showScheduleModal, setShowScheduleModal] = useState(false)
 
-  const isLoading = startAgent.isPending || stopAgent.isPending
-  const isRunning = status === 'running' || status === 'paused'
+  const isLoading = startAgent.isPending || stopAgent.isPending || gracefulPause.isPending || gracefulResume.isPending
+  const isRunning = status === 'running' || status === 'paused' || status === 'pausing' || status === 'paused_graceful'
   const isLoadingStatus = status === 'loading'
   const isParallel = concurrency > 1
 
@@ -126,7 +130,7 @@ export function AgentControl({ projectName, status, defaultConcurrency = 3 }: Ag
           </Badge>
         )}
 
-        {/* Start/Stop button */}
+        {/* Start/Stop/Pause/Resume buttons */}
         {isLoadingStatus ? (
           <Button disabled variant="outline" size="sm">
             <Loader2 size={18} className="animate-spin" />
@@ -146,19 +150,69 @@ export function AgentControl({ projectName, status, defaultConcurrency = 3 }: Ag
             )}
           </Button>
         ) : (
-          <Button
-            onClick={handleStop}
-            disabled={isLoading}
-            variant="destructive"
-            size="sm"
-            title={yoloMode ? 'Stop Agent (YOLO Mode)' : 'Stop Agent'}
-          >
-            {isLoading ? (
-              <Loader2 size={18} className="animate-spin" />
-            ) : (
-              <Square size={18} />
+          <div className="flex items-center gap-1.5">
+            {/* Pausing indicator */}
+            {status === 'pausing' && (
+              <Badge variant="secondary" className="gap-1 animate-pulse">
+                <Loader2 size={12} className="animate-spin" />
+                Pausing...
+              </Badge>
             )}
-          </Button>
+
+            {/* Paused indicator + Resume button */}
+            {status === 'paused_graceful' && (
+              <>
+                <Badge variant="outline" className="gap-1">
+                  Paused
+                </Badge>
+                <Button
+                  onClick={() => gracefulResume.mutate()}
+                  disabled={isLoading}
+                  variant="default"
+                  size="sm"
+                  title="Resume agent"
+                >
+                  {gracefulResume.isPending ? (
+                    <Loader2 size={18} className="animate-spin" />
+                  ) : (
+                    <PlayCircle size={18} />
+                  )}
+                </Button>
+              </>
+            )}
+
+            {/* Graceful pause button (only when running normally) */}
+            {status === 'running' && (
+              <Button
+                onClick={() => gracefulPause.mutate()}
+                disabled={isLoading}
+                variant="outline"
+                size="sm"
+                title="Pause agent (finish current work first)"
+              >
+                {gracefulPause.isPending ? (
+                  <Loader2 size={18} className="animate-spin" />
+                ) : (
+                  <Pause size={18} />
+                )}
+              </Button>
+            )}
+
+            {/* Stop button (always available) */}
+            <Button
+              onClick={handleStop}
+              disabled={isLoading}
+              variant="destructive"
+              size="sm"
+              title="Stop Agent (immediate)"
+            >
+              {stopAgent.isPending ? (
+                <Loader2 size={18} className="animate-spin" />
+              ) : (
+                <Square size={18} />
+              )}
+            </Button>
+          </div>
         )}
 
         {/* Clock button to open schedule modal */}
