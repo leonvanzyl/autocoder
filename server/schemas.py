@@ -445,6 +445,7 @@ class SettingsResponse(BaseModel):
     testing_agent_ratio: int = 1  # Regression testing agents (0-3)
     playwright_headless: bool = True
     batch_size: int = 3  # Features per coding agent batch (1-3)
+    agent_session_logging: bool = True  # Persist agent output to SQLite
     api_provider: str = "claude"
     api_base_url: str | None = None
     api_has_auth_token: bool = False  # Never expose actual token
@@ -464,6 +465,7 @@ class SettingsUpdate(BaseModel):
     testing_agent_ratio: int | None = None  # 0-3
     playwright_headless: bool | None = None
     batch_size: int | None = None  # Features per agent batch (1-3)
+    agent_session_logging: bool | None = None
     api_provider: str | None = None
     api_base_url: str | None = Field(None, max_length=500)
     api_auth_token: str | None = Field(None, max_length=500)  # Write-only, never returned

@@ -37,6 +37,9 @@ features.db-shm
 assistant.db
 assistant.db-wal
 assistant.db-shm
+agent_sessions.db
+agent_sessions.db-wal
+agent_sessions.db-shm
 .agent.lock
 .devserver.lock
 .pause_drain
@@ -125,6 +128,11 @@ def get_features_db_path(project_dir: Path) -> Path:
 def get_assistant_db_path(project_dir: Path) -> Path:
     """Resolve the path to ``assistant.db``."""
     return _resolve_path(project_dir, "assistant.db")
+
+
+def get_agent_sessions_db_path(project_dir: Path) -> Path:
+    """Resolve the path to ``agent_sessions.db``."""
+    return _resolve_path(project_dir, "agent_sessions.db")
 
 
 def get_agent_lock_path(project_dir: Path) -> Path:

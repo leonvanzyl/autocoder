@@ -9,6 +9,7 @@ import asyncio
 import json
 import logging
 import re
+import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Set
@@ -21,6 +22,10 @@ from .services.dev_server_manager import get_devserver_manager
 from .services.process_manager import get_manager
 from .utils.project_helpers import get_project_path as _get_project_path
 from .utils.validation import is_valid_project_name as validate_project_name
+
+# Ensure root is on sys.path for registry import
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 
 # Lazy imports
 _count_passing_tests = None
@@ -82,6 +87,146 @@ ORCHESTRATOR_PATTERNS = {
     'drain_complete': re.compile(r'All agents drained'),
     'drain_resume': re.compile(r'Resuming from graceful pause'),
 }
+
+
+# Patterns for classifying log line types
+_TOOL_USE_PATTERN = re.compile(r'\[Tool:\s*\w+\]', re.I)
+_ERROR_PATTERN = re.compile(r'^(?:Error|Failed|Exception|Traceback)', re.I)
+
+
+def classify_line_type(line: str) -> str:
+    """Classify an output line into a log type."""
+    if _TOOL_USE_PATTERN.search(line):
+        return "tool_use"
+    if _ERROR_PATTERN.search(line):
+        return "error"
+    return "output"
+
+
+class SessionLogger:
+    """Buffers and persists agent session logs to SQLite.
+
+    Accumulates logs in memory and flushes periodically (every 50 lines or 2 seconds)
+    to avoid per-line INSERT overhead.
+    """
+
+    def __init__(self, project_dir: Path, project_name: str):
+        self.project_dir = project_dir
+        self.project_name = project_name
+        self.session_id: int | None = None
+        self._buffer: list[dict] = []
+        self._flush_task: asyncio.Task | None = None
+        self._enabled = True
+        self._buffer_limit = 50
+
+    def _is_logging_enabled(self) -> bool:
+        """Check global setting for session logging."""
+        try:
+            from registry import get_setting
+            value = get_setting("agent_session_logging", "true")
+            return (value or "true").lower() == "true"
+        except Exception:
+            return True
+
+    async def start_session(
+        self,
+        yolo_mode: bool = False,
+        model: str | None = None,
+        max_concurrency: int | None = None,
+    ) -> None:
+        """Create a new session in the database."""
+        self._enabled = self._is_logging_enabled()
+        if not self._enabled:
+            return
+        try:
+            from .services.agent_session_database import create_session
+            self.session_id = create_session(
+                self.project_dir,
+                self.project_name,
+                yolo_mode=yolo_mode,
+                model=model,
+                max_concurrency=max_concurrency,
+            )
+            # Start periodic flush
+            self._flush_task = asyncio.create_task(self._periodic_flush())
+        except Exception:
+            logger.warning("Failed to create agent session", exc_info=True)
+            self._enabled = False
+
+    async def end_session(self, status: str = "completed") -> None:
+        """Flush remaining buffer and mark session as ended."""
+        if self._flush_task:
+            self._flush_task.cancel()
+            try:
+                await self._flush_task
+            except asyncio.CancelledError:
+                pass
+            self._flush_task = None
+
+        await self._flush()
+
+        if not self._enabled or self.session_id is None:
+            return
+        try:
+            from .services.agent_session_database import end_session
+            end_session(self.project_dir, self.session_id, status)
+        except Exception:
+            logger.warning("Failed to end agent session", exc_info=True)
+        self.session_id = None
+
+    def add_log(
+        self,
+        line: str,
+        feature_id: int | None = None,
+        agent_index: int | None = None,
+        agent_name: str | None = None,
+    ) -> None:
+        """Add a log entry to the buffer."""
+        if not self._enabled or self.session_id is None:
+            return
+        self._buffer.append({
+            "line_type": classify_line_type(line),
+            "content": line,
+            "feature_id": feature_id,
+            "agent_index": agent_index,
+            "agent_name": agent_name,
+        })
+        if len(self._buffer) >= self._buffer_limit:
+            # Schedule a flush (non-blocking)
+            asyncio.ensure_future(self._flush())
+
+    def add_agent_update(self, update: dict) -> None:
+        """Add an agent_update entry to the buffer."""
+        if not self._enabled or self.session_id is None:
+            return
+        self._buffer.append({
+            "line_type": "agent_update",
+            "content": json.dumps(update),
+            "feature_id": update.get("featureId"),
+            "agent_index": update.get("agentIndex"),
+            "agent_name": update.get("agentName"),
+        })
+
+    async def _flush(self) -> None:
+        """Flush buffered logs to the database."""
+        if not self._buffer or self.session_id is None:
+            return
+        batch = self._buffer[:]
+        self._buffer.clear()
+        try:
+            from .services.agent_session_database import add_logs_batch
+            add_logs_batch(self.project_dir, self.session_id, batch)
+        except Exception:
+            logger.warning("Failed to flush session logs", exc_info=True)
+
+    async def _periodic_flush(self) -> None:
+        """Flush buffer every 2 seconds."""
+        try:
+            while True:
+                await asyncio.sleep(2)
+                await self._flush()
+        except asyncio.CancelledError:
+            pass
 
 
 class AgentTracker:
@@ -787,16 +932,20 @@ async def project_websocket(websocket: WebSocket, project_name: str):
     # Create orchestrator tracker for observability
     orchestrator_tracker = OrchestratorTracker()
 
+    # Create session logger for persisting agent output
+    session_logger = SessionLogger(project_dir, project_name)
+
     async def on_output(line: str):
         """Handle agent output - broadcast to this WebSocket."""
         try:
             # Extract feature ID from line if present
             feature_id = None
             agent_index = None
+            agent_name = None
             match = FEATURE_ID_PATTERN.match(line)
             if match:
                 feature_id = int(match.group(1))
-                agent_index, _ = await agent_tracker.get_agent_info(feature_id)
+                agent_index, agent_name = await agent_tracker.get_agent_info(feature_id)
 
             # Send the raw log line with optional feature/agent attribution
             log_msg: dict[str, str | int] = {
@@ -811,11 +960,15 @@ async def project_websocket(websocket: WebSocket, project_name: str):
 
             await websocket.send_json(log_msg)
 
+            # Persist log line to session database
+            session_logger.add_log(line, feature_id=feature_id, agent_index=agent_index, agent_name=agent_name)
+
             # Check if this line indicates agent activity (parallel mode)
             # and emit agent_update messages if so
             agent_update = await agent_tracker.process_line(line)
             if agent_update:
                 await websocket.send_json(agent_update)
+                session_logger.add_agent_update(agent_update)
 
             # Also check for orchestrator events and emit orchestrator_update messages
             orch_update = await orchestrator_tracker.process_line(line)
@@ -831,10 +984,22 @@ async def project_websocket(websocket: WebSocket, project_name: str):
                 "type": "agent_status",
                 "status": status,
             })
+
+            # Start session logging when agent begins running
+            if status == "running":
+                await session_logger.start_session(
+                    yolo_mode=agent_manager.yolo_mode,
+                    model=agent_manager.model,
+                    max_concurrency=agent_manager.max_concurrency,
+                )
+
             # Reset trackers when agent stops OR crashes to prevent ghost agents on restart
             if status in ("stopped", "crashed"):
                 await agent_tracker.reset()
                 await orchestrator_tracker.reset()
+                await session_logger.end_session(
+                    status="completed" if status == "stopped" else "crashed"
+                )
         except Exception:
             pass  # Connection may be closed
 
@@ -934,6 +1099,10 @@ async def project_websocket(websocket: WebSocket, project_name: str):
         # Unregister dev server callbacks
         devserver_manager.remove_output_callback(on_dev_output)
         devserver_manager.remove_status_callback(on_dev_status_change)
+
+        # Flush any remaining session logs on disconnect
+        if session_logger.session_id is not None:
+            await session_logger.end_session(status="completed")
 
         # Disconnect from manager
         await manager.disconnect(websocket, project_name)

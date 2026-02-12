@@ -408,6 +408,24 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               />
             </div>
 
+            {/* Session Logging Toggle */}
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label htmlFor="session-logging" className="font-medium">
+                  Session Logging
+                </Label>
+                <p className="text-sm text-muted-foreground">
+                  Save agent output to database for review
+                </p>
+              </div>
+              <Switch
+                id="session-logging"
+                checked={settings.agent_session_logging}
+                onCheckedChange={() => updateSettings.mutate({ agent_session_logging: !settings.agent_session_logging })}
+                disabled={isSaving}
+              />
+            </div>
+
             {/* Regression Agents */}
             <div className="space-y-2">
               <Label className="font-medium">Regression Agents</Label>

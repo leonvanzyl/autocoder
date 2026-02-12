@@ -302,6 +302,7 @@ const DEFAULT_SETTINGS: Settings = {
   testing_agent_ratio: 1,
   playwright_headless: true,
   batch_size: 3,
+  agent_session_logging: true,
   api_provider: 'claude',
   api_base_url: null,
   api_has_auth_token: false,

@@ -30,6 +30,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .routers import (
     agent_router,
+    agent_sessions_router,
     assistant_chat_router,
     devserver_router,
     expand_project_router,
@@ -161,6 +162,7 @@ if not ALLOW_REMOTE:
 app.include_router(projects_router)
 app.include_router(features_router)
 app.include_router(agent_router)
+app.include_router(agent_sessions_router)
 app.include_router(schedules_router)
 app.include_router(devserver_router)
 app.include_router(spec_creation_router)
