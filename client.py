@@ -365,6 +365,12 @@ def create_client(
         elif "ANTHROPIC_BASE_URL" in sdk_env:
             print(f"   - Alternative API: Using {sdk_env['ANTHROPIC_BASE_URL']}")
 
+    # ADDED: Confirm subscription-only mode for default Claude provider
+    # This prevents accidental API credit consumption when user has a Claude Code subscription
+    if not is_alternative_api and not base_url:
+        print("   ✓ Claude Code Subscription Mode: API credit usage DISABLED")
+        print("   ✓ Using OAuth token in subscription mode only")
+
     # Create a wrapper for bash_security_hook that passes project_dir via context
     async def bash_hook_with_context(input_data, tool_use_id=None, context=None):
         """Wrapper that injects project_dir into context for security hook."""
@@ -444,6 +450,26 @@ def create_client(
                 "customInstructions": compaction_guidance,
             }
         )
+
+    # CRITICAL SAFETY CHECK: Ensure we're not in API mode for default Claude provider
+    # This prevents accidental API charges when user has a Claude Code subscription.
+    # The check must happen BEFORE creating the SDK client to catch configuration errors early.
+    from registry import get_all_settings
+    all_settings = get_all_settings()
+    provider_id = all_settings.get("api_provider", "claude")
+    if provider_id == "claude" and not is_alternative_api:
+        # Verify no API credentials are being passed that would trigger API billing
+        if sdk_env.get("ANTHROPIC_API_KEY") and sdk_env.get("ANTHROPIC_API_KEY") != "":
+            raise RuntimeError(
+                "SAFETY CHECK FAILED: ANTHROPIC_API_KEY detected for Claude provider! "
+                "This would consume API credits. Check registry settings and environment variables."
+            )
+        if sdk_env.get("ANTHROPIC_AUTH_TOKEN") and sdk_env.get("ANTHROPIC_AUTH_TOKEN") != "":
+            raise RuntimeError(
+                "SAFETY CHECK FAILED: ANTHROPIC_AUTH_TOKEN detected for Claude provider! "
+                "This would consume API credits. Check registry settings and environment variables."
+            )
+        print("   ✓ Safety check passed: No API credentials detected")
 
     # PROMPT CACHING: The Claude Code CLI applies cache_control breakpoints internally.
     # Our system_prompt benefits from automatic caching without explicit configuration.
