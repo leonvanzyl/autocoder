@@ -1049,8 +1049,21 @@ def feature_request_human_input(
         ftype = field.get("type", "text")
         if ftype not in VALID_FIELD_TYPES:
             return json.dumps({"error": f"Field at index {i} has invalid type '{ftype}'. Must be one of: {', '.join(sorted(VALID_FIELD_TYPES))}"})
-        if ftype == "select" and not field.get("options"):
-            return json.dumps({"error": f"Field at index {i} is type 'select' but missing 'options' array"})
+        if ftype == "select":
+            options = field.get("options")
+            if not options or not isinstance(options, list):
+                return json.dumps({"error": f"Field at index {i} is type 'select' but missing or invalid 'options' array"})
+            for j, opt in enumerate(options):
+                if not isinstance(opt, dict):
+                    return json.dumps({"error": f"Field at index {i}, option {j} must be an object with 'value' and 'label'"})
+                if "value" not in opt or "label" not in opt:
+                    return json.dumps({"error": f"Field at index {i}, option {j} missing required 'value' or 'label'"})
+                if not isinstance(opt["value"], str) or not opt["value"].strip():
+                    return json.dumps({"error": f"Field at index {i}, option {j} has empty or invalid 'value'"})
+                if not isinstance(opt["label"], str) or not opt["label"].strip():
+                    return json.dumps({"error": f"Field at index {i}, option {j} has empty or invalid 'label'"})
+        elif field.get("options"):
+            return json.dumps({"error": f"Field at index {i} has 'options' but type is '{ftype}' (only 'select' uses options)"})
 
     request_data = {
         "prompt": prompt,
