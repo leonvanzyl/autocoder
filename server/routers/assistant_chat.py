@@ -255,6 +255,22 @@ async def assistant_chat_websocket(websocket: WebSocket, project_name: str):
                     await websocket.send_json({"type": "pong"})
                     continue
 
+                elif msg_type == "set_tier":
+                    # Dynamic tier switching for assistant model quality
+                    tier = message.get("tier", "mid")
+                    if tier in ("high", "mid", "low") and session:
+                        session.set_tier(tier)
+                        await websocket.send_json({
+                            "type": "tier_changed",
+                            "tier": tier,
+                        })
+                    elif not session:
+                        await websocket.send_json({
+                            "type": "error",
+                            "content": "No active session. Send 'start' first."
+                        })
+                    continue
+
                 elif msg_type == "start":
                     # Get optional conversation_id to resume
                     conversation_id = message.get("conversation_id")
@@ -268,6 +284,12 @@ async def assistant_chat_websocket(websocket: WebSocket, project_name: str):
                             project_dir,
                             conversation_id=conversation_id,
                         )
+
+                        # Apply initial tier from start message if provided
+                        initial_tier = message.get("tier")
+                        if initial_tier and initial_tier in ("high", "mid", "low"):
+                            session.set_tier(initial_tier)
+
                         logger.debug("Session created, starting...")
 
                         # Stream the initial greeting

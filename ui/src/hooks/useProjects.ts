@@ -306,6 +306,7 @@ const DEFAULT_SETTINGS: Settings = {
   api_base_url: null,
   api_has_auth_token: false,
   api_model: null,
+  role_models: null,
 }
 
 const DEFAULT_PROVIDERS: ProvidersResponse = {
@@ -358,11 +359,21 @@ export function useUpdateSettings() {
       const previous = queryClient.getQueryData<Settings>(['settings'])
 
       // Optimistically update
-      queryClient.setQueryData<Settings>(['settings'], (old) => ({
-        ...DEFAULT_SETTINGS,
-        ...old,
-        ...newSettings,
-      }))
+      queryClient.setQueryData<Settings>(['settings'], (old) => {
+        const base = { ...DEFAULT_SETTINGS, ...old }
+        const { role_models: newRoleModels, ...rest } = newSettings
+        const merged = { ...base, ...rest }
+        // Merge role_models carefully (partial update into full object)
+        if (newRoleModels) {
+          merged.role_models = {
+            initializer: null, coding: null, testing: null,
+            spec_creation: null, expand: null, assistant: null, log_review: null,
+            ...base.role_models,
+            ...newRoleModels,
+          }
+        }
+        return merged
+      })
 
       return { previous }
     },

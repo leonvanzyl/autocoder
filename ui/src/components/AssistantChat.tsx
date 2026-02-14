@@ -8,7 +8,8 @@
 
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { Send, Loader2, Wifi, WifiOff, Plus, History } from 'lucide-react'
-import { useAssistantChat } from '../hooks/useAssistantChat'
+import { useAssistantChat, type AssistantTier } from '../hooks/useAssistantChat'
+import { useAvailableProviders, useSettings } from '../hooks/useProjects'
 import { ChatMessage as ChatMessageComponent } from './ChatMessage'
 import { ConversationHistory } from './ConversationHistory'
 import { QuestionOptions } from './QuestionOptions'
@@ -54,14 +55,25 @@ export function AssistantChat({
     connectionStatus,
     conversationId: activeConversationId,
     currentQuestions,
+    currentTier,
     start,
     sendMessage,
     sendAnswer,
+    setTier,
     clearMessages,
   } = useAssistantChat({
     projectName,
     onError: handleError,
   })
+
+  // Get provider info for tier model labels
+  const { data: providersData } = useAvailableProviders()
+  const { data: settings } = useSettings()
+  const currentProvider = providersData?.providers?.find(p => p.id === (settings?.api_provider ?? 'claude'))
+  const providerTiers = currentProvider?.tiers
+  const hasMultipleTiers = providerTiers
+    ? new Set(Object.values(providerTiers)).size > 1
+    : false
 
   // Notify parent when a NEW conversation is created (not when switching to existing)
   // Track activeConversationId to fire callback only once when it transitions from null to a value
@@ -206,8 +218,34 @@ export function AssistantChat({
           />
         </div>
 
-        {/* Connection status */}
+        {/* Tier toggle + Connection status */}
         <div className="flex items-center gap-2">
+          {/* Tier toggle - only show when provider has multiple distinct tier models */}
+          {hasMultipleTiers && providerTiers && (
+            <div className="flex rounded-md border border-border overflow-hidden" title="Model quality tier">
+              {(['low', 'mid', 'high'] as AssistantTier[]).map((tier) => {
+                const modelId = providerTiers[tier]
+                const modelName = currentProvider?.models?.find(m => m.id === modelId)?.name
+                // Short label: take last word (e.g., "Claude Haiku" -> "Haiku")
+                const shortLabel = modelName?.split(' ').pop() ?? tier.toUpperCase()
+                return (
+                  <button
+                    key={tier}
+                    onClick={() => setTier(tier)}
+                    className={`px-1.5 py-0.5 text-[10px] font-medium transition-colors ${
+                      currentTier === tier
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-background text-muted-foreground hover:bg-muted hover:text-foreground'
+                    }`}
+                    title={`${tier} tier: ${modelName ?? modelId}`}
+                  >
+                    {shortLabel}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+
           {connectionStatus === 'connected' ? (
             <>
               <Wifi size={14} className="text-green-500" />

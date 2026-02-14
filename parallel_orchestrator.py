@@ -232,6 +232,18 @@ class ParallelOrchestrator:
         """Get a new database session."""
         return self._session_maker()
 
+    def _get_model_for_role(self, role: str) -> str | None:
+        """Resolve the model for a given agent role.
+
+        Uses the per-role model resolution from registry, with self.model
+        as the CLI override (highest priority).
+
+        Returns:
+            Model ID string, or None if the default should be used.
+        """
+        from registry import get_model_for_role
+        return get_model_for_role(role, cli_override=self.model)
+
     def _get_random_passing_feature(self) -> int | None:
         """Get a random passing feature for regression testing (no claim needed).
 
@@ -839,8 +851,9 @@ class ParallelOrchestrator:
             "--agent-type", "coding",
             "--feature-id", str(feature_id),
         ]
-        if self.model:
-            cmd.extend(["--model", self.model])
+        coding_model = self._get_model_for_role("coding")
+        if coding_model:
+            cmd.extend(["--model", coding_model])
         if self.yolo_mode:
             cmd.append("--yolo")
 
@@ -905,8 +918,9 @@ class ParallelOrchestrator:
             "--agent-type", "coding",
             "--feature-ids", ",".join(str(fid) for fid in feature_ids),
         ]
-        if self.model:
-            cmd.extend(["--model", self.model])
+        coding_model = self._get_model_for_role("coding")
+        if coding_model:
+            cmd.extend(["--model", coding_model])
         if self.yolo_mode:
             cmd.append("--yolo")
 
@@ -1008,8 +1022,9 @@ class ParallelOrchestrator:
                 "--agent-type", "testing",
                 "--testing-feature-ids", batch_str,
             ]
-            if self.model:
-                cmd.extend(["--model", self.model])
+            testing_model = self._get_model_for_role("testing")
+            if testing_model:
+                cmd.extend(["--model", testing_model])
 
             try:
                 # CREATE_NO_WINDOW on Windows prevents console window pop-ups
@@ -1069,8 +1084,9 @@ class ParallelOrchestrator:
             "--agent-type", "initializer",
             "--max-iterations", "1",
         ]
-        if self.model:
-            cmd.extend(["--model", self.model])
+        init_model = self._get_model_for_role("initializer")
+        if init_model:
+            cmd.extend(["--model", init_model])
 
         print("Running initializer agent...", flush=True)
 

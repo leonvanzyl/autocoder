@@ -12,15 +12,19 @@ interface UseAssistantChatOptions {
   onError?: (error: string) => void;
 }
 
+export type AssistantTier = "high" | "mid" | "low";
+
 interface UseAssistantChatReturn {
   messages: ChatMessage[];
   isLoading: boolean;
   connectionStatus: ConnectionStatus;
   conversationId: number | null;
   currentQuestions: SpecQuestion[] | null;
+  currentTier: AssistantTier;
   start: (conversationId?: number | null) => void;
   sendMessage: (content: string) => void;
   sendAnswer: (answers: Record<string, string | string[]>) => void;
+  setTier: (tier: AssistantTier) => void;
   disconnect: () => void;
   clearMessages: () => void;
 }
@@ -39,6 +43,15 @@ export function useAssistantChat({
     useState<ConnectionStatus>("disconnected");
   const [conversationId, setConversationId] = useState<number | null>(null);
   const [currentQuestions, setCurrentQuestions] = useState<SpecQuestion[] | null>(null);
+  const [currentTier, setCurrentTier] = useState<AssistantTier>(() => {
+    try {
+      const stored = localStorage.getItem(`assistant-tier-${projectName}`);
+      if (stored && (stored === "high" || stored === "mid" || stored === "low")) {
+        return stored as AssistantTier;
+      }
+    } catch { /* ignore */ }
+    return "mid";
+  });
 
   const wsRef = useRef<WebSocket | null>(null);
   const currentAssistantMessageRef = useRef<string | null>(null);
@@ -273,6 +286,12 @@ export function useAssistantChat({
             // Keep-alive response, nothing to do
             break;
           }
+
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          case "tier_changed" as any: {
+            // Server confirmed tier change, nothing more to do
+            break;
+          }
         }
       } catch (e) {
         console.error("Failed to parse WebSocket message:", e);
@@ -295,8 +314,9 @@ export function useAssistantChat({
         if (wsRef.current?.readyState === WebSocket.OPEN) {
           checkAndSendTimeoutRef.current = null;
           setIsLoading(true);
-          const payload: { type: string; conversation_id?: number } = {
+          const payload: { type: string; conversation_id?: number; tier?: string } = {
             type: "start",
+            tier: currentTier,
           };
           if (existingConversationId) {
             payload.conversation_id = existingConversationId;
@@ -315,7 +335,7 @@ export function useAssistantChat({
 
       checkAndSendTimeoutRef.current = window.setTimeout(checkAndSend, 100);
     },
-    [connect],
+    [connect, currentTier],
   );
 
   const sendMessage = useCallback(
@@ -392,6 +412,24 @@ export function useAssistantChat({
     [onError],
   );
 
+  const setTier = useCallback(
+    (tier: AssistantTier) => {
+      setCurrentTier(tier);
+      localStorage.setItem(`assistant-tier-${projectName}`, tier);
+
+      // Send to server if connected
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(
+          JSON.stringify({
+            type: "set_tier",
+            tier,
+          }),
+        );
+      }
+    },
+    [projectName],
+  );
+
   const disconnect = useCallback(() => {
     reconnectAttempts.current = maxReconnectAttempts; // Prevent reconnection
     if (pingIntervalRef.current) {
@@ -416,9 +454,11 @@ export function useAssistantChat({
     connectionStatus,
     conversationId,
     currentQuestions,
+    currentTier,
     start,
     sendMessage,
     sendAnswer,
+    setTier,
     disconnect,
     clearMessages,
   };

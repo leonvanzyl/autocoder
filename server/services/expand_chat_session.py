@@ -9,7 +9,6 @@ Uses the expand-project.md skill to help users add features to existing projects
 import asyncio
 import json
 import logging
-import os
 import shutil
 import sys
 import threading
@@ -154,11 +153,11 @@ class ExpandChatSession:
         system_prompt = skill_content.replace("$ARGUMENTS", project_path)
 
         # Build environment overrides for API configuration
-        from registry import DEFAULT_MODEL, get_effective_sdk_env
+        from registry import get_effective_sdk_env, get_model_for_role
         sdk_env = get_effective_sdk_env()
 
-        # Determine model from SDK env (provider-aware) or fallback to env/default
-        model = sdk_env.get("ANTHROPIC_DEFAULT_OPUS_MODEL") or os.getenv("ANTHROPIC_DEFAULT_OPUS_MODEL", DEFAULT_MODEL)
+        # Determine model using per-role resolution (expand -> high tier)
+        model = get_model_for_role("expand")
 
         # Build MCP servers config for feature creation
         mcp_servers = {

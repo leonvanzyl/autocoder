@@ -11,7 +11,15 @@ import sys
 
 from fastapi import APIRouter
 
-from ..schemas import ModelInfo, ModelsResponse, ProviderInfo, ProvidersResponse, SettingsResponse, SettingsUpdate
+from ..schemas import (
+    ModelInfo,
+    ModelsResponse,
+    ProviderInfo,
+    ProvidersResponse,
+    RoleModelAssignment,
+    SettingsResponse,
+    SettingsUpdate,
+)
 from ..services.chat_constants import ROOT_DIR
 
 # Mimetype fix for Windows - must run before StaticFiles is mounted
@@ -25,6 +33,9 @@ from registry import (
     API_PROVIDERS,
     AVAILABLE_MODELS,
     DEFAULT_MODEL,
+    ROLE_MODEL_KEY_PREFIX,
+    VALID_ROLES,
+    get_all_role_models,
     get_all_settings,
     get_setting,
     set_setting,
@@ -51,6 +62,7 @@ async def get_available_providers():
             models=[ModelInfo(id=m["id"], name=m["name"]) for m in pdata.get("models", [])],
             default_model=pdata.get("default_model", ""),
             requires_auth=pdata.get("requires_auth", False),
+            tiers=pdata.get("tiers"),
         ))
     return ProvidersResponse(providers=providers, current=current)
 
@@ -105,6 +117,9 @@ async def get_settings():
     glm_mode = api_provider == "glm"
     ollama_mode = api_provider == "ollama"
 
+    role_models_dict = get_all_role_models()
+    role_models = RoleModelAssignment(**role_models_dict)
+
     return SettingsResponse(
         yolo_mode=_parse_yolo_mode(all_settings.get("yolo_mode")),
         model=all_settings.get("model", DEFAULT_MODEL),
@@ -117,6 +132,7 @@ async def get_settings():
         api_base_url=all_settings.get("api_base_url"),
         api_has_auth_token=bool(all_settings.get("api_auth_token")),
         api_model=all_settings.get("api_model"),
+        role_models=role_models,
     )
 
 
@@ -163,11 +179,27 @@ async def update_settings(update: SettingsUpdate):
     if update.api_model is not None:
         set_setting("api_model", update.api_model)
 
+    # Per-role model overrides
+    if update.role_models is not None:
+        role_dict = update.role_models.model_dump()
+        for role in VALID_ROLES:
+            value = role_dict.get(role)
+            if value is not None:
+                key = f"{ROLE_MODEL_KEY_PREFIX}{role}"
+                if value == "":
+                    # Empty string clears the override (delete the setting)
+                    set_setting(key, "")
+                else:
+                    set_setting(key, value)
+
     # Return updated settings
     all_settings = get_all_settings()
     api_provider = all_settings.get("api_provider", "claude")
     glm_mode = api_provider == "glm"
     ollama_mode = api_provider == "ollama"
+
+    updated_role_models_dict = get_all_role_models()
+    updated_role_models = RoleModelAssignment(**updated_role_models_dict)
 
     return SettingsResponse(
         yolo_mode=_parse_yolo_mode(all_settings.get("yolo_mode")),
@@ -181,4 +213,5 @@ async def update_settings(update: SettingsUpdate):
         api_base_url=all_settings.get("api_base_url"),
         api_has_auth_token=bool(all_settings.get("api_auth_token")),
         api_model=all_settings.get("api_model"),
+        role_models=updated_role_models,
     )

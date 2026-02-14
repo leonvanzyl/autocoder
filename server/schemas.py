@@ -428,12 +428,24 @@ class ProviderInfo(BaseModel):
     models: list[ModelInfo]
     default_model: str
     requires_auth: bool = False
+    tiers: dict[str, str] | None = None
 
 
 class ProvidersResponse(BaseModel):
     """Response schema for available providers list."""
     providers: list[ProviderInfo]
     current: str
+
+
+class RoleModelAssignment(BaseModel):
+    """Per-role model overrides. None means use provider tier default."""
+    initializer: str | None = None
+    coding: str | None = None
+    testing: str | None = None
+    spec_creation: str | None = None
+    expand: str | None = None
+    assistant: str | None = None
+    log_review: str | None = None
 
 
 class SettingsResponse(BaseModel):
@@ -449,6 +461,7 @@ class SettingsResponse(BaseModel):
     api_base_url: str | None = None
     api_has_auth_token: bool = False  # Never expose actual token
     api_model: str | None = None
+    role_models: RoleModelAssignment | None = None
 
 
 class ModelsResponse(BaseModel):
@@ -468,6 +481,7 @@ class SettingsUpdate(BaseModel):
     api_base_url: str | None = Field(None, max_length=500)
     api_auth_token: str | None = Field(None, max_length=500)  # Write-only, never returned
     api_model: str | None = Field(None, max_length=200)
+    role_models: RoleModelAssignment | None = None
 
     @field_validator('api_base_url')
     @classmethod

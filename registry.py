@@ -48,6 +48,7 @@ def _migrate_registry_dir() -> None:
 AVAILABLE_MODELS = [
     {"id": "claude-opus-4-6", "name": "Claude Opus"},
     {"id": "claude-sonnet-4-5-20250929", "name": "Claude Sonnet"},
+    {"id": "claude-haiku-4-5-20251001", "name": "Claude Haiku"},
 ]
 
 # Map legacy model IDs to their current replacements.
@@ -72,6 +73,23 @@ DEFAULT_MODEL = _env_default_model or "claude-opus-4-6"
 if DEFAULT_MODEL and DEFAULT_MODEL not in VALID_MODELS:
     VALID_MODELS.append(DEFAULT_MODEL)
 DEFAULT_YOLO_MODE = False
+
+# =============================================================================
+# Role-to-Tier Mapping
+# =============================================================================
+
+# Each role maps to a tier (high/mid/low) which resolves to a provider-specific model
+ROLE_TIER_MAP: dict[str, str] = {
+    "initializer": "high",
+    "coding": "mid",
+    "testing": "low",
+    "spec_creation": "high",
+    "expand": "high",
+    "assistant": "mid",
+    "log_review": "low",
+}
+VALID_ROLES = list(ROLE_TIER_MAP.keys())
+ROLE_MODEL_KEY_PREFIX = "model_"
 
 # SQLite connection settings
 SQLITE_TIMEOUT = 30  # seconds to wait for database lock
@@ -617,9 +635,12 @@ def get_all_settings() -> dict[str, str]:
             settings = session.query(Settings).all()
             result = {s.key: s.value for s in settings}
 
-            # Auto-migrate legacy model IDs
+            # Auto-migrate legacy model IDs (including per-role model_* keys)
             migrated = False
-            for key in ("model", "api_model"):
+            migration_keys = ["model", "api_model"] + [
+                f"{ROLE_MODEL_KEY_PREFIX}{role}" for role in VALID_ROLES
+            ]
+            for key in migration_keys:
                 old_id = result.get(key)
                 if old_id and old_id in LEGACY_MODEL_MAP:
                     new_id = LEGACY_MODEL_MAP[old_id]
@@ -642,6 +663,75 @@ def get_all_settings() -> dict[str, str]:
         return {}
 
 
+def get_model_for_role(role: str, cli_override: str | None = None) -> str:
+    """Resolve the model to use for a given role.
+
+    Resolution chain:
+    1. cli_override (--model flag) — universal override
+    2. settings["model_{role}"] — per-role override from Settings UI
+    3. Provider tier default — provider.tiers[ROLE_TIER_MAP[role]]
+    4. settings["api_model"] — global model override
+    5. DEFAULT_MODEL — absolute fallback
+
+    Args:
+        role: One of VALID_ROLES (e.g. "coding", "testing", "assistant")
+        cli_override: Model passed via --model CLI flag
+
+    Returns:
+        Model ID string
+    """
+    if cli_override:
+        return cli_override
+
+    all_settings = get_all_settings()
+
+    # Per-role setting
+    role_model = all_settings.get(f"{ROLE_MODEL_KEY_PREFIX}{role}")
+    if role_model:
+        return role_model
+
+    # Provider tier default
+    provider_id = all_settings.get("api_provider", "claude")
+    provider = API_PROVIDERS.get(provider_id, {})
+    tier = ROLE_TIER_MAP.get(role, "mid")
+    tier_model = provider.get("tiers", {}).get(tier)
+    if tier_model:
+        return tier_model
+
+    # Global fallback
+    return all_settings.get("api_model") or all_settings.get("model") or DEFAULT_MODEL
+
+
+def get_model_for_tier(tier: str) -> str:
+    """Resolve the model for a specific tier (high/mid/low).
+
+    Used by the assistant chat session for dynamic tier switching.
+
+    Args:
+        tier: One of "high", "mid", "low"
+
+    Returns:
+        Model ID string
+    """
+    all_settings = get_all_settings()
+    provider_id = all_settings.get("api_provider", "claude")
+    provider = API_PROVIDERS.get(provider_id, {})
+    tier_model = provider.get("tiers", {}).get(tier)
+    if tier_model:
+        return tier_model
+    return all_settings.get("api_model") or all_settings.get("model") or DEFAULT_MODEL
+
+
+def get_all_role_models() -> dict[str, str | None]:
+    """Get all per-role model overrides from settings.
+
+    Returns:
+        Dict mapping role names to model IDs (None if no override set).
+    """
+    all_settings = get_all_settings()
+    return {role: all_settings.get(f"{ROLE_MODEL_KEY_PREFIX}{role}") or None for role in VALID_ROLES}
+
+
 # =============================================================================
 # API Provider Definitions
 # =============================================================================
@@ -654,8 +744,14 @@ API_PROVIDERS: dict[str, dict[str, Any]] = {
         "models": [
             {"id": "claude-opus-4-6", "name": "Claude Opus"},
             {"id": "claude-sonnet-4-5-20250929", "name": "Claude Sonnet"},
+            {"id": "claude-haiku-4-5-20251001", "name": "Claude Haiku"},
         ],
         "default_model": "claude-opus-4-6",
+        "tiers": {
+            "high": "claude-opus-4-6",
+            "mid": "claude-sonnet-4-5-20250929",
+            "low": "claude-haiku-4-5-20251001",
+        },
     },
     "kimi": {
         "name": "Kimi K2.5 (Moonshot)",
@@ -664,6 +760,7 @@ API_PROVIDERS: dict[str, dict[str, Any]] = {
         "auth_env_var": "ANTHROPIC_API_KEY",
         "models": [{"id": "kimi-k2.5", "name": "Kimi K2.5"}],
         "default_model": "kimi-k2.5",
+        "tiers": {"high": "kimi-k2.5", "mid": "kimi-k2.5", "low": "kimi-k2.5"},
     },
     "glm": {
         "name": "GLM (Zhipu AI)",
@@ -676,6 +773,7 @@ API_PROVIDERS: dict[str, dict[str, Any]] = {
             {"id": "glm-4.5-air", "name": "GLM 4.5 Air"},
         ],
         "default_model": "glm-4.7",
+        "tiers": {"high": "glm-4.7", "mid": "glm-4.5-air", "low": "glm-4.5-air"},
     },
     "azure": {
         "name": "Azure Anthropic (Claude)",
@@ -698,6 +796,7 @@ API_PROVIDERS: dict[str, dict[str, Any]] = {
             {"id": "deepseek-coder-v2", "name": "DeepSeek Coder V2"},
         ],
         "default_model": "qwen3-coder",
+        "tiers": {"high": "qwen3-coder", "mid": "qwen3-coder", "low": "qwen3-coder"},
     },
     "custom": {
         "name": "Custom Provider",
@@ -706,6 +805,7 @@ API_PROVIDERS: dict[str, dict[str, Any]] = {
         "auth_env_var": "ANTHROPIC_AUTH_TOKEN",
         "models": [],
         "default_model": "",
+        "tiers": {"high": "", "mid": "", "low": ""},
     },
 }
 

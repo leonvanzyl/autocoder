@@ -9,7 +9,6 @@ but cannot modify any files.
 
 import json
 import logging
-import os
 import shutil
 import sys
 import threading
@@ -185,6 +184,8 @@ class AssistantChatSession:
         self._client_entered: bool = False
         self.created_at = datetime.now()
         self._history_loaded: bool = False  # Track if we've loaded history for resumed conversations
+        self.tier_override: Optional[str] = None  # Dynamic tier override (high/mid/low)
+        self._needs_client_refresh: bool = False  # Flag to recreate client on tier change
 
     async def close(self) -> None:
         """Clean up resources and close the Claude client."""
@@ -266,11 +267,11 @@ class AssistantChatSession:
         system_cli = shutil.which("claude")
 
         # Build environment overrides for API configuration
-        from registry import DEFAULT_MODEL, get_effective_sdk_env
+        from registry import get_effective_sdk_env
         sdk_env = get_effective_sdk_env()
 
-        # Determine model from SDK env (provider-aware) or fallback to env/default
-        model = sdk_env.get("ANTHROPIC_DEFAULT_OPUS_MODEL") or os.getenv("ANTHROPIC_DEFAULT_OPUS_MODEL", DEFAULT_MODEL)
+        # Determine model using per-role resolution (assistant -> mid tier by default)
+        model = self._resolve_model()
 
         try:
             logger.info("Creating ClaudeSDKClient...")
@@ -321,6 +322,23 @@ class AssistantChatSession:
             # For resumed conversations, history will be loaded on first message
             # _history_loaded stays False so send_message() will include history
             yield {"type": "response_done"}
+
+    def set_tier(self, tier: str) -> None:
+        """Set model tier override for this session. Takes effect on next message."""
+        if tier in ("high", "mid", "low"):
+            self.tier_override = tier
+            self._needs_client_refresh = True
+            logger.info(f"Assistant tier set to '{tier}' for {self.project_name}")
+
+    def _resolve_model(self) -> str:
+        """Resolve model with tier override support.
+
+        Resolution: tier_override -> per-role setting -> provider tier default -> api_model -> DEFAULT_MODEL
+        """
+        from registry import get_model_for_role, get_model_for_tier
+        if self.tier_override:
+            return get_model_for_tier(self.tier_override)
+        return get_model_for_role("assistant")
 
     async def send_message(self, user_message: str) -> AsyncGenerator[dict, None]:
         """
@@ -384,9 +402,59 @@ class AssistantChatSession:
         Internal method to query Claude and stream responses.
 
         Handles tool calls and text responses.
+        Recreates the client if a tier change was requested.
         """
         if not self.client:
             return
+
+        # Recreate client if tier was changed
+        if self._needs_client_refresh:
+            self._needs_client_refresh = False
+            new_model = self._resolve_model()
+            logger.info(f"Refreshing Claude client with model: {new_model}")
+            # Close existing client
+            if self._client_entered:
+                try:
+                    await self.client.__aexit__(None, None, None)
+                except Exception as e:
+                    logger.warning(f"Error closing old client during refresh: {e}")
+                self._client_entered = False
+
+            # Recreate with new model
+            from registry import get_effective_sdk_env
+            system_cli = shutil.which("claude")
+            sdk_env = get_effective_sdk_env()
+
+            from autoforge_paths import get_claude_assistant_settings_path
+            settings_file = get_claude_assistant_settings_path(self.project_dir)
+
+            from claude_agent_sdk import ClaudeAgentOptions
+            self.client = ClaudeSDKClient(
+                options=ClaudeAgentOptions(
+                    model=new_model,
+                    cli_path=system_cli,
+                    setting_sources=["project"],
+                    allowed_tools=[*READONLY_BUILTIN_TOOLS, *ASSISTANT_FEATURE_TOOLS],
+                    mcp_servers={
+                        "features": {
+                            "command": sys.executable,
+                            "args": ["-m", "mcp_server.feature_mcp"],
+                            "env": {
+                                "PROJECT_DIR": str(self.project_dir.resolve()),
+                                "PYTHONPATH": str(ROOT_DIR.resolve()),
+                            },
+                        },
+                    },  # type: ignore[arg-type]
+                    permission_mode="bypassPermissions",
+                    max_turns=100,
+                    cwd=str(self.project_dir.resolve()),
+                    settings=str(settings_file.resolve()),
+                    env=sdk_env,
+                )
+            )
+            await self.client.__aenter__()
+            self._client_entered = True
+            logger.info(f"Client refreshed with model: {new_model}")
 
         # Send message to Claude
         await self.client.query(message)
